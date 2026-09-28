@@ -1,0 +1,46 @@
+{
+  "name": "phone-sound-mode",
+  "author": "ark-am",
+  "version": "1.0.3",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "Phone Sound Mode",
+    "uuid": "9e7fbef8-d934-4538-ae25-11f29029b3a4",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "messageKeys": {
+      "COMMAND": 1,
+      "RESULT": 2,
+      "CURRENT_MODE": 3
+    },
+    "resources": {
+      "media": []
+    },
+    "companionApp": {
+      "android": {
+        "url": "https://github.com/ark-am/pebble-phone-sound-mode",
+        "apps": [
+          {
+            "package": "com.arkam.pebblesoundmode"
+          }
+        ]
+      }
+    }
+  }
+}

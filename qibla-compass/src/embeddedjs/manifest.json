@@ -1,0 +1,30 @@
+{
+  "include": [
+    "$(MODDABLE)/examples/manifest_mod.json",
+    "$(MODDABLE)/examples/manifest_typings.json"
+  ],
+  "ffi": {
+    "functions": {
+      "isDebugBuild": {
+        "arguments": [],
+        "returns": "int32_t"
+      },
+      "compassStart": {
+        "arguments": [],
+        "returns": "int32_t"
+      },
+      "compassReadHeading": {
+        "arguments": [],
+        "returns": "int32_t"
+      }
+    }
+  },
+  "modules": {
+    "*": [
+      "./main",
+      "./qibla",
+      "./geomagnetic",
+      "./retry-location"
+    ]
+  }
+}

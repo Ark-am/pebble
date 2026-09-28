@@ -1,0 +1,39 @@
+{
+  "name": "qibla-compass",
+  "author": "ark-am",
+  "version": "1.0.3",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "dependencies": {
+    "@moddable/pebbleproxy": "^0.2.0"
+  },
+  "pebble": {
+    "displayName": "Qibla Compass",
+    "uuid": "3935bb82-a179-4900-b46c-8e7f12b6ff71",
+    "projectType": "moddable",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "emery"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "capabilities": [
+      "location"
+    ],
+    "messageKeys": [],
+    "resources": {
+      "media": [
+        {
+          "type": "png",
+          "name": "IMAGE_MENU_ICON",
+          "file": "images/menu_icon.png",
+          "menuIcon": true
+        }
+      ]
+    }
+  }
+}

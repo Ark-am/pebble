@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Phone Sound Mode</string>
+    <string name="grant_access">Grant Do Not Disturb access</string>
+    <string name="permission_granted">Permission granted</string>
+    <string name="status_permission_required">Permission is required before the watch can change sound mode.</string>
+    <string name="status_ready">Ready. Choose Silent, Vibrate, or Normal on your Pebble.</string>
+</resources>
