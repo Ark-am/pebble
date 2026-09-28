@@ -6,6 +6,9 @@
     "pebble-app"
   ],
   "private": true,
+  "scripts": {
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test"
+  },
   "dependencies": {
     "@moddable/pebbleproxy": "^0.2.0"
   },

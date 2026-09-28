@@ -1,10 +1,6 @@
 #include <pebble.h>
 
-enum {
-  KEY_COMMAND = 1,
-  KEY_RESULT = 2,
-  KEY_CURRENT_MODE = 3,
-};
+// Message keys come from package.json as MESSAGE_KEY_COMMAND and friends.
 
 enum {
   MODE_SILENT = 0,
@@ -63,17 +59,23 @@ static void response_timeout(void *context) {
 }
 
 static void send_mode(int32_t mode) {
+  DictionaryIterator *iterator;
+  const AppMessageResult result = app_message_outbox_begin(&iterator);
+  if (result == APP_MSG_BUSY) {
+    // The previous command is still in flight; keep waiting for its reply.
+    set_status("Still sending...");
+    return;
+  }
+
   cancel_response_timer();
   s_pending_mode = -1;
 
-  DictionaryIterator *iterator;
-  const AppMessageResult result = app_message_outbox_begin(&iterator);
   if (result != APP_MSG_OK) {
     set_status("Phone unavailable");
     return;
   }
 
-  dict_write_int32(iterator, KEY_COMMAND, mode);
+  dict_write_int32(iterator, MESSAGE_KEY_COMMAND, mode);
   s_pending_mode = mode;
   set_status("Sending...");
 
@@ -93,7 +95,7 @@ static void send_mode(int32_t mode) {
 static uint16_t menu_get_num_rows(MenuLayer *menu_layer,
                                   uint16_t section_index,
                                   void *context) {
-  return 3;
+  return ARRAY_LENGTH(MODE_MENU_ORDER);
 }
 
 static void menu_draw_row(GContext *ctx,
@@ -113,8 +115,8 @@ static void menu_select(MenuLayer *menu_layer,
 static void inbox_received(DictionaryIterator *iterator, void *context) {
   cancel_response_timer();
 
-  const Tuple *result_tuple = dict_find(iterator, KEY_RESULT);
-  const Tuple *mode_tuple = dict_find(iterator, KEY_CURRENT_MODE);
+  const Tuple *result_tuple = dict_find(iterator, MESSAGE_KEY_RESULT);
+  const Tuple *mode_tuple = dict_find(iterator, MESSAGE_KEY_CURRENT_MODE);
 
   if (!result_tuple) {
     set_status("Invalid phone response");
@@ -141,6 +143,8 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
 }
 
 static void inbox_dropped(AppMessageResult reason, void *context) {
+  cancel_response_timer();
+  s_pending_mode = -1;
   set_status("Phone response lost");
 }
 
@@ -155,7 +159,9 @@ static void outbox_failed(DictionaryIterator *iterator,
 static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   const GRect bounds = layer_get_bounds(root);
-  const int16_t status_height = 28;
+  // Round screens clip the bottom corners, so give the status two lines and
+  // let the text flow within the visible part of the display.
+  const int16_t status_height = PBL_IF_ROUND_ELSE(40, 28);
 
   s_menu_layer = menu_layer_create(GRect(
     0,
@@ -183,6 +189,9 @@ static void window_load(Window *window) {
   text_layer_set_text_alignment(s_status_layer, GTextAlignmentCenter);
   text_layer_set_text(s_status_layer, "Choose phone mode");
   layer_add_child(root, text_layer_get_layer(s_status_layer));
+#if defined(PBL_ROUND)
+  text_layer_enable_screen_text_flow_and_paging(s_status_layer, 4);
+#endif
 }
 
 static void window_unload(Window *window) {

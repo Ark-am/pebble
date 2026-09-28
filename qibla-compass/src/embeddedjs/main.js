@@ -30,6 +30,7 @@ const CENTER_Y = 103;
 const COMPASS_RADIUS = 59;
 const SENSOR_TIMEOUT = 15000;
 const APP_VERSION = "1.0.3";
+const DEBUG = !!Natives.isDebugBuild();
 
 let qiblaBearing;
 let magneticHeading;
@@ -42,7 +43,18 @@ let location;
 let locationTimer;
 let compassTimer;
 let compassPollTimer;
-let retryAvailable = false;
+let locationFailed = false;
+let compassFailed = false;
+
+function debugLog(message) {
+  if (DEBUG) {
+    console.log(message);
+  }
+}
+
+function retryAvailable() {
+  return locationFailed || compassFailed;
+}
 
 function centeredText(text, font, color, y) {
   const width = render.getTextWidth(text, font);
@@ -54,7 +66,11 @@ function smoothHeading(previous, next, factor = 0.2) {
     return next;
   }
 
+  // Snap once close enough so polling can stop redrawing a settled heading.
   const difference = ((next - previous + 540) % 360) - 180;
+  if (Math.abs(difference) < 0.5) {
+    return next;
+  }
   return normalizeDegrees(previous + difference * factor);
 }
 
@@ -117,7 +133,7 @@ function drawCompass(turnAngle, isAligned) {
     centeredText(
       isCalibrating
         ? "Move watch to calibrate"
-        : retryAvailable
+        : retryAvailable()
           ? "Tap screen to retry"
           : "Waiting for sensors",
       smallFont,
@@ -167,11 +183,11 @@ function updateDirection() {
   const turnAngle = normalizeSignedDegrees(qiblaBearing - trueHeading);
   const isAligned = Math.abs(turnAngle) <= 4;
 
-  console.log("Qibla: " + qiblaBearing);
-  console.log("Magnetic heading: " + smoothedHeading);
-  console.log("True heading: " + trueHeading);
-  console.log("Turn angle: " + turnAngle);
-  console.log("Aligned: " + isAligned);
+  debugLog("Qibla: " + qiblaBearing);
+  debugLog("Magnetic heading: " + smoothedHeading);
+  debugLog("True heading: " + trueHeading);
+  debugLog("Turn angle: " + turnAngle);
+  debugLog("Aligned: " + isAligned);
 
   handleAlignment(isAligned);
   drawCompass(turnAngle, isAligned);
@@ -184,6 +200,7 @@ function requestLocation() {
   }
 
   qiblaBearing = undefined;
+  locationFailed = false;
   locationStatus = watch.connected.pebblekit
     ? "Getting phone location"
     : "Waiting for phone";
@@ -210,6 +227,7 @@ function requestLocation() {
           modelDate
         );
         locationStatus = "Location ready";
+        locationFailed = false;
 
         console.log("Location: " + sample.latitude + ", " + sample.longitude);
         console.log(
@@ -228,7 +246,7 @@ function requestLocation() {
         }
         this.stop();
         locationStatus = "Location unavailable";
-        retryAvailable = true;
+        locationFailed = true;
         updateDirection();
       }
     });
@@ -245,7 +263,7 @@ function requestLocation() {
   locationTimer = setTimeout(() => {
     locationTimer = undefined;
     locationStatus = "Phone/location timed out";
-    retryAvailable = true;
+    locationFailed = true;
     updateDirection();
   }, SENSOR_TIMEOUT);
 }
@@ -262,6 +280,7 @@ function updateHeading(heading) {
   magneticHeading = normalizeDegrees(heading);
   smoothedHeading = smoothHeading(smoothedHeading, magneticHeading);
   compassStatus = "Hold watch flat";
+  compassFailed = false;
   updateDirection();
 }
 
@@ -270,7 +289,12 @@ function pollCompass() {
 
   if (heading >= 0) {
     if (heading !== magneticHeading) {
-      console.log("Compass heading: " + heading);
+      debugLog("Compass heading: " + heading);
+      updateHeading(heading);
+    }
+    else if (smoothedHeading !== magneticHeading) {
+      // The sensor only reports changes, so keep easing toward the latest
+      // reading; otherwise the arrow stops short once the watch is held still.
       updateHeading(heading);
     }
     else if (compassTimer !== undefined) {
@@ -290,7 +314,7 @@ function pollCompass() {
       compassTimer = undefined;
     }
     compassStatus = "Compass unavailable";
-    retryAvailable = true;
+    compassFailed = true;
     updateDirection();
   }
   else if (compassStatus !== "Calibrating compass") {
@@ -313,10 +337,11 @@ function startCompass() {
   magneticHeading = undefined;
   smoothedHeading = undefined;
   compassStatus = "Waiting for compass";
+  compassFailed = false;
 
   if (!Natives.compassStart()) {
     compassStatus = "Compass unavailable";
-    retryAvailable = true;
+    compassFailed = true;
     updateDirection();
     return;
   }
@@ -326,28 +351,45 @@ function startCompass() {
   compassTimer = setTimeout(() => {
     compassTimer = undefined;
     compassStatus = "Move watch to calibrate";
-    retryAvailable = true;
+    compassFailed = true;
     updateDirection();
   }, SENSOR_TIMEOUT);
 }
 
 function retrySensors() {
-  console.log("Retrying location and compass");
-  retryAvailable = false;
+  debugLog("Retrying location and compass");
   previouslyAligned = false;
   startCompass();
   requestLocation();
 }
 
+// Restart only what failed, so an accidental tap cannot discard a working
+// location or interrupt a compass that has since recovered.
+function retryFailedSensors() {
+  debugLog("Retrying failed sensors");
+  if (compassFailed) {
+    previouslyAligned = false;
+    startCompass();
+  }
+  if (locationFailed) {
+    requestLocation();
+  }
+}
+
 let virtualCompass;
-if (Natives.isDebugBuild()) {
+if (DEBUG) {
   // The current Pebble emulator does not always forward emulated compass
   // events to Alloy. Debug builds expose this deterministic test input.
   virtualCompass = new Message({
     keys: new Map([["DEBUG_HEADING", 16000]]),
     onReadable() {
       const message = this.read();
-      updateHeading(Number(message.get("DEBUG_HEADING")));
+      const heading = Number(message.get("DEBUG_HEADING"));
+      // Injected headings are exact test input, so apply them unsmoothed.
+      if (heading === heading) {
+        smoothedHeading = undefined;
+      }
+      updateHeading(heading);
     }
   });
 }
@@ -379,8 +421,8 @@ const retryTouch = new device.sensor.Touch({
     }
     else if (retryTouchDown) {
       retryTouchDown = false;
-      if (retryAvailable) {
-        retrySensors();
+      if (retryAvailable()) {
+        retryFailedSensors();
       }
     }
   }

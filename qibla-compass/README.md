@@ -11,6 +11,17 @@ pebble install --emulator emery       # install on the emery emulator
 pebble install --phone <ip>           # install to a paired phone
 ```
 
+## Unit tests
+
+The Qibla bearing and magnetic-declination calculations are plain JavaScript
+and can be tested with Node.js 22 or newer, without the Pebble SDK:
+
+```sh
+npm test
+```
+
+The declination tests use NOAA's official WMM2025 sea-level test values.
+
 ## Testing without a watch
 
 These steps provide a repeatable test using the Pebble Time 2 (`emery`)
@@ -148,6 +159,7 @@ src/embeddedjs/main.js         JavaScript that runs on the watch
 src/embeddedjs/qibla.js        Qibla bearing calculations
 src/embeddedjs/manifest.json   Moddable manifest
 src/pkjs/index.js              PebbleKit JS (phone-side) code
+test/                          Node.js unit tests for the calculations
 package.json                   Project metadata (UUID, platforms, resources)
 wscript                        Build rules — usually no need to edit
 ```
