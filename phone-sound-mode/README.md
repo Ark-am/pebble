@@ -57,9 +57,10 @@ access for the app, return to it, and confirm that it says it is ready.
 
 Install the Android APK first, grant access, and then install the PBW through
 the Pebble phone app. Open **Phone Sound Mode** on the watch and choose one of
-the three modes. A short vibration confirms that Android applied the mode.
-If the phone does not answer within 10 seconds, select the same mode again to
-retry.
+the three modes. A short vibration confirms that Android applied the mode, and
+the app then returns to the watchface after one second. If the change fails,
+the app stays open and shows why. If the phone does not answer within 10
+seconds, select the same mode again to retry.
 
 ## Publishing checklist
 

@@ -24,9 +24,12 @@ static Window *s_window;
 static MenuLayer *s_menu_layer;
 static TextLayer *s_status_layer;
 static AppTimer *s_response_timer;
+static AppTimer *s_exit_timer;
 static int32_t s_pending_mode = -1;
 
 #define RESPONSE_TIMEOUT_MS 10000
+// Long enough to read the confirmation before returning to the watchface.
+#define EXIT_DELAY_MS 1000
 
 static const char *mode_name(int32_t mode) {
   switch (mode) {
@@ -52,6 +55,19 @@ static void cancel_response_timer(void) {
   }
 }
 
+static void cancel_exit_timer(void) {
+  if (s_exit_timer) {
+    app_timer_cancel(s_exit_timer);
+    s_exit_timer = NULL;
+  }
+}
+
+static void exit_to_watchface(void *context) {
+  s_exit_timer = NULL;
+  exit_reason_set(APP_EXIT_ACTION_PERFORMED_SUCCESSFULLY);
+  window_stack_pop_all(true);
+}
+
 static void response_timeout(void *context) {
   s_response_timer = NULL;
   s_pending_mode = -1;
@@ -68,6 +84,7 @@ static void send_mode(int32_t mode) {
   }
 
   cancel_response_timer();
+  cancel_exit_timer();
   s_pending_mode = -1;
 
   if (result != APP_MSG_OK) {
@@ -140,6 +157,10 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
   set_status(status);
   vibes_short_pulse();
   s_pending_mode = -1;
+
+  // Only leave after the phone confirms, so failures stay visible for a retry.
+  cancel_exit_timer();
+  s_exit_timer = app_timer_register(EXIT_DELAY_MS, exit_to_watchface, NULL);
 }
 
 static void inbox_dropped(AppMessageResult reason, void *context) {
@@ -215,6 +236,7 @@ static void init(void) {
 
 static void deinit(void) {
   cancel_response_timer();
+  cancel_exit_timer();
   window_destroy(s_window);
 }
 
