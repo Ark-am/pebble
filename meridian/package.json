@@ -6,7 +6,6 @@
     "pebble-app"
   ],
   "private": true,
-  "dependencies": {},
   "pebble": {
     "displayName": "Meridian",
     "uuid": "4f48fd12-df4f-45a1-aa77-88e4b6ed34b7",
@@ -26,15 +25,29 @@
     },
     "capabilities": [
       "location",
-      "health"
+      "health",
+      "configurable"
     ],
     "messageKeys": [
       "TEMPERATURE",
       "CONDITION",
-      "REQUEST_WEATHER"
+      "REQUEST_WEATHER",
+      "THEME",
+      "ACCENT_COLOR",
+      "HOUR_NUMBERS",
+      "SECOND_HAND",
+      "DISCONNECT_VIBE",
+      "SLOT_TOP",
+      "SLOT_RIGHT",
+      "SLOT_BOTTOM",
+      "SLOT_LEFT",
+      "TEMPERATURE_UNIT"
     ],
     "resources": {
       "media": []
     }
+  },
+  "dependencies": {
+    "@rebble/clay": "^1.1.0"
   }
 }

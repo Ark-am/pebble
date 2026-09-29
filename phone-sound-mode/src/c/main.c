@@ -306,7 +306,7 @@ static void window_load(Window *window) {
   text_layer_set_text_color(s_status_layer, GColorWhite);
   text_layer_set_font(s_status_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
   text_layer_set_text_alignment(s_status_layer, GTextAlignmentCenter);
-  text_layer_set_text(s_status_layer, "Choose phone mode");
+  text_layer_set_text(s_status_layer, "www.ark-am.com");
   layer_add_child(root, text_layer_get_layer(s_status_layer));
 #if defined(PBL_ROUND)
   text_layer_enable_screen_text_flow_and_paging(s_status_layer, 4);

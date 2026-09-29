@@ -29,7 +29,7 @@ const CENTER_X = 100;
 const CENTER_Y = 103;
 const COMPASS_RADIUS = 59;
 const SENSOR_TIMEOUT = 15000;
-const APP_VERSION = "1.0.3";
+const APP_VERSION = "1.0.5";
 const DEBUG = !!Natives.isDebugBuild();
 
 let qiblaBearing;

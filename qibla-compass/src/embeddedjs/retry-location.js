@@ -11,8 +11,7 @@ class RetryLocation {
   #onSample;
   #onError;
   #sample;
-  #options = {};
-  #pendingCommand;
+  #pendingValues = [];
   #writable = false;
 
   constructor(options) {
@@ -32,14 +31,27 @@ class RetryLocation {
     });
   }
 
-  request(options) {
-    this.#options = options ?? {};
-    this.#pendingCommand = "request";
+  request(options = {}) {
+    // The phone proxy ignores a request while it believes an earlier watch is
+    // still running, which happens when a previous launch exited before its
+    // stop was delivered. Stopping first makes every request start fresh.
+    //
+    // The proxy reads any non-empty accuracy field as true (even "0"), so
+    // low accuracy is requested by leaving the field empty.
+    this.#pendingValues = [
+      "0",
+      [
+        "1",
+        options.enableHighAccuracy ? "1" : "",
+        options.timeout ?? "",
+        options.maximumAge ?? ""
+      ].join(",")
+    ];
     this.#flush();
   }
 
   stop() {
-    this.#pendingCommand = "stop";
+    this.#pendingValues = ["0"];
     this.#flush();
   }
 
@@ -50,29 +62,13 @@ class RetryLocation {
   }
 
   #flush() {
-    if (!this.#writable || !this.#pendingCommand) {
+    if (!this.#writable || !this.#pendingValues.length) {
       return;
     }
 
-    let value;
-    if (this.#pendingCommand === "stop") {
-      value = "0";
-    }
-    else {
-      const options = this.#options;
-      value = [
-        "1",
-        options.enableHighAccuracy === undefined
-          ? ""
-          : Number(options.enableHighAccuracy),
-        options.timeout ?? "",
-        options.maximumAge ?? ""
-      ].join(",");
-    }
-
-    this.#pendingCommand = undefined;
+    // Send one value at a time; onWritable flushes the next.
     this.#writable = false;
-    this.#message.write(new Map([["LOCATION", value]]));
+    this.#message.write(new Map([["LOCATION", this.#pendingValues.shift()]]));
   }
 
   #read(message) {

@@ -1,6 +1,12 @@
-// Fetches the current weather for the phone's location from Open-Meteo, which
-// needs no API key, and sends the temperature (°C) and a short condition name
-// to the watch.
+// Serves the settings page (via Clay) and fetches the current weather for the
+// phone's location from Open-Meteo, which needs no API key. The watch gets the
+// temperature in the chosen unit and a short condition name.
+
+var Clay = require('@rebble/clay');
+var clayConfig = require('./config');
+
+// Clay shows the settings page and sends the chosen values to the watch.
+new Clay(clayConfig);
 
 var LOCATION_OPTIONS = { timeout: 15000, maximumAge: 10 * 60 * 1000 };
 
@@ -8,7 +14,7 @@ var LOCATION_OPTIONS = { timeout: 15000, maximumAge: 10 * 60 * 1000 };
 function conditionName(code) {
   if (code === 0) return 'CLEAR';
   if (code <= 2) return 'FAIR';
-  if (code === 3) return 'OVERCAST';
+  if (code === 3) return 'CLOUDY';
   if (code === 45 || code === 48) return 'FOG';
   if (code >= 51 && code <= 57) return 'DRIZZLE';
   if (code >= 61 && code <= 67) return 'RAIN';
@@ -19,11 +25,21 @@ function conditionName(code) {
   return 'WEATHER';
 }
 
+function useFahrenheit() {
+  try {
+    var settings = JSON.parse(localStorage.getItem('clay-settings')) || {};
+    return settings.TEMPERATURE_UNIT === 'F';
+  } catch (error) {
+    return false;
+  }
+}
+
 function sendWeather(position) {
   var url = 'https://api.open-meteo.com/v1/forecast' +
     '?latitude=' + position.coords.latitude.toFixed(3) +
     '&longitude=' + position.coords.longitude.toFixed(3) +
-    '&current=temperature_2m,weather_code';
+    '&current=temperature_2m,weather_code' +
+    (useFahrenheit() ? '&temperature_unit=fahrenheit' : '');
 
   var request = new XMLHttpRequest();
   request.onload = function () {
@@ -53,6 +69,14 @@ function fetchWeather() {
 }
 
 Pebble.addEventListener('ready', fetchWeather);
+
+// Runs after Clay has saved the settings, so a new temperature unit applies
+// straight away.
+Pebble.addEventListener('webviewclosed', function (event) {
+  if (event && event.response) {
+    fetchWeather();
+  }
+});
 
 Pebble.addEventListener('appmessage', function (event) {
   if ('REQUEST_WEATHER' in event.payload) {
