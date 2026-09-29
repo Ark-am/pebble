@@ -1,0 +1,40 @@
+{
+  "name": "meridian",
+  "author": "ark-am",
+  "version": "1.0.0",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "Meridian",
+    "uuid": "4f48fd12-df4f-45a1-aa77-88e4b6ed34b7",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": true
+    },
+    "capabilities": [
+      "location",
+      "health"
+    ],
+    "messageKeys": [
+      "TEMPERATURE",
+      "CONDITION",
+      "REQUEST_WEATHER"
+    ],
+    "resources": {
+      "media": []
+    }
+  }
+}

@@ -1,0 +1,61 @@
+// Fetches the current weather for the phone's location from Open-Meteo, which
+// needs no API key, and sends the temperature (°C) and a short condition name
+// to the watch.
+
+var LOCATION_OPTIONS = { timeout: 15000, maximumAge: 10 * 60 * 1000 };
+
+// WMO weather interpretation codes, as used by Open-Meteo.
+function conditionName(code) {
+  if (code === 0) return 'CLEAR';
+  if (code <= 2) return 'FAIR';
+  if (code === 3) return 'OVERCAST';
+  if (code === 45 || code === 48) return 'FOG';
+  if (code >= 51 && code <= 57) return 'DRIZZLE';
+  if (code >= 61 && code <= 67) return 'RAIN';
+  if (code >= 71 && code <= 77) return 'SNOW';
+  if (code >= 80 && code <= 82) return 'SHOWERS';
+  if (code === 85 || code === 86) return 'SNOW';
+  if (code >= 95) return 'STORM';
+  return 'WEATHER';
+}
+
+function sendWeather(position) {
+  var url = 'https://api.open-meteo.com/v1/forecast' +
+    '?latitude=' + position.coords.latitude.toFixed(3) +
+    '&longitude=' + position.coords.longitude.toFixed(3) +
+    '&current=temperature_2m,weather_code';
+
+  var request = new XMLHttpRequest();
+  request.onload = function () {
+    if (request.status !== 200) {
+      console.log('Weather request failed: HTTP ' + request.status);
+      return;
+    }
+    var current = JSON.parse(request.responseText).current;
+    Pebble.sendAppMessage({
+      TEMPERATURE: Math.round(current.temperature_2m),
+      CONDITION: conditionName(current.weather_code)
+    }, null, function () {
+      console.log('Could not send weather to the watch');
+    });
+  };
+  request.onerror = function () {
+    console.log('Weather request failed');
+  };
+  request.open('GET', url);
+  request.send();
+}
+
+function fetchWeather() {
+  navigator.geolocation.getCurrentPosition(sendWeather, function (error) {
+    console.log('Location unavailable: ' + error.message);
+  }, LOCATION_OPTIONS);
+}
+
+Pebble.addEventListener('ready', fetchWeather);
+
+Pebble.addEventListener('appmessage', function (event) {
+  if ('REQUEST_WEATHER' in event.payload) {
+    fetchWeather();
+  }
+});

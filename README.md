@@ -10,6 +10,7 @@ build output, and documentation.
 | --- | --- | --- |
 | [Qibla Compass](./qibla-compass/) | Points toward the Qibla using the watch compass, the phone's location, and magnetic-declination correction. | Emery (Pebble Time 2) |
 | [Phone Sound Mode](./phone-sound-mode/) | Changes a paired Android phone's sound mode from the watch using a native Android companion app. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
+| [Meridian](./meridian/) | Analog watchface with weather, date, battery, connection and Quiet Time alerts, and health data. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 
 Follow a project's link for its requirements, build instructions, testing
 steps, and platform-specific notes.
@@ -21,6 +22,7 @@ steps, and platform-specific notes.
 ├── .gitignore           # Shared ignore rules for every project
 ├── qibla-compass/       # Qibla direction app
 ├── phone-sound-mode/    # Watch app and Android companion
+├── meridian/            # Analog watchface
 └── README.md            # Repository overview
 ```
 
