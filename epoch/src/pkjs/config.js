@@ -36,6 +36,32 @@ module.exports = [
     ]
   },
   {
+    type: 'section',
+    items: [
+      {
+        type: 'heading',
+        defaultValue: 'Weather and alerts'
+      },
+      {
+        type: 'select',
+        messageKey: 'TEMPERATURE_UNIT',
+        label: 'Temperature',
+        defaultValue: 'C',
+        options: [
+          { label: 'Celsius (°C)', value: 'C' },
+          { label: 'Fahrenheit (°F)', value: 'F' }
+        ]
+      },
+      {
+        type: 'toggle',
+        messageKey: 'DISCONNECT_VIBE',
+        label: 'Vibrate when the phone disconnects',
+        description: 'Never vibrates during Quiet Time.',
+        defaultValue: true
+      }
+    ]
+  },
+  {
     type: 'submit',
     defaultValue: 'Save'
   }

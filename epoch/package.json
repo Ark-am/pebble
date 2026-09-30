@@ -24,11 +24,18 @@
       "watchface": true
     },
     "capabilities": [
+      "location",
+      "health",
       "configurable"
     ],
     "messageKeys": [
       "THEME",
-      "NUMERALS"
+      "NUMERALS",
+      "TEMPERATURE",
+      "CONDITION",
+      "REQUEST_WEATHER",
+      "TEMPERATURE_UNIT",
+      "DISCONNECT_VIBE"
     ],
     "resources": {
       "media": []
