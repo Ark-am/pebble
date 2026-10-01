@@ -32,6 +32,16 @@ module.exports = [
           { label: 'Classic: 12, 2, 4, 6, 8, 10, turned to follow the dial', value: '0' },
           { label: 'Modern: 12, 3, 6, 9, upright', value: '1' }
         ]
+      },
+      {
+        type: 'input',
+        messageKey: 'DIAL_NAME',
+        label: 'Name on the dial',
+        description: 'Shown below the 12. Leave empty to show no name.',
+        defaultValue: 'Pebble',
+        attributes: {
+          maxlength: 20
+        }
       }
     ]
   },

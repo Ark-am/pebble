@@ -21,11 +21,11 @@ Open the watchface's settings in the Pebble phone app:
 | --- | --- |
 | Background | Light (default) or Dark |
 | Hour numbers | Classic: 12, 2, 4, 6, 8 and 10, turned to follow the dial (default). Modern: 12, 3, 6 and 9, upright. |
+| Name on the dial | Any text, shown below the 12 (default "Pebble"). Leave it empty to show no name. Long names are cut off with "…". |
 | Temperature | Celsius (default) or Fahrenheit |
 | Vibrate when the phone disconnects | On (default) or off |
 
-Hours without a number get a long index line instead. The name "Pebble" sits
-below the 12; change `DIAL_NAME` in `src/c/main.c` to show a different one.
+Hours without a number get a long index line instead.
 
 The system fonts cannot be rotated, so the classic numbers are drawn as line
 strokes from glyph outlines in `src/c/main.c`. Only the digits 0, 1, 2, 4, 6 and

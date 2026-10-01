@@ -60,17 +60,21 @@
 #define EDGE_INSET 2
 #define NUMERAL_GAP 6
 #define LINE_GAP 2
-#define DIAL_NAME "Pebble"
+#define DEFAULT_DIAL_NAME "Pebble"
 #define RING_SEGMENTS 10
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 2
+#define SETTINGS_VERSION 3
 typedef struct {
   uint8_t version;
   bool dark;
   bool modern_numerals;
   bool disconnect_vibe;
+  // Added in version 3. Empty to show no name.
+  char dial_name[32];
 } Settings;
+
+#define SETTINGS_V2_SIZE offsetof(Settings, dial_name)
 
 static Settings s_settings;
 
@@ -219,6 +223,7 @@ static void settings_set_defaults(Settings *settings) {
     .dark = false,
     .modern_numerals = false,
     .disconnect_vibe = true,
+    .dial_name = DEFAULT_DIAL_NAME,
   };
 }
 
@@ -569,8 +574,10 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   const int16_t below_numeral = reach_y - HOUR_TICK_LENGTH - NUMERAL_GAP - numeral_height;
   const int16_t above_row = row + (DATE_HEIGHT + LINE_GAP + LABEL_HEIGHT) / 2;
   const int16_t name_y = centre.y - (below_numeral + above_row) / 2;
-  draw_text_line(ctx, DIAL_NAME, s_label_font, GPoint(centre.x, name_y),
-                 name_y - LABEL_HEIGHT / 2, LABEL_PAD, LABEL_HEIGHT);
+  if (s_settings.dial_name[0]) {
+    draw_text_line(ctx, s_settings.dial_name, s_label_font, GPoint(centre.x, name_y),
+                   name_y - LABEL_HEIGHT / 2, LABEL_PAD, LABEL_HEIGHT);
+  }
 
   const int16_t side = reach_x * 32 / 100;
   draw_weather(ctx, GPoint(centre.x - side, centre.y - row));
@@ -641,6 +648,11 @@ static bool read_settings(DictionaryIterator *iterator) {
     s_settings.disconnect_vibe = tuple_int(tuple) != 0;
     changed = true;
   }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_DIAL_NAME)) && tuple->type == TUPLE_CSTRING) {
+    strncpy(s_settings.dial_name, tuple->value->cstring, sizeof(s_settings.dial_name) - 1);
+    s_settings.dial_name[sizeof(s_settings.dial_name) - 1] = '\0';
+    changed = true;
+  }
   return changed;
 }
 
@@ -692,6 +704,10 @@ static void load_saved_state(void) {
     const int size = persist_read_data(PERSIST_KEY_SETTINGS, &saved, sizeof(saved));
     if (size == (int)sizeof(saved) && saved.version == SETTINGS_VERSION) {
       s_settings = saved;
+    } else if (size == (int)SETTINGS_V2_SIZE && saved.version == 2) {
+      // Older settings carry over; the name keeps its default.
+      memcpy(&s_settings, &saved, SETTINGS_V2_SIZE);
+      s_settings.version = SETTINGS_VERSION;
     }
   }
   apply_palette();
