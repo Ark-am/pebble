@@ -1,8 +1,8 @@
 #include <pebble.h>
 
 // A classic analog watchface: a minute track that follows the edge of the
-// screen, hour numbers and indices, and tapered hands. The weather and health
-// data sit above the centre, the date and a battery ring below it; tap the
+// screen, hour numbers and indices, and tapered hands. The weather (with an
+// icon for the conditions) and health data sit above the centre, the date and a battery ring below it; tap the
 // watch to cycle the health metric. The background, the style of the hour
 // numbers and the other options are configurable from the phone (see src/pkjs).
 
@@ -10,6 +10,7 @@
 #define PERSIST_KEY_METRIC 2
 #define PERSIST_KEY_TEMPERATURE 3
 #define PERSIST_KEY_CONDITION 4
+#define PERSIST_KEY_DAYTIME 5
 
 #define WEATHER_REFRESH_MINUTES 30
 #define NO_TEMPERATURE INT32_MIN
@@ -35,6 +36,10 @@
   #define LEAF_RADIUS 7
   #define LEAF_OUTLINE 2
   #define RING_RADIUS 15
+  // Weather icons are designed on a 24 x 16 grid and drawn at this many
+  // quarters of a pixel per unit.
+  #define WEATHER_ICON_SCALE 4
+  #define WEATHER_ICON_STROKE 2
 #else
   #define MODERN_FONT FONT_KEY_GOTHIC_24_BOLD
   #define DATE_FONT FONT_KEY_GOTHIC_18_BOLD
@@ -55,6 +60,8 @@
   #define LEAF_RADIUS 4
   #define LEAF_OUTLINE 1
   #define RING_RADIUS 11
+  #define WEATHER_ICON_SCALE 3
+  #define WEATHER_ICON_STROKE 1
 #endif
 
 #define EDGE_INSET 2
@@ -84,6 +91,8 @@ typedef struct {
   GColor leaf;
   GColor ring;
   GColor connected;
+  GColor sun;
+  GColor rain;
 } Palette;
 
 static Palette s_palette;
@@ -98,6 +107,7 @@ static BatteryChargeState s_battery;
 static bool s_bluetooth_connected;
 static int32_t s_temperature = NO_TEMPERATURE;
 static char s_condition[16];
+static bool s_daytime = true;
 
 // ---------------------------------------------------------------------------
 // Health metrics
@@ -235,10 +245,14 @@ static void apply_palette(void) {
   s_palette.leaf = dark ? GColorDarkGray : GColorLightGray;
   s_palette.ring = GColorMintGreen;
   s_palette.connected = GColorPictonBlue;
+  s_palette.sun = GColorChromeYellow;
+  s_palette.rain = dark ? GColorPictonBlue : GColorBlue;
 #else
   s_palette.leaf = s_palette.background;
   s_palette.ring = s_palette.foreground;
   s_palette.connected = s_palette.foreground;
+  s_palette.sun = s_palette.foreground;
+  s_palette.rain = s_palette.foreground;
 #endif
 }
 
@@ -437,6 +451,180 @@ static void draw_complication(GContext *ctx, GPoint at, const char *value, const
                  LABEL_PAD, LABEL_HEIGHT);
 }
 
+// ---------------------------------------------------------------------------
+// Weather icons
+
+// Condition names as the phone sends them (see src/pkjs/index.js).
+typedef enum {
+  WEATHER_UNKNOWN,
+  WEATHER_CLEAR,
+  WEATHER_FAIR,
+  WEATHER_CLOUDY,
+  WEATHER_FOG,
+  WEATHER_DRIZZLE,
+  WEATHER_RAIN,
+  WEATHER_SHOWERS,
+  WEATHER_SNOW,
+  WEATHER_STORM,
+} Weather;
+
+static Weather weather_from_condition(const char *condition) {
+  static const char *const names[] = {
+    [WEATHER_CLEAR] = "CLEAR",
+    [WEATHER_FAIR] = "FAIR",
+    [WEATHER_CLOUDY] = "CLOUDY",
+    [WEATHER_FOG] = "FOG",
+    [WEATHER_DRIZZLE] = "DRIZZLE",
+    [WEATHER_RAIN] = "RAIN",
+    [WEATHER_SHOWERS] = "SHOWERS",
+    [WEATHER_SNOW] = "SNOW",
+    [WEATHER_STORM] = "STORM",
+  };
+  for (size_t i = 1; i < ARRAY_LENGTH(names); i++) {
+    if (strcmp(condition, names[i]) == 0) {
+      return i;
+    }
+  }
+  return WEATHER_UNKNOWN;
+}
+
+// A point on the icon's 24 x 16 design grid.
+static GPoint icon_point(GPoint origin, int16_t x, int16_t y) {
+  return GPoint(origin.x + x * WEATHER_ICON_SCALE / 4, origin.y + y * WEATHER_ICON_SCALE / 4);
+}
+
+static int16_t icon_size(int16_t size) {
+  return size * WEATHER_ICON_SCALE / 4;
+}
+
+// A cloud resting on a point: a large puff between a small one on the left and
+// a medium one on the right, over a flat base. It is about three and a quarter
+// times as wide as the radius and twice as tall. Growing it gives the outline that separates
+// it from a sun or moon behind it.
+static void draw_cloud(GContext *ctx, GPoint bottom, int16_t radius, int16_t grow,
+                       GColor color) {
+  const int16_t left_radius = radius * 55 / 100;
+  const int16_t right_radius = radius * 65 / 100;
+  const GPoint middle = GPoint(bottom.x, bottom.y - radius);
+  const GPoint left = GPoint(bottom.x - radius, bottom.y - left_radius);
+  const GPoint right = GPoint(bottom.x + radius * 105 / 100, bottom.y - right_radius);
+  graphics_context_set_fill_color(ctx, color);
+  graphics_fill_circle(ctx, middle, radius + grow);
+  graphics_fill_circle(ctx, left, left_radius + grow);
+  graphics_fill_circle(ctx, right, right_radius + grow);
+  graphics_fill_rect(ctx, GRect(left.x, bottom.y - left_radius - grow, right.x - left.x,
+                                left_radius + grow * 2 + 1),
+                     0, GCornerNone);
+}
+
+static void draw_outlined_cloud(GContext *ctx, GPoint bottom, int16_t radius) {
+  draw_cloud(ctx, bottom, radius, 1, s_palette.background);
+  draw_cloud(ctx, bottom, radius, 0, s_palette.foreground);
+}
+
+static void draw_sun(GContext *ctx, GPoint centre, int16_t radius) {
+  graphics_context_set_fill_color(ctx, s_palette.sun);
+  graphics_fill_circle(ctx, centre, radius);
+  graphics_context_set_stroke_color(ctx, s_palette.sun);
+  graphics_context_set_stroke_width(ctx, 1);
+  for (int i = 0; i < 8; i++) {
+    const int32_t angle = TRIG_MAX_ANGLE * i / 8;
+    graphics_draw_line(ctx, ray_point(centre, angle, radius + 2),
+                       ray_point(centre, angle, radius * 2 + 1));
+  }
+}
+
+static void draw_moon(GContext *ctx, GPoint centre, int16_t radius) {
+  graphics_context_set_fill_color(ctx, s_palette.foreground);
+  graphics_fill_circle(ctx, centre, radius);
+  graphics_context_set_fill_color(ctx, s_palette.background);
+  graphics_fill_circle(ctx, GPoint(centre.x + radius / 2, centre.y - radius / 3), radius * 5 / 6);
+}
+
+// Short slanted lines, round drops or snowflakes below a cloud.
+static void draw_precipitation(GContext *ctx, GPoint origin, Weather weather) {
+  static const int16_t columns[] = { 8, 13, 18 };
+  for (size_t i = 0; i < ARRAY_LENGTH(columns); i++) {
+    const int16_t x = columns[i];
+    switch (weather) {
+      case WEATHER_SNOW:
+        graphics_context_set_fill_color(ctx, s_palette.foreground);
+        graphics_fill_circle(ctx, icon_point(origin, x - 1, i % 2 ? 15 : 13), icon_size(3) / 2);
+        break;
+      case WEATHER_DRIZZLE:
+        graphics_context_set_fill_color(ctx, s_palette.rain);
+        graphics_fill_circle(ctx, icon_point(origin, x - 1, i % 2 ? 15 : 13), icon_size(2) / 2);
+        break;
+      default:
+        graphics_context_set_stroke_color(ctx, s_palette.rain);
+        graphics_context_set_stroke_width(ctx, WEATHER_ICON_STROKE);
+        graphics_draw_line(ctx, icon_point(origin, x, 12), icon_point(origin, x - 2, 16));
+        break;
+    }
+  }
+}
+
+static void draw_lightning(GContext *ctx, GPoint origin) {
+  const GPoint points[] = {
+    icon_point(origin, 14, 9), icon_point(origin, 10, 13),
+    icon_point(origin, 14, 13), icon_point(origin, 10, 17),
+  };
+  graphics_context_set_stroke_color(ctx, s_palette.sun);
+  graphics_context_set_stroke_width(ctx, WEATHER_ICON_STROKE);
+  for (size_t i = 1; i < ARRAY_LENGTH(points); i++) {
+    graphics_draw_line(ctx, points[i - 1], points[i]);
+  }
+}
+
+// Draws the icon for a condition in a 24 x 16 unit box centred on a point.
+static void draw_weather_icon(GContext *ctx, GPoint centre, Weather weather) {
+  const GPoint origin = GPoint(centre.x - icon_size(24) / 2, centre.y - icon_size(16) / 2);
+  switch (weather) {
+    case WEATHER_CLEAR:
+      if (s_daytime) {
+        draw_sun(ctx, icon_point(origin, 12, 8), icon_size(4));
+      } else {
+        draw_moon(ctx, icon_point(origin, 12, 8), icon_size(7));
+      }
+      break;
+    case WEATHER_FAIR:
+      if (s_daytime) {
+        draw_sun(ctx, icon_point(origin, 8, 6), icon_size(3));
+      } else {
+        draw_moon(ctx, icon_point(origin, 8, 6), icon_size(5));
+      }
+      draw_outlined_cloud(ctx, icon_point(origin, 14, 16), icon_size(5));
+      break;
+    case WEATHER_CLOUDY:
+      draw_cloud(ctx, icon_point(origin, 11, 16), icon_size(7), 0, s_palette.foreground);
+      break;
+    case WEATHER_FOG:
+      graphics_context_set_stroke_color(ctx, s_palette.foreground);
+      graphics_context_set_stroke_width(ctx, WEATHER_ICON_STROKE);
+      for (int i = 0; i < 3; i++) {
+        const int16_t y = 3 + i * 5;
+        const int16_t shift = i % 2 ? 2 : 0;
+        graphics_draw_line(ctx, icon_point(origin, 3 + shift, y), icon_point(origin, 19 + shift, y));
+      }
+      break;
+    case WEATHER_DRIZZLE:
+    case WEATHER_RAIN:
+    case WEATHER_SHOWERS:
+    case WEATHER_SNOW:
+      draw_cloud(ctx, icon_point(origin, 12, 10), icon_size(5), 0, s_palette.foreground);
+      draw_precipitation(ctx, origin, weather);
+      break;
+    case WEATHER_STORM:
+      draw_cloud(ctx, icon_point(origin, 12, 10), icon_size(5), 0, s_palette.foreground);
+      draw_lightning(ctx, origin);
+      break;
+    default:
+      break;
+  }
+}
+
+// The temperature above an icon for the conditions. Conditions without an
+// icon, and the time before the first reading, are written out instead.
 static void draw_weather(GContext *ctx, GPoint at) {
   char temperature[16];
   if (s_temperature == NO_TEMPERATURE) {
@@ -444,7 +632,15 @@ static void draw_weather(GContext *ctx, GPoint at) {
   } else {
     snprintf(temperature, sizeof(temperature), "%d\xc2\xb0", (int)s_temperature);
   }
-  draw_complication(ctx, at, temperature, s_condition[0] ? s_condition : "WEATHER");
+  const Weather weather = weather_from_condition(s_condition);
+  if (weather == WEATHER_UNKNOWN) {
+    draw_complication(ctx, at, temperature, s_condition[0] ? s_condition : "WEATHER");
+    return;
+  }
+  const int16_t top = at.y - (DATE_HEIGHT + LINE_GAP + LABEL_HEIGHT) / 2;
+  draw_text_line(ctx, temperature, s_date_font, at, top, DATE_PAD, DATE_HEIGHT);
+  draw_weather_icon(ctx, GPoint(at.x, top + DATE_HEIGHT + LINE_GAP + 1 + icon_size(16) / 2),
+                    weather);
 }
 
 #if defined(PBL_HEALTH)
@@ -659,6 +855,7 @@ static bool read_settings(DictionaryIterator *iterator) {
 static void inbox_received(DictionaryIterator *iterator, void *context) {
   const Tuple *temperature = dict_find(iterator, MESSAGE_KEY_TEMPERATURE);
   const Tuple *condition = dict_find(iterator, MESSAGE_KEY_CONDITION);
+  const Tuple *daytime = dict_find(iterator, MESSAGE_KEY_DAYTIME);
   if (temperature) {
     s_temperature = temperature->value->int32;
     persist_write_int(PERSIST_KEY_TEMPERATURE, s_temperature);
@@ -667,6 +864,10 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
     strncpy(s_condition, condition->value->cstring, sizeof(s_condition) - 1);
     s_condition[sizeof(s_condition) - 1] = '\0';
     persist_write_string(PERSIST_KEY_CONDITION, s_condition);
+  }
+  if (daytime) {
+    s_daytime = daytime->value->int32 != 0;
+    persist_write_bool(PERSIST_KEY_DAYTIME, s_daytime);
   }
 
   if (read_settings(iterator)) {
@@ -717,6 +918,9 @@ static void load_saved_state(void) {
   }
   if (persist_exists(PERSIST_KEY_CONDITION)) {
     persist_read_string(PERSIST_KEY_CONDITION, s_condition, sizeof(s_condition));
+  }
+  if (persist_exists(PERSIST_KEY_DAYTIME)) {
+    s_daytime = persist_read_bool(PERSIST_KEY_DAYTIME);
   }
 #if defined(PBL_HEALTH)
   s_metric = persist_exists(PERSIST_KEY_METRIC)

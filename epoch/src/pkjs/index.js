@@ -1,6 +1,7 @@
 // Serves the settings page (via Clay) and fetches the current weather for the
 // phone's location from Open-Meteo, which needs no API key. The watch gets the
-// temperature in the chosen unit and a short condition name.
+// temperature in the chosen unit, a short condition name, and whether it is
+// daytime there, so clear skies show a sun or a moon.
 
 var Clay = require('@rebble/clay');
 var clayConfig = require('./config');
@@ -38,7 +39,7 @@ function sendWeather(position) {
   var url = 'https://api.open-meteo.com/v1/forecast' +
     '?latitude=' + position.coords.latitude.toFixed(3) +
     '&longitude=' + position.coords.longitude.toFixed(3) +
-    '&current=temperature_2m,weather_code' +
+    '&current=temperature_2m,weather_code,is_day' +
     (useFahrenheit() ? '&temperature_unit=fahrenheit' : '');
 
   var request = new XMLHttpRequest();
@@ -50,7 +51,8 @@ function sendWeather(position) {
     var current = JSON.parse(request.responseText).current;
     Pebble.sendAppMessage({
       TEMPERATURE: Math.round(current.temperature_2m),
-      CONDITION: conditionName(current.weather_code)
+      CONDITION: conditionName(current.weather_code),
+      DAYTIME: current.is_day
     }, null, function () {
       console.log('Could not send weather to the watch');
     });

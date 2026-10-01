@@ -36,7 +36,8 @@
       "REQUEST_WEATHER",
       "TEMPERATURE_UNIT",
       "DISCONNECT_VIBE",
-      "DIAL_NAME"
+      "DIAL_NAME",
+      "DAYTIME"
     ],
     "resources": {
       "media": []
