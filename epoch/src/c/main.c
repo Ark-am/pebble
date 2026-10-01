@@ -71,7 +71,7 @@
 #define RING_SEGMENTS 10
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 3
+#define SETTINGS_VERSION 4
 typedef struct {
   uint8_t version;
   bool dark;
@@ -79,9 +79,20 @@ typedef struct {
   bool disconnect_vibe;
   // Added in version 3. Empty to show no name.
   char dial_name[32];
+  // Added in version 4.
+  bool second_hand;
 } Settings;
 
-#define SETTINGS_V2_SIZE offsetof(Settings, dial_name)
+// How much of the settings each version saved, so older settings carry over
+// and the fields added since keep their defaults.
+static int settings_size(uint8_t version) {
+  switch (version) {
+    case 2: return offsetof(Settings, dial_name);
+    case 3: return offsetof(Settings, second_hand);
+    case SETTINGS_VERSION: return sizeof(Settings);
+    default: return -1;
+  }
+}
 
 static Settings s_settings;
 
@@ -93,6 +104,7 @@ typedef struct {
   GColor connected;
   GColor sun;
   GColor rain;
+  GColor second_hand;
 } Palette;
 
 static Palette s_palette;
@@ -234,6 +246,7 @@ static void settings_set_defaults(Settings *settings) {
     .modern_numerals = false,
     .disconnect_vibe = true,
     .dial_name = DEFAULT_DIAL_NAME,
+    .second_hand = false,
   };
 }
 
@@ -247,12 +260,14 @@ static void apply_palette(void) {
   s_palette.connected = GColorPictonBlue;
   s_palette.sun = GColorChromeYellow;
   s_palette.rain = dark ? GColorPictonBlue : GColorBlue;
+  s_palette.second_hand = GColorRed;
 #else
   s_palette.leaf = s_palette.background;
   s_palette.ring = s_palette.foreground;
   s_palette.connected = s_palette.foreground;
   s_palette.sun = s_palette.foreground;
   s_palette.rain = s_palette.foreground;
+  s_palette.second_hand = s_palette.foreground;
 #endif
 }
 
@@ -789,6 +804,17 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   const int32_t hour_angle = TRIG_MAX_ANGLE * ((t->tm_hour % 12) * 60 + t->tm_min) / 720;
   draw_hand(ctx, centre, hour_angle, hour_length, HOUR_HAND_WIDTH);
   draw_hand(ctx, centre, minute_angle, minute_length, MINUTE_HAND_WIDTH);
+
+  if (s_settings.second_hand) {
+    // A thin line with a short tail, pinned by a dot over the other hands.
+    const int32_t second_angle = TRIG_MAX_ANGLE * t->tm_sec / 60;
+    graphics_context_set_stroke_color(ctx, s_palette.second_hand);
+    graphics_context_set_stroke_width(ctx, 1);
+    graphics_draw_line(ctx, ray_point(centre, second_angle + TRIG_MAX_ANGLE / 2, LEAF_RADIUS * 2),
+                       ray_point(centre, second_angle, minute_length + 2));
+    graphics_context_set_fill_color(ctx, s_palette.second_hand);
+    graphics_fill_circle(ctx, centre, LEAF_RADIUS / 2);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -805,9 +831,15 @@ static void request_weather(void) {
 
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   layer_mark_dirty(s_canvas);
-  if (tick_time->tm_min % WEATHER_REFRESH_MINUTES == 0) {
+  if ((units_changed & MINUTE_UNIT) && tick_time->tm_min % WEATHER_REFRESH_MINUTES == 0) {
     request_weather();
   }
+}
+
+// A second hand costs battery, so only tick every second while it is shown.
+static void subscribe_ticks(void) {
+  tick_timer_service_subscribe(s_settings.second_hand ? SECOND_UNIT : MINUTE_UNIT,
+                               tick_handler);
 }
 
 static void battery_handler(BatteryChargeState state) {
@@ -844,6 +876,10 @@ static bool read_settings(DictionaryIterator *iterator) {
     s_settings.disconnect_vibe = tuple_int(tuple) != 0;
     changed = true;
   }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_SECOND_HAND))) {
+    s_settings.second_hand = tuple_int(tuple) != 0;
+    changed = true;
+  }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_DIAL_NAME)) && tuple->type == TUPLE_CSTRING) {
     strncpy(s_settings.dial_name, tuple->value->cstring, sizeof(s_settings.dial_name) - 1);
     s_settings.dial_name[sizeof(s_settings.dial_name) - 1] = '\0';
@@ -874,6 +910,7 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
     persist_write_data(PERSIST_KEY_SETTINGS, &s_settings, sizeof(s_settings));
     apply_palette();
     window_set_background_color(s_window, s_palette.background);
+    subscribe_ticks();
   }
   layer_mark_dirty(s_canvas);
 }
@@ -903,11 +940,8 @@ static void load_saved_state(void) {
   if (persist_exists(PERSIST_KEY_SETTINGS)) {
     Settings saved;
     const int size = persist_read_data(PERSIST_KEY_SETTINGS, &saved, sizeof(saved));
-    if (size == (int)sizeof(saved) && saved.version == SETTINGS_VERSION) {
-      s_settings = saved;
-    } else if (size == (int)SETTINGS_V2_SIZE && saved.version == 2) {
-      // Older settings carry over; the name keeps its default.
-      memcpy(&s_settings, &saved, SETTINGS_V2_SIZE);
+    if (size == settings_size(saved.version)) {
+      memcpy(&s_settings, &saved, size);
       s_settings.version = SETTINGS_VERSION;
     }
   }
@@ -948,7 +982,7 @@ static void init(void) {
   });
   window_stack_push(s_window, true);
 
-  tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
+  subscribe_ticks();
   battery_state_service_subscribe(battery_handler);
   connection_service_subscribe((ConnectionHandlers) {
     .pebble_app_connection_handler = bluetooth_handler,

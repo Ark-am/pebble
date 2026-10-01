@@ -34,6 +34,13 @@ module.exports = [
         ]
       },
       {
+        type: 'toggle',
+        messageKey: 'SECOND_HAND',
+        label: 'Show second hand',
+        description: 'Updates every second, which uses more battery.',
+        defaultValue: false
+      },
+      {
         type: 'input',
         messageKey: 'DIAL_NAME',
         label: 'Name on the dial',

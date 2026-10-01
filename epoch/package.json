@@ -37,7 +37,8 @@
       "TEMPERATURE_UNIT",
       "DISCONNECT_VIBE",
       "DIAL_NAME",
-      "DAYTIME"
+      "DAYTIME",
+      "SECOND_HAND"
     ],
     "resources": {
       "media": []

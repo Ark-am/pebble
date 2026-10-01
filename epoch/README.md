@@ -21,6 +21,7 @@ Open the watchface's settings in the Pebble phone app:
 | --- | --- |
 | Background | Light (default) or Dark |
 | Hour numbers | Classic: 12, 2, 4, 6, 8 and 10, turned to follow the dial (default). Modern: 12, 3, 6 and 9, upright. |
+| Second hand | Off (default) or on. It updates every second, which uses more battery. |
 | Name on the dial | Any text, shown below the 12 (default "Pebble"). Leave it empty to show no name. Long names are cut off with "…". |
 | Temperature | Celsius (default) or Fahrenheit |
 | Vibrate when the phone disconnects | On (default) or off |
