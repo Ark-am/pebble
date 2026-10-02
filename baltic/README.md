@@ -3,7 +3,9 @@
 A dress-watch face modelled on a classic small-seconds wristwatch: a round
 dial with a minute scale and railroad track around the edge, Breguet-style hour
 numbers, slim leaf hands, and a small seconds dial at half past seven, where the
-7 and 8 would be. On rectangular watches the area around the dial is black.
+7 and 8 would be. If you choose, a matching small dial at half past four shows
+the date, weather, battery or health data, in place of the 4 and 5. On
+rectangular watches the area around the dial is black.
 
 ## Settings
 
@@ -14,6 +16,13 @@ Open the watchface's settings in the Pebble phone app:
 | Dial | Salmon (default), Navy blue, Silver, Black and gold, or Azure blue |
 | Running seconds | On (default) or off. Shows a hand on the small seconds dial; it updates every second, which uses more battery. |
 | Name on the dial | Any text up to 12 characters, in spaced capitals below the 12 (default "BALTIC"). Leave it empty to show no name. |
+| Small dial at half past four | Nothing (default), Date, Weather, Battery, or Health. Health shows steps; tap the watch to cycle through distance, active calories, active minutes, sleep and heart rate (on watches with a sensor). The original Pebble has no health data and shows the date instead. |
+| Temperature | Celsius (default) or Fahrenheit, for the weather |
+
+The weather comes from [Open-Meteo](https://open-meteo.com/), which needs no
+account or API key, for the phone's location. The phone only asks for the
+location while the weather is chosen, and the watch refreshes it every 30
+minutes.
 
 | Dial | Dial colour | Numbers and hands |
 | --- | --- | --- |

@@ -46,6 +46,32 @@ module.exports = [
         attributes: {
           maxlength: 12
         }
+      },
+      {
+        // Values match the Info enum on the watch.
+        type: 'select',
+        messageKey: 'INFO',
+        label: 'Small dial at half past four',
+        description: 'Health data is not available on the original Pebble, which shows the ' +
+          'date instead. Tap the watch to cycle through the health data.',
+        defaultValue: '0',
+        options: [
+          { label: 'Nothing', value: '0' },
+          { label: 'Date', value: '1' },
+          { label: 'Weather', value: '2' },
+          { label: 'Battery', value: '3' },
+          { label: 'Health (steps, distance, sleep and more)', value: '4' }
+        ]
+      },
+      {
+        type: 'select',
+        messageKey: 'TEMPERATURE_UNIT',
+        label: 'Temperature',
+        defaultValue: 'C',
+        options: [
+          { label: 'Celsius (°C)', value: 'C' },
+          { label: 'Fahrenheit (°F)', value: 'F' }
+        ]
       }
     ]
   },

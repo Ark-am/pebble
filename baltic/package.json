@@ -24,12 +24,19 @@
       "watchface": true
     },
     "capabilities": [
+      "location",
+      "health",
       "configurable"
     ],
     "messageKeys": [
       "DIAL_COLOR",
       "SECONDS",
-      "DIAL_NAME"
+      "DIAL_NAME",
+      "INFO",
+      "TEMPERATURE",
+      "CONDITION",
+      "REQUEST_WEATHER",
+      "TEMPERATURE_UNIT"
     ],
     "resources": {
       "media": [
@@ -44,14 +51,23 @@
           "name": "FONT_NUMERALS_16",
           "file": "fonts/NotoSerifDisplay-BoldItalic.ttf",
           "characterRegex": "[0-9]",
-          "targetPlatforms": ["aplite", "basalt", "chalk", "diorite", "flint"]
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_NUMERALS_22",
           "file": "fonts/NotoSerifDisplay-BoldItalic.ttf",
           "characterRegex": "[0-9]",
-          "targetPlatforms": ["emery", "gabbro"]
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
         }
       ]
     }
