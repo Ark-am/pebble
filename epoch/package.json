@@ -53,6 +53,222 @@
           "name": "IMAGE_MENU_ICON",
           "file": "images/menu_icon.png",
           "menuIcon": true
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_12",
+          "file": "images/numerals/numeral_large_black_12.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_2",
+          "file": "images/numerals/numeral_large_black_2.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_4",
+          "file": "images/numerals/numeral_large_black_4.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_6",
+          "file": "images/numerals/numeral_large_black_6.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_8",
+          "file": "images/numerals/numeral_large_black_8.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_10",
+          "file": "images/numerals/numeral_large_black_10.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_12",
+          "file": "images/numerals/numeral_large_white_12.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_2",
+          "file": "images/numerals/numeral_large_white_2.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_4",
+          "file": "images/numerals/numeral_large_white_4.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_6",
+          "file": "images/numerals/numeral_large_white_6.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_8",
+          "file": "images/numerals/numeral_large_white_8.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_10",
+          "file": "images/numerals/numeral_large_white_10.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_12",
+          "file": "images/numerals/numeral_small_black_12.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_2",
+          "file": "images/numerals/numeral_small_black_2.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_4",
+          "file": "images/numerals/numeral_small_black_4.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_6",
+          "file": "images/numerals/numeral_small_black_6.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_8",
+          "file": "images/numerals/numeral_small_black_8.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_10",
+          "file": "images/numerals/numeral_small_black_10.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_12",
+          "file": "images/numerals/numeral_small_white_12.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_2",
+          "file": "images/numerals/numeral_small_white_2.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_4",
+          "file": "images/numerals/numeral_small_white_4.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_6",
+          "file": "images/numerals/numeral_small_white_6.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_8",
+          "file": "images/numerals/numeral_small_white_8.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_10",
+          "file": "images/numerals/numeral_small_white_10.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
         }
       ]
     }

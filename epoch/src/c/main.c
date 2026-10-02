@@ -140,6 +140,45 @@ static GFont s_modern_font;
 static GFont s_date_font;
 static GFont s_label_font;
 
+#if defined(PBL_COLOR)
+// Smooth images of the classic numbers, already turned to follow the dial and
+// made by tools/make_numerals.py, in the order 12, 2, 4, 6, 8, 10.
+#if PBL_DISPLAY_WIDTH >= 200
+static const uint32_t NUMERAL_BLACK[6] = {
+  RESOURCE_ID_NUMERAL_LARGE_BLACK_12, RESOURCE_ID_NUMERAL_LARGE_BLACK_2,
+  RESOURCE_ID_NUMERAL_LARGE_BLACK_4, RESOURCE_ID_NUMERAL_LARGE_BLACK_6,
+  RESOURCE_ID_NUMERAL_LARGE_BLACK_8, RESOURCE_ID_NUMERAL_LARGE_BLACK_10,
+};
+static const uint32_t NUMERAL_WHITE[6] = {
+  RESOURCE_ID_NUMERAL_LARGE_WHITE_12, RESOURCE_ID_NUMERAL_LARGE_WHITE_2,
+  RESOURCE_ID_NUMERAL_LARGE_WHITE_4, RESOURCE_ID_NUMERAL_LARGE_WHITE_6,
+  RESOURCE_ID_NUMERAL_LARGE_WHITE_8, RESOURCE_ID_NUMERAL_LARGE_WHITE_10,
+};
+#else
+static const uint32_t NUMERAL_BLACK[6] = {
+  RESOURCE_ID_NUMERAL_SMALL_BLACK_12, RESOURCE_ID_NUMERAL_SMALL_BLACK_2,
+  RESOURCE_ID_NUMERAL_SMALL_BLACK_4, RESOURCE_ID_NUMERAL_SMALL_BLACK_6,
+  RESOURCE_ID_NUMERAL_SMALL_BLACK_8, RESOURCE_ID_NUMERAL_SMALL_BLACK_10,
+};
+static const uint32_t NUMERAL_WHITE[6] = {
+  RESOURCE_ID_NUMERAL_SMALL_WHITE_12, RESOURCE_ID_NUMERAL_SMALL_WHITE_2,
+  RESOURCE_ID_NUMERAL_SMALL_WHITE_4, RESOURCE_ID_NUMERAL_SMALL_WHITE_6,
+  RESOURCE_ID_NUMERAL_SMALL_WHITE_8, RESOURCE_ID_NUMERAL_SMALL_WHITE_10,
+};
+#endif
+
+static GBitmap *s_numerals[6];
+
+static void unload_numerals(void) {
+  for (int i = 0; i < 6; i++) {
+    if (s_numerals[i]) {
+      gbitmap_destroy(s_numerals[i]);
+      s_numerals[i] = NULL;
+    }
+  }
+}
+#endif
+
 static BatteryChargeState s_battery;
 static bool s_bluetooth_connected;
 static int32_t s_temperature = NO_TEMPERATURE;
@@ -301,6 +340,15 @@ static void apply_palette(void) {
   s_palette.rain = s_palette.foreground;
   s_palette.second_hand = s_palette.foreground;
 #endif
+
+#if defined(PBL_COLOR)
+  // The classic numbers' images match the text colour.
+  unload_numerals();
+  const uint32_t *ids = s_settings.dark ? NUMERAL_WHITE : NUMERAL_BLACK;
+  for (int i = 0; i < 6; i++) {
+    s_numerals[i] = gbitmap_create_with_resource(ids[i]);
+  }
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -384,6 +432,21 @@ static void fill_dial(GContext *ctx, GRect screen, GRect bounds) {
   graphics_fill_circle(ctx, GPoint(right, top), r);
   graphics_fill_circle(ctx, GPoint(left, bottom), r);
   graphics_fill_circle(ctx, GPoint(right, bottom), r);
+
+  // Filled circles have stepped edges, so a smooth arc is drawn over the outer
+  // quarter of each corner.
+  graphics_context_set_stroke_color(ctx, GColorBlack);
+  graphics_context_set_stroke_width(ctx, 2);
+  const GPoint corners[] = {
+    GPoint(left, top), GPoint(right, top), GPoint(right, bottom), GPoint(left, bottom),
+  };
+  for (int i = 0; i < 4; i++) {
+    // Quarters clockwise from 12 o'clock: top right, bottom right, bottom left,
+    // top left. Corner i needs the quarter i + 3.
+    const int32_t start = TRIG_MAX_ANGLE * ((i + 3) % 4) / 4;
+    graphics_draw_arc(ctx, GRect(corners[i].x - r - 1, corners[i].y - r - 1, r * 2 + 3, r * 2 + 3),
+                      GOvalScaleModeFitCircle, start, start + TRIG_MAX_ANGLE / 4);
+  }
 #endif
 }
 
@@ -590,6 +653,17 @@ static void draw_hours(GContext *ctx, GRect bounds, GPoint centre) {
       // The tops of the numbers face outward, except on the lower half of the
       // dial, where that would turn them upside down.
       const bool lower = hour > 3 && hour < 9;
+#if defined(PBL_COLOR)
+      GBitmap *image = s_numerals[hour / 2];
+      if (image) {
+        const GSize size = gbitmap_get_bounds(image).size;
+        graphics_context_set_compositing_mode(ctx, GCompOpSet);
+        graphics_draw_bitmap_in_rect(ctx, image, GRect(at.x - size.w / 2, at.y - size.h / 2,
+                                                       size.w, size.h));
+        graphics_context_set_compositing_mode(ctx, GCompOpAssign);
+        continue;
+      }
+#endif
       draw_classic_numeral(ctx, text, at, lower ? angle - TRIG_MAX_ANGLE / 2 : angle);
     }
   }
@@ -1449,6 +1523,9 @@ static void deinit(void) {
   accel_tap_service_unsubscribe();
 #endif
   window_destroy(s_window);
+#if defined(PBL_COLOR)
+  unload_numerals();
+#endif
 }
 
 int main(void) {

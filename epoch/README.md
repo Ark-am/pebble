@@ -34,9 +34,13 @@ Open the watchface's settings in the Pebble phone app:
 
 Hours without a number get a long index line instead.
 
-The system fonts cannot be rotated, so the classic numbers are drawn as line
-strokes from glyph outlines in `src/c/main.c`. Only the digits 0, 1, 2, 4, 6 and
-8 are defined.
+Pebble's fonts cannot be rotated and are drawn without smoothing, so on colour
+watches the classic numbers are images with soft edges, already turned to
+follow the dial. `tools/make_numerals.py` renders them from Noto Serif Display
+Bold, narrowed to a condensed shape, into `resources/images/numerals/`; run it
+again after changing the font, sizes or angles. Black-and-white watches cannot
+show soft edges, so they draw the numbers as line strokes from glyph outlines
+in `src/c/main.c`, where only the digits 0, 1, 2, 4, 6 and 8 are defined.
 
 ## Weather
 
