@@ -38,7 +38,13 @@
       "DISCONNECT_VIBE",
       "DIAL_NAME",
       "DAYTIME",
-      "SECOND_HAND"
+      "SECOND_HAND",
+      "SHOW_WEATHER",
+      "SHOW_HEALTH",
+      "SHOW_DATE",
+      "SHOW_BATTERY",
+      "AVOID_HANDS",
+      "SECOND_HAND_COLOR"
     ],
     "resources": {
       "media": [

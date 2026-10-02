@@ -33,8 +33,9 @@
   #define HOUR_TICK_LENGTH 9
   #define HOUR_HAND_WIDTH 4
   #define MINUTE_HAND_WIDTH 3
-  #define LEAF_RADIUS 7
+  #define LEAF_RADIUS 5
   #define LEAF_OUTLINE 2
+  #define CORNER_RADIUS 22
   #define RING_RADIUS 15
   // Weather icons are designed on a 24 x 16 grid and drawn at this many
   // quarters of a pixel per unit.
@@ -57,8 +58,9 @@
   #define HOUR_TICK_LENGTH 7
   #define HOUR_HAND_WIDTH 3
   #define MINUTE_HAND_WIDTH 2
-  #define LEAF_RADIUS 4
+  #define LEAF_RADIUS 3
   #define LEAF_OUTLINE 1
+  #define CORNER_RADIUS 16
   #define RING_RADIUS 11
   #define WEATHER_ICON_SCALE 3
   #define WEATHER_ICON_STROKE 1
@@ -69,9 +71,20 @@
 #define LINE_GAP 2
 #define DEFAULT_DIAL_NAME "Pebble"
 #define RING_SEGMENTS 10
+// How far along each hand its grey leaf reaches, in percent.
+#define LEAF_PERCENT 70
+
+// How far an item may move to keep clear of the hands: around the centre in
+// steps of 3 degrees, and outward in steps of a sixth of its distance. A step
+// outward counts as three steps around. Plus the space to leave around it.
+#define AVOID_STEP (TRIG_MAX_ANGLE / 120)
+#define AVOID_STEPS 20
+#define AVOID_PUSHES 3
+#define AVOID_PUSH_COST 3
+#define AVOID_GAP 2
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 4
+#define SETTINGS_VERSION 7
 typedef struct {
   uint8_t version;
   bool dark;
@@ -81,6 +94,15 @@ typedef struct {
   char dial_name[32];
   // Added in version 4.
   bool second_hand;
+  // Added in version 5: which complications are shown.
+  bool show_weather;
+  bool show_health;
+  bool show_date;
+  bool show_battery;
+  // Added in version 6.
+  bool avoid_hands;
+  // Added in version 7. 0 (clear) means the same colour as the text.
+  uint8_t second_hand_argb;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -89,6 +111,9 @@ static int settings_size(uint8_t version) {
   switch (version) {
     case 2: return offsetof(Settings, dial_name);
     case 3: return offsetof(Settings, second_hand);
+    case 4: return offsetof(Settings, show_weather);
+    case 5: return offsetof(Settings, avoid_hands);
+    case 6: return offsetof(Settings, second_hand_argb);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -247,6 +272,12 @@ static void settings_set_defaults(Settings *settings) {
     .disconnect_vibe = true,
     .dial_name = DEFAULT_DIAL_NAME,
     .second_hand = false,
+    .show_weather = true,
+    .show_health = true,
+    .show_date = true,
+    .show_battery = true,
+    .avoid_hands = false,
+    .second_hand_argb = GColorRedARGB8,
   };
 }
 
@@ -260,7 +291,8 @@ static void apply_palette(void) {
   s_palette.connected = GColorPictonBlue;
   s_palette.sun = GColorChromeYellow;
   s_palette.rain = dark ? GColorPictonBlue : GColorBlue;
-  s_palette.second_hand = GColorRed;
+  s_palette.second_hand = s_settings.second_hand_argb
+    ? (GColor) { .argb = s_settings.second_hand_argb } : s_palette.foreground;
 #else
   s_palette.leaf = s_palette.background;
   s_palette.ring = s_palette.foreground;
@@ -281,9 +313,24 @@ static GPoint ray_point(GPoint centre, int32_t angle, int32_t distance) {
   );
 }
 
-// Distance from the centre to the screen edge along an angle. Round screens
-// use a circle; rectangular ones follow the display's edge so the minute
-// track fills the whole face.
+#if !defined(PBL_ROUND)
+static int32_t isqrt(int32_t value) {
+  if (value <= 0) {
+    return 0;
+  }
+  int32_t root = value;
+  int32_t next = (root + 1) / 2;
+  while (next < root) {
+    root = next;
+    next = (root + value / root) / 2;
+  }
+  return root;
+}
+#endif
+
+// Distance from the centre to the edge of the dial along an angle. Round
+// screens use a circle; rectangular ones follow the dial's rounded rectangle so
+// the minute track fills the whole face.
 static int32_t edge_distance(GRect bounds, int32_t angle) {
   const int32_t half_w = bounds.size.w / 2 - EDGE_INSET;
   const int32_t half_h = bounds.size.h / 2 - EDGE_INSET;
@@ -295,8 +342,82 @@ static int32_t edge_distance(GRect bounds, int32_t angle) {
   const int32_t cos_abs = abs(cos_lookup(angle));
   const int32_t to_side = sin_abs ? half_w * TRIG_MAX_RATIO / sin_abs : INT32_MAX;
   const int32_t to_top = cos_abs ? half_h * TRIG_MAX_RATIO / cos_abs : INT32_MAX;
-  return to_side < to_top ? to_side : to_top;
+  const int32_t distance = to_side < to_top ? to_side : to_top;
+
+  // Where the ray meets a rounded corner, find where it crosses the corner's
+  // circle instead, working in sixteenths of a pixel.
+  const int32_t radius = CORNER_RADIUS - EDGE_INSET;
+  const int32_t corner_x = half_w - radius;
+  const int32_t corner_y = half_h - radius;
+  if (distance * sin_abs / TRIG_MAX_RATIO <= corner_x
+      || distance * cos_abs / TRIG_MAX_RATIO <= corner_y) {
+    return distance;
+  }
+  const int32_t along = (sin_abs * corner_x + cos_abs * corner_y) / (TRIG_MAX_RATIO / 16);
+  const int32_t offset = along * along
+    - 256 * (corner_x * corner_x + corner_y * corner_y - radius * radius);
+  return (along + isqrt(offset)) / 16;
 #endif
+}
+
+// The dial: the whole screen on round watches, a rectangle with rounded, black
+// corners on the others.
+static void fill_dial(GContext *ctx, GRect screen, GRect bounds) {
+#if defined(PBL_ROUND)
+  graphics_context_set_fill_color(ctx, s_palette.background);
+  graphics_fill_rect(ctx, screen, 0, GCornerNone);
+#else
+  graphics_context_set_fill_color(ctx, GColorBlack);
+  graphics_fill_rect(ctx, screen, 0, GCornerNone);
+  const int16_t r = CORNER_RADIUS;
+  const GRect b = bounds;
+  graphics_context_set_fill_color(ctx, s_palette.background);
+  graphics_fill_rect(ctx, GRect(b.origin.x + r, b.origin.y, b.size.w - r * 2, b.size.h),
+                     0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(b.origin.x, b.origin.y + r, b.size.w, b.size.h - r * 2),
+                     0, GCornerNone);
+  const int16_t left = b.origin.x + r;
+  const int16_t right = b.origin.x + b.size.w - r - 1;
+  const int16_t top = b.origin.y + r;
+  const int16_t bottom = b.origin.y + b.size.h - r - 1;
+  graphics_fill_circle(ctx, GPoint(left, top), r);
+  graphics_fill_circle(ctx, GPoint(right, top), r);
+  graphics_fill_circle(ctx, GPoint(left, bottom), r);
+  graphics_fill_circle(ctx, GPoint(right, bottom), r);
+#endif
+}
+
+static GRect rect_grow(GRect rect, int16_t by) {
+  return GRect(rect.origin.x - by, rect.origin.y - by,
+               rect.size.w + by * 2, rect.size.h + by * 2);
+}
+
+static bool rects_overlap(GRect a, GRect b) {
+  return a.origin.x < b.origin.x + b.size.w && b.origin.x < a.origin.x + a.size.w
+    && a.origin.y < b.origin.y + b.size.h && b.origin.y < a.origin.y + a.size.h;
+}
+
+// Positive or negative according to which side of the line from a to b the
+// point is on.
+static int32_t side_of_line(GPoint a, GPoint b, GPoint point) {
+  return (int32_t)(b.x - a.x) * (point.y - a.y) - (int32_t)(b.y - a.y) * (point.x - a.x);
+}
+
+static bool lines_cross(GPoint a, GPoint b, GPoint c, GPoint d) {
+  return (side_of_line(c, d, a) > 0) != (side_of_line(c, d, b) > 0)
+    && (side_of_line(a, b, c) > 0) != (side_of_line(a, b, d) > 0);
+}
+
+// A line that passes through a rectangle either ends inside it or crosses one
+// of its diagonals.
+static bool line_crosses_rect(GPoint a, GPoint b, GRect rect) {
+  const GPoint top_left = rect.origin;
+  const GPoint bottom_right = GPoint(rect.origin.x + rect.size.w, rect.origin.y + rect.size.h);
+  const GPoint top_right = GPoint(bottom_right.x, top_left.y);
+  const GPoint bottom_left = GPoint(top_left.x, bottom_right.y);
+  return grect_contains_point(&rect, &a) || grect_contains_point(&rect, &b)
+    || lines_cross(a, b, top_left, bottom_right)
+    || lines_cross(a, b, top_right, bottom_left);
 }
 
 // ---------------------------------------------------------------------------
@@ -393,7 +514,7 @@ static void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
     const int32_t outer = edge_distance(bounds, angle);
     const int32_t length = hour ? HOUR_TICK_LENGTH : MINUTE_TICK_LENGTH;
     graphics_context_set_stroke_color(ctx, s_palette.foreground);
-    graphics_context_set_stroke_width(ctx, hour ? 3 : 1);
+    graphics_context_set_stroke_width(ctx, hour ? 2 : 1);
     graphics_draw_line(ctx, ray_point(centre, angle, outer - length),
                        ray_point(centre, angle, outer));
   }
@@ -413,13 +534,47 @@ static void draw_modern_numeral(GContext *ctx, const char *text, GPoint at) {
 
 // Hour numbers sit just inside the ticks, with a long index at every other
 // hour.
+static int16_t modern_numeral_width(const char *text) {
+  return graphics_text_layout_get_content_size(
+    text, s_modern_font, GRect(0, 0, 60, MODERN_HEIGHT + MODERN_PAD * 2),
+    GTextOverflowModeFill, GTextAlignmentCenter).w;
+}
+
+// The area an hour number covers. Classic numbers turn with the dial, so they
+// are given a square as wide as the number.
+static GRect numeral_rect(GRect bounds, GPoint centre, int hour) {
+  const int32_t angle = TRIG_MAX_ANGLE * hour / 12;
+  const int32_t edge = edge_distance(bounds, angle);
+  char text[3];
+  snprintf(text, sizeof(text), "%d", hour == 0 ? 12 : hour);
+  int16_t width;
+  int16_t height;
+  int32_t reach;
+  if (s_settings.modern_numerals) {
+    width = modern_numeral_width(text);
+    height = MODERN_HEIGHT;
+    // Numbers at 3 and 9 reach the ticks with their width, not their height.
+    reach = hour % 6 == 0 ? MODERN_HEIGHT / 2 : width / 2;
+  } else {
+    const int length = strlen(text);
+    width = (length * GLYPH_WIDTH + (length - 1) * GLYPH_GAP) * CLASSIC_HEIGHT / GLYPH_HEIGHT;
+    if (width < CLASSIC_HEIGHT) {
+      width = CLASSIC_HEIGHT;
+    }
+    height = width;
+    reach = CLASSIC_HEIGHT / 2;
+  }
+  const GPoint at = ray_point(centre, angle, edge - HOUR_TICK_LENGTH - NUMERAL_GAP - reach);
+  return GRect(at.x - width / 2, at.y - height / 2, width, height);
+}
+
 static void draw_hours(GContext *ctx, GRect bounds, GPoint centre) {
   for (int hour = 0; hour < 12; hour++) {
     const int32_t angle = TRIG_MAX_ANGLE * hour / 12;
-    const int32_t edge = edge_distance(bounds, angle);
     if (!hour_has_numeral(hour)) {
+      const int32_t edge = edge_distance(bounds, angle);
       graphics_context_set_stroke_color(ctx, s_palette.foreground);
-      graphics_context_set_stroke_width(ctx, 2);
+      graphics_context_set_stroke_width(ctx, 1);
       graphics_draw_line(ctx, ray_point(centre, angle, edge * 64 / 100),
                          ray_point(centre, angle, edge * 82 / 100));
       continue;
@@ -427,24 +582,15 @@ static void draw_hours(GContext *ctx, GRect bounds, GPoint centre) {
 
     char text[3];
     snprintf(text, sizeof(text), "%d", hour == 0 ? 12 : hour);
+    const GRect area = numeral_rect(bounds, centre, hour);
+    const GPoint at = grect_center_point(&area);
     if (s_settings.modern_numerals) {
-      // Numbers at 3 and 9 reach the ticks with their width, not their height.
-      int32_t reach = MODERN_HEIGHT / 2;
-      if (hour % 6 != 0) {
-        reach = graphics_text_layout_get_content_size(
-          text, s_modern_font, GRect(0, 0, 60, MODERN_HEIGHT + MODERN_PAD * 2),
-          GTextOverflowModeFill, GTextAlignmentCenter).w / 2;
-      }
-      draw_modern_numeral(ctx, text,
-                          ray_point(centre, angle, edge - HOUR_TICK_LENGTH - NUMERAL_GAP - reach));
+      draw_modern_numeral(ctx, text, at);
     } else {
       // The tops of the numbers face outward, except on the lower half of the
       // dial, where that would turn them upside down.
       const bool lower = hour > 3 && hour < 9;
-      const int32_t rotation = lower ? angle - TRIG_MAX_ANGLE / 2 : angle;
-      const GPoint at = ray_point(centre, angle,
-                                  edge - HOUR_TICK_LENGTH - NUMERAL_GAP - CLASSIC_HEIGHT / 2);
-      draw_classic_numeral(ctx, text, at, rotation);
+      draw_classic_numeral(ctx, text, at, lower ? angle - TRIG_MAX_ANGLE / 2 : angle);
     }
   }
 }
@@ -640,16 +786,24 @@ static void draw_weather_icon(GContext *ctx, GPoint centre, Weather weather) {
 
 // The temperature above an icon for the conditions. Conditions without an
 // icon, and the time before the first reading, are written out instead.
+static void format_temperature(char *buffer, size_t size) {
+  if (s_temperature == NO_TEMPERATURE) {
+    snprintf(buffer, size, "--\xc2\xb0");
+  } else {
+    snprintf(buffer, size, "%d\xc2\xb0", (int)s_temperature);
+  }
+}
+
+static const char *weather_label(void) {
+  return s_condition[0] ? s_condition : "WEATHER";
+}
+
 static void draw_weather(GContext *ctx, GPoint at) {
   char temperature[16];
-  if (s_temperature == NO_TEMPERATURE) {
-    snprintf(temperature, sizeof(temperature), "--\xc2\xb0");
-  } else {
-    snprintf(temperature, sizeof(temperature), "%d\xc2\xb0", (int)s_temperature);
-  }
+  format_temperature(temperature, sizeof(temperature));
   const Weather weather = weather_from_condition(s_condition);
   if (weather == WEATHER_UNKNOWN) {
-    draw_complication(ctx, at, temperature, s_condition[0] ? s_condition : "WEATHER");
+    draw_complication(ctx, at, temperature, weather_label());
     return;
   }
   const int16_t top = at.y - (DATE_HEIGHT + LINE_GAP + LABEL_HEIGHT) / 2;
@@ -667,17 +821,23 @@ static void draw_health(GContext *ctx, GPoint at) {
 }
 #endif
 
-// The day of the week above the day of the month.
-static void draw_date(GContext *ctx, GPoint at, const struct tm *t) {
-  char day[4];
-  strftime(day, sizeof(day), "%a", t);
+// The day of the week, in capitals, and the day of the month. Both buffers
+// hold four characters.
+static void format_date(const struct tm *t, char *day, char *date) {
+  strftime(day, 4, "%a", t);
   for (char *c = day; *c; c++) {
     if (*c >= 'a' && *c <= 'z') {
       *c -= 'a' - 'A';
     }
   }
+  snprintf(date, 4, "%d", t->tm_mday);
+}
+
+// The day of the week above the day of the month.
+static void draw_date(GContext *ctx, GPoint at, const struct tm *t) {
+  char day[4];
   char date[4];
-  snprintf(date, sizeof(date), "%d", t->tm_mday);
+  format_date(t, day, date);
 
   const int16_t top = at.y - (DATE_HEIGHT * 2 + LINE_GAP) / 2;
   draw_text_line(ctx, day, s_date_font, at, top, DATE_PAD, DATE_HEIGHT);
@@ -733,7 +893,7 @@ static void draw_battery_ring(GContext *ctx, GPoint at) {
 // A thin line out to the tip, from a leaf-shaped base around the centre.
 static void draw_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t length,
                       int16_t width) {
-  const int16_t leaf = length * 40 / 100;
+  const int16_t leaf = length * LEAF_PERCENT / 100;
   graphics_context_set_stroke_color(ctx, s_palette.foreground);
   graphics_context_set_stroke_width(ctx, width);
   graphics_draw_line(ctx, ray_point(centre, angle, leaf - 2), ray_point(centre, angle, length));
@@ -762,6 +922,215 @@ static void draw_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t lengt
   gpath_destroy(path);
 }
 
+// ---------------------------------------------------------------------------
+// Layout
+
+// The information around the centre of the dial.
+typedef enum {
+  ITEM_WEATHER,
+  ITEM_HEALTH,
+  ITEM_DATE,
+  ITEM_BATTERY,
+  ITEM_COUNT,
+} Item;
+
+typedef struct {
+  GPoint centre;
+  GPoint tip;
+  GPoint leaf_end;
+  int16_t width;
+} Hand;
+
+static Hand make_hand(GPoint centre, int32_t angle, int16_t length, int16_t width) {
+  return (Hand) {
+    .centre = centre,
+    .tip = ray_point(centre, angle, length),
+    .leaf_end = ray_point(centre, angle, length * LEAF_PERCENT / 100),
+    .width = width,
+  };
+}
+
+static bool item_shown(Item item) {
+  switch (item) {
+    case ITEM_WEATHER: return s_settings.show_weather;
+#if defined(PBL_HEALTH)
+    case ITEM_HEALTH: return s_settings.show_health;
+#endif
+    case ITEM_DATE: return s_settings.show_date;
+    case ITEM_BATTERY: return s_settings.show_battery;
+    default: return false;
+  }
+}
+
+static int16_t text_width(const char *text, GFont font) {
+  return graphics_text_layout_get_content_size(
+    text, font, GRect(0, 0, TEXT_BOX_WIDTH, 40),
+    GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter).w;
+}
+
+// The area an item covers, relative to the point it is drawn at.
+static GRect item_extent(Item item, const struct tm *t) {
+  const int16_t complication_top = -(DATE_HEIGHT + LINE_GAP + LABEL_HEIGHT) / 2;
+  int16_t width = 0;
+  int16_t top = complication_top;
+  int16_t bottom = complication_top + DATE_HEIGHT + LINE_GAP + LABEL_HEIGHT;
+  switch (item) {
+    case ITEM_WEATHER: {
+      char temperature[16];
+      format_temperature(temperature, sizeof(temperature));
+      width = text_width(temperature, s_date_font);
+      int16_t below = text_width(weather_label(), s_label_font);
+      if (weather_from_condition(s_condition) != WEATHER_UNKNOWN) {
+        below = icon_size(24);
+        bottom = top + DATE_HEIGHT + LINE_GAP + 1 + icon_size(16);
+      }
+      width = width > below ? width : below;
+      break;
+    }
+#if defined(PBL_HEALTH)
+    case ITEM_HEALTH: {
+      char value[16];
+      const char *label;
+      format_metric(s_metric, value, sizeof(value), &label);
+      const int16_t value_width = text_width(value, s_date_font);
+      const int16_t label_width = text_width(label, s_label_font);
+      width = value_width > label_width ? value_width : label_width;
+      break;
+    }
+#endif
+    case ITEM_DATE: {
+      char day[4];
+      char date[4];
+      format_date(t, day, date);
+      const int16_t day_width = text_width(day, s_date_font);
+      const int16_t date_width = text_width(date, s_date_font);
+      width = day_width > date_width ? day_width : date_width;
+      top = -(DATE_HEIGHT * 2 + LINE_GAP) / 2;
+      bottom = top + DATE_HEIGHT * 2 + LINE_GAP;
+      break;
+    }
+    case ITEM_BATTERY:
+      width = RING_RADIUS * 2 + 2;
+      top = -RING_RADIUS - 1;
+      bottom = RING_RADIUS + 1;
+      break;
+    default:
+      break;
+  }
+  return GRect(-width / 2 - 1, top, width + 2, bottom - top);
+}
+
+// Whether a rectangle lies inside the ring of ticks.
+static bool rect_in_dial(GRect rect, GRect bounds, GPoint centre) {
+  const GPoint corners[] = {
+    rect.origin,
+    GPoint(rect.origin.x + rect.size.w, rect.origin.y),
+    GPoint(rect.origin.x, rect.origin.y + rect.size.h),
+    GPoint(rect.origin.x + rect.size.w, rect.origin.y + rect.size.h),
+  };
+  for (size_t i = 0; i < ARRAY_LENGTH(corners); i++) {
+    const int32_t dx = corners[i].x - centre.x;
+    const int32_t dy = corners[i].y - centre.y;
+    const int32_t angle = atan2_lookup(dx, -dy);
+    const int32_t limit = edge_distance(bounds, angle) - HOUR_TICK_LENGTH - AVOID_GAP;
+    if (dx * dx + dy * dy > limit * limit) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// The leaf is widest near the centre and narrows outward; half its widest is
+// a fair allowance along its length.
+static bool hand_crosses(const Hand *hand, GRect rect) {
+  return line_crosses_rect(hand->centre, hand->leaf_end,
+                           rect_grow(rect, LEAF_RADIUS / 2 + 1 + AVOID_GAP))
+    || line_crosses_rect(hand->leaf_end, hand->tip,
+                         rect_grow(rect, hand->width / 2 + 1 + AVOID_GAP));
+}
+
+// Everything an item has to keep clear of, worked out once per redraw.
+typedef struct {
+  GRect bounds;
+  GPoint centre;
+  Hand hands[2];
+  GRect numerals[12];  // Empty for hours without a number.
+  GRect name;          // Empty when no name is shown.
+} Obstacles;
+
+// Whether an item could sit in a rectangle: inside the dial, clear of both
+// hands, the other items, the hour numbers and the name.
+static bool item_is_clear(Item item, GRect rect, const GRect *rects, const Obstacles *o) {
+  if (!rect_in_dial(rect, o->bounds, o->centre)) {
+    return false;
+  }
+  for (int i = 0; i < 2; i++) {
+    if (hand_crosses(&o->hands[i], rect)) {
+      return false;
+    }
+  }
+  const GRect spaced = rect_grow(rect, AVOID_GAP);
+  for (int i = 0; i < ITEM_COUNT; i++) {
+    if (i != (int)item && item_shown(i) && rects_overlap(spaced, rects[i])) {
+      return false;
+    }
+  }
+  if (o->name.size.w && rects_overlap(spaced, o->name)) {
+    return false;
+  }
+  for (int hour = 0; hour < 12; hour++) {
+    if (o->numerals[hour].size.w && rects_overlap(spaced, o->numerals[hour])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Moves each item around the centre and outward, by as little as possible, to
+// where neither hand crosses it. An item with nowhere clear to go stays where
+// it was, partly covered.
+static void avoid_hands(GPoint *points, GRect *rects, const GRect *extents,
+                        const Obstacles *o) {
+  const GPoint centre = o->centre;
+  for (int item = 0; item < ITEM_COUNT; item++) {
+    if (!item_shown(item)) {
+      continue;
+    }
+    const int32_t dx = points[item].x - centre.x;
+    const int32_t dy = points[item].y - centre.y;
+    // Smallest move first: no move, then one step around either way, and so
+    // on, with steps outward mixed in by their cost.
+    bool placed = false;
+    for (int cost = 0; cost <= AVOID_STEPS + AVOID_PUSHES * AVOID_PUSH_COST && !placed; cost++) {
+      for (int push = 0; push <= AVOID_PUSHES && !placed; push++) {
+        const int steps = cost - push * AVOID_PUSH_COST;
+        if (steps < 0 || steps > AVOID_STEPS) {
+          continue;
+        }
+        for (int direction = 1; direction >= -1 && !placed; direction -= 2) {
+          if (steps == 0 && direction < 0) {
+            continue;
+          }
+          const int32_t angle = steps * direction * AVOID_STEP;
+          const int32_t sin = sin_lookup(angle);
+          const int32_t cos = cos_lookup(angle);
+          const int32_t scale = 6 + push;
+          const GPoint at = GPoint(
+            centre.x + (dx * cos - dy * sin) / TRIG_MAX_RATIO * scale / 6,
+            centre.y + (dx * sin + dy * cos) / TRIG_MAX_RATIO * scale / 6);
+          const GRect rect = GRect(at.x + extents[item].origin.x, at.y + extents[item].origin.y,
+                                   extents[item].size.w, extents[item].size.h);
+          if (item_is_clear(item, rect, rects, o)) {
+            points[item] = at;
+            rects[item] = rect;
+            placed = true;
+          }
+        }
+      }
+    }
+  }
+}
+
 static void canvas_update_proc(Layer *layer, GContext *ctx) {
   // The unobstructed area shrinks when a Timeline Quick View is showing.
   const GRect bounds = layer_get_unobstructed_bounds(layer);
@@ -770,8 +1139,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   const struct tm *t = localtime(&now);
 
   graphics_context_set_antialiased(ctx, true);
-  graphics_context_set_fill_color(ctx, s_palette.background);
-  graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
+  fill_dial(ctx, layer_get_bounds(layer), bounds);
 
   draw_ticks(ctx, bounds, centre);
   draw_hours(ctx, bounds, centre);
@@ -785,23 +1153,66 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   const int16_t below_numeral = reach_y - HOUR_TICK_LENGTH - NUMERAL_GAP - numeral_height;
   const int16_t above_row = row + (DATE_HEIGHT + LINE_GAP + LABEL_HEIGHT) / 2;
   const int16_t name_y = centre.y - (below_numeral + above_row) / 2;
+  GRect name = GRectZero;
   if (s_settings.dial_name[0]) {
-    draw_text_line(ctx, s_settings.dial_name, s_label_font, GPoint(centre.x, name_y),
-                   name_y - LABEL_HEIGHT / 2, LABEL_PAD, LABEL_HEIGHT);
+    draw_text_line(ctx, s_settings.dial_name, s_date_font, GPoint(centre.x, name_y),
+                   name_y - DATE_HEIGHT / 2, DATE_PAD, DATE_HEIGHT);
+    const int16_t width = text_width(s_settings.dial_name, s_date_font);
+    name = GRect(centre.x - width / 2, name_y - DATE_HEIGHT / 2, width, DATE_HEIGHT);
   }
-
-  const int16_t side = reach_x * 32 / 100;
-  draw_weather(ctx, GPoint(centre.x - side, centre.y - row));
-#if defined(PBL_HEALTH)
-  draw_health(ctx, GPoint(centre.x + side, centre.y - row));
-#endif
-  draw_date(ctx, GPoint(centre.x - reach_x * 30 / 100, centre.y + row), t);
-  draw_battery_ring(ctx, GPoint(centre.x + reach_x * 25 / 100, centre.y + row));
 
   const int16_t minute_length = (reach_x < reach_y ? reach_x : reach_y) - HOUR_TICK_LENGTH - 4;
   const int16_t hour_length = minute_length * 65 / 100;
   const int32_t minute_angle = TRIG_MAX_ANGLE * t->tm_min / 60;
   const int32_t hour_angle = TRIG_MAX_ANGLE * ((t->tm_hour % 12) * 60 + t->tm_min) / 720;
+
+  const int16_t side = reach_x * 32 / 100;
+  GPoint points[ITEM_COUNT] = {
+    [ITEM_WEATHER] = GPoint(centre.x - side, centre.y - row),
+    [ITEM_HEALTH] = GPoint(centre.x + side, centre.y - row),
+    [ITEM_DATE] = GPoint(centre.x - reach_x * 30 / 100, centre.y + row),
+    [ITEM_BATTERY] = GPoint(centre.x + reach_x * 25 / 100, centre.y + row),
+  };
+  if (s_settings.avoid_hands) {
+    // Kept off the stack, which is small on the oldest watches.
+    static Obstacles o;
+    o = (Obstacles) {
+      .bounds = bounds,
+      .centre = centre,
+      .hands = {
+        make_hand(centre, hour_angle, hour_length, HOUR_HAND_WIDTH),
+        make_hand(centre, minute_angle, minute_length, MINUTE_HAND_WIDTH),
+      },
+      .name = name,
+    };
+    for (int hour = 0; hour < 12; hour++) {
+      o.numerals[hour] = hour_has_numeral(hour) ? numeral_rect(bounds, centre, hour) : GRectZero;
+    }
+    GRect extents[ITEM_COUNT];
+    GRect rects[ITEM_COUNT];
+    for (int i = 0; i < ITEM_COUNT; i++) {
+      extents[i] = item_shown(i) ? item_extent(i, t) : GRectZero;
+      rects[i] = GRect(points[i].x + extents[i].origin.x, points[i].y + extents[i].origin.y,
+                       extents[i].size.w, extents[i].size.h);
+    }
+    avoid_hands(points, rects, extents, &o);
+  }
+
+  if (item_shown(ITEM_WEATHER)) {
+    draw_weather(ctx, points[ITEM_WEATHER]);
+  }
+#if defined(PBL_HEALTH)
+  if (item_shown(ITEM_HEALTH)) {
+    draw_health(ctx, points[ITEM_HEALTH]);
+  }
+#endif
+  if (item_shown(ITEM_DATE)) {
+    draw_date(ctx, points[ITEM_DATE], t);
+  }
+  if (item_shown(ITEM_BATTERY)) {
+    draw_battery_ring(ctx, points[ITEM_BATTERY]);
+  }
+
   draw_hand(ctx, centre, hour_angle, hour_length, HOUR_HAND_WIDTH);
   draw_hand(ctx, centre, minute_angle, minute_length, MINUTE_HAND_WIDTH);
 
@@ -831,7 +1242,8 @@ static void request_weather(void) {
 
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   layer_mark_dirty(s_canvas);
-  if ((units_changed & MINUTE_UNIT) && tick_time->tm_min % WEATHER_REFRESH_MINUTES == 0) {
+  if (s_settings.show_weather && (units_changed & MINUTE_UNIT)
+      && tick_time->tm_min % WEATHER_REFRESH_MINUTES == 0) {
     request_weather();
   }
 }
@@ -878,6 +1290,32 @@ static bool read_settings(DictionaryIterator *iterator) {
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_SECOND_HAND))) {
     s_settings.second_hand = tuple_int(tuple) != 0;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_SHOW_WEATHER))) {
+    s_settings.show_weather = tuple_int(tuple) != 0;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_SHOW_HEALTH))) {
+    s_settings.show_health = tuple_int(tuple) != 0;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_SHOW_DATE))) {
+    s_settings.show_date = tuple_int(tuple) != 0;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_SHOW_BATTERY))) {
+    s_settings.show_battery = tuple_int(tuple) != 0;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_AVOID_HANDS))) {
+    s_settings.avoid_hands = tuple_int(tuple) != 0;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_SECOND_HAND_COLOR))) {
+    // A colour as 0xRRGGBB, or -1 for the same colour as the text.
+    const int32_t color = tuple_int(tuple);
+    s_settings.second_hand_argb = color < 0 ? 0 : GColorFromHEX(color).argb;
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_DIAL_NAME)) && tuple->type == TUPLE_CSTRING) {

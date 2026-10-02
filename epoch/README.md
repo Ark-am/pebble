@@ -13,6 +13,9 @@ sit around the centre:
 
 The watch vibrates twice if the phone disconnects, except during Quiet Time.
 
+On rectangular watches the dial has rounded corners with black behind them,
+and the minute track follows the curve.
+
 ## Settings
 
 Open the watchface's settings in the Pebble phone app:
@@ -22,7 +25,10 @@ Open the watchface's settings in the Pebble phone app:
 | Background | Light (default) or Dark |
 | Hour numbers | Classic: 12, 2, 4, 6, 8 and 10, turned to follow the dial (default). Modern: 12, 3, 6 and 9, upright. |
 | Second hand | Off (default) or on. It updates every second, which uses more battery. |
+| Second hand colour | Red (default), Orange, Amber, Green, Teal, Blue, Violet, Rose, or the same black or white as the text. Colour watches only. |
 | Name on the dial | Any text, shown below the 12 (default "Pebble"). Leave it empty to show no name. Long names are cut off with "…". |
+| Weather, Health, Date, Battery and connection | Each can be turned off to hide that item; all are on by default |
+| Move information clear of the hands | Off (default) or on. Each item slides around the centre, and outward if needed, when a hand would cover it. When there is no room it stays where it is, partly covered. |
 | Temperature | Celsius (default) or Fahrenheit |
 | Vibrate when the phone disconnects | On (default) or off |
 

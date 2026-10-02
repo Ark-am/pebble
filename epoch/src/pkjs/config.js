@@ -41,6 +41,24 @@ module.exports = [
         defaultValue: false
       },
       {
+        type: 'select',
+        messageKey: 'SECOND_HAND_COLOR',
+        label: 'Second hand colour',
+        description: 'Colour watches only.',
+        defaultValue: '16711680',
+        options: [
+          { label: 'Red', value: '16711680' },
+          { label: 'Orange', value: '16733440' },
+          { label: 'Amber', value: '16755200' },
+          { label: 'Green', value: '43520' },
+          { label: 'Teal', value: '43690' },
+          { label: 'Blue', value: '22015' },
+          { label: 'Violet', value: '11163135' },
+          { label: 'Rose', value: '16711765' },
+          { label: 'Same as the text (black or white)', value: '-1' }
+        ]
+      },
+      {
         type: 'input',
         messageKey: 'DIAL_NAME',
         label: 'Name on the dial',
@@ -49,6 +67,56 @@ module.exports = [
         attributes: {
           maxlength: 20
         }
+      }
+    ]
+  },
+  {
+    type: 'section',
+    items: [
+      {
+        type: 'heading',
+        defaultValue: 'Information'
+      },
+      {
+        type: 'text',
+        defaultValue: 'Choose what appears around the centre of the dial.'
+      },
+      {
+        type: 'toggle',
+        messageKey: 'SHOW_WEATHER',
+        label: 'Weather',
+        description: 'Temperature and an icon for the conditions, upper left.',
+        defaultValue: true
+      },
+      {
+        type: 'toggle',
+        messageKey: 'SHOW_HEALTH',
+        label: 'Health',
+        description: 'Steps and other health data, upper right. Tap the watch to cycle ' +
+          'through them. Not available on the original Pebble.',
+        defaultValue: true
+      },
+      {
+        type: 'toggle',
+        messageKey: 'SHOW_DATE',
+        label: 'Date',
+        description: 'Day of the week and day of the month, lower left.',
+        defaultValue: true
+      },
+      {
+        type: 'toggle',
+        messageKey: 'SHOW_BATTERY',
+        label: 'Battery and connection',
+        description: 'Battery ring with the phone connection and Quiet Time, lower right.',
+        defaultValue: true
+      },
+      {
+        type: 'toggle',
+        messageKey: 'AVOID_HANDS',
+        label: 'Move information clear of the hands',
+        description: 'Each item slides around the centre when a hand would cover it. ' +
+          'When there is no room, it stays where it is.',
+        defaultValue: false
       }
     ]
   },
