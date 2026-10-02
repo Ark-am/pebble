@@ -1,8 +1,8 @@
-# Epoch publishing files
+# Gnomon 2 publishing files
 
 ## Release
 
-Title: **Epoch**  
+Title: **Gnomon 2**  
 Type: **Watchface**  
 Author: **ark-am**  
 Version: **1.0.0**  
@@ -19,7 +19,7 @@ followed by `pebble build` from this directory.
 
 ## Store description
 
-Epoch brings a classic analog dial to Pebble, with tapered hands, a minute track
+Gnomon 2 brings a classic analog dial to Pebble, with tapered hands, a minute track
 that follows the screen, and a choice of turned classic or upright modern hour
 numbers.
 

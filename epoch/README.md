@@ -1,4 +1,4 @@
-# Epoch
+# Gnomon 2
 
 A classic analog watchface. The minute track follows the edge of the screen,
 the hands have a tapered leaf around the centre, and four small complications

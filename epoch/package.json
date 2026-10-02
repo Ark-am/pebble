@@ -7,7 +7,7 @@
   ],
   "private": true,
   "pebble": {
-    "displayName": "Epoch",
+    "displayName": "Gnomon 2",
     "uuid": "363239a9-545d-431d-8d1d-3c8104189ff0",
     "sdkVersion": "3",
     "enableMultiJS": true,

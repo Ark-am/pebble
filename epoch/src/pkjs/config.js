@@ -4,7 +4,7 @@
 module.exports = [
   {
     type: 'heading',
-    defaultValue: 'Epoch'
+    defaultValue: 'Gnomon 2'
   },
   {
     type: 'section',
