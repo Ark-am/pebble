@@ -1,0 +1,62 @@
+{
+  "name": "baltic",
+  "author": "ark-am",
+  "version": "1.0.0",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "pebble": {
+    "displayName": "Baltic",
+    "uuid": "cc7fc976-cb70-4bc7-b868-864149968a66",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": true
+    },
+    "capabilities": [
+      "configurable"
+    ],
+    "messageKeys": [
+      "DIAL_COLOR",
+      "SECONDS",
+      "DIAL_NAME"
+    ],
+    "resources": {
+      "media": [
+        {
+          "type": "png",
+          "name": "IMAGE_MENU_ICON",
+          "file": "images/menu_icon.png",
+          "menuIcon": true
+        },
+        {
+          "type": "font",
+          "name": "FONT_NUMERALS_16",
+          "file": "fonts/NotoSerifDisplay-BoldItalic.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": ["aplite", "basalt", "chalk", "diorite", "flint"]
+        },
+        {
+          "type": "font",
+          "name": "FONT_NUMERALS_22",
+          "file": "fonts/NotoSerifDisplay-BoldItalic.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": ["emery", "gabbro"]
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "@rebble/clay": "^1.1.0"
+  }
+}
