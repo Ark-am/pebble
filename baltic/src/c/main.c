@@ -79,7 +79,7 @@ static void settings_set_defaults(Settings *settings) {
   *settings = (Settings) {
     .version = SETTINGS_VERSION,
     .dial = DIAL_SALMON,
-    .seconds = false,
+    .seconds = true,
     .dial_name = "BALTIC",
   };
 }
@@ -264,8 +264,11 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   const struct tm *t = localtime(&now);
 
   graphics_context_set_antialiased(ctx, true);
-  graphics_context_set_fill_color(ctx, s_palette.dial);
+  // Black around a round dial.
+  graphics_context_set_fill_color(ctx, GColorBlack);
   graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
+  graphics_context_set_fill_color(ctx, s_palette.dial);
+  graphics_fill_circle(ctx, centre, radius);
 
   draw_scale(ctx, centre, radius);
   const int16_t inside_track = radius - SCALE_BAND - TRACK_WIDTH;
@@ -329,7 +332,7 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
   if (read_settings(iterator)) {
     persist_write_data(PERSIST_KEY_SETTINGS, &s_settings, sizeof(s_settings));
     apply_palette();
-    window_set_background_color(s_window, s_palette.dial);
+    window_set_background_color(s_window, GColorBlack);
     subscribe_ticks();
     layer_mark_dirty(s_canvas);
   }
@@ -375,7 +378,7 @@ static void init(void) {
   load_settings();
 
   s_window = window_create();
-  window_set_background_color(s_window, s_palette.dial);
+  window_set_background_color(s_window, GColorBlack);
   window_set_window_handlers(s_window, (WindowHandlers) {
     .load = window_load,
     .unload = window_unload,

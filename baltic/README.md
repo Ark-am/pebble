@@ -3,7 +3,7 @@
 A dress-watch face modelled on a classic small-seconds wristwatch: a round
 dial with a minute scale and railroad track around the edge, Breguet-style hour
 numbers, slim leaf hands, and a small seconds dial at half past seven, where the
-7 and 8 would be.
+7 and 8 would be. On rectangular watches the area around the dial is black.
 
 ## Settings
 
@@ -12,7 +12,7 @@ Open the watchface's settings in the Pebble phone app:
 | Setting | Options |
 | --- | --- |
 | Dial | Salmon (default), Navy blue, Silver, Black and gold, or Azure blue |
-| Running seconds | Off (default) or on. Shows a hand on the small seconds dial; it updates every second, which uses more battery. |
+| Running seconds | On (default) or off. Shows a hand on the small seconds dial; it updates every second, which uses more battery. |
 | Name on the dial | Any text up to 12 characters, in spaced capitals below the 12 (default "BALTIC"). Leave it empty to show no name. |
 
 | Dial | Dial colour | Numbers and hands |

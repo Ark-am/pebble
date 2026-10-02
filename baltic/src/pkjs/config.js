@@ -35,7 +35,7 @@ module.exports = [
         label: 'Running seconds',
         description: 'Shows a hand on the small seconds dial. It updates every second, ' +
           'which uses more battery.',
-        defaultValue: false
+        defaultValue: true
       },
       {
         type: 'input',
