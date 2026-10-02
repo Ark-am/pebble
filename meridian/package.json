@@ -41,7 +41,8 @@
       "SLOT_RIGHT",
       "SLOT_BOTTOM",
       "SLOT_LEFT",
-      "TEMPERATURE_UNIT"
+      "TEMPERATURE_UNIT",
+      "ROTATION"
     ],
     "resources": {
       "media": [

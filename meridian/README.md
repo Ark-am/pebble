@@ -17,6 +17,11 @@ On rectangular watches the minute track follows the edge of the screen; on
 round watches it follows the circle. When a Timeline Quick View covers part of
 the screen, the dial shrinks to fit the remaining area.
 
+The whole face can be turned to suit how the watch is worn: set **Rotate the
+dial** in the settings, from -180 to 180 degrees in steps of 5 (positive is
+clockwise). The ticks, 12 o'clock marker, hour numbers, information and hands
+all turn together; the text stays upright.
+
 ## Weather
 
 The companion JavaScript runs in the Pebble phone app. It asks the phone for

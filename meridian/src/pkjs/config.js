@@ -63,6 +63,17 @@ module.exports = [
         label: 'Show second hand',
         description: 'Updates every second, which uses more battery.',
         defaultValue: false
+      },
+      {
+        type: 'slider',
+        messageKey: 'ROTATION',
+        label: 'Rotate the dial',
+        description: 'Turns the whole face clockwise by this many degrees, for wearing ' +
+          'the watch at an angle. Negative values turn it anticlockwise.',
+        defaultValue: 0,
+        min: -180,
+        max: 180,
+        step: 5
       }
     ]
   },

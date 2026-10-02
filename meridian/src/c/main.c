@@ -60,7 +60,7 @@ typedef enum {
 enum { POSITION_TOP, POSITION_RIGHT, POSITION_BOTTOM, POSITION_LEFT, POSITION_COUNT };
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 1
+#define SETTINGS_VERSION 2
 typedef struct {
   uint8_t version;
   bool light_theme;
@@ -69,7 +69,19 @@ typedef struct {
   bool second_hand;
   bool disconnect_vibe;
   uint8_t slots[POSITION_COUNT];
+  // Added in version 2: degrees the whole dial is turned, clockwise.
+  int16_t rotation;
 } Settings;
+
+// How much of the settings each version saved, so older settings carry over
+// and the fields added since keep their defaults.
+static int settings_size(uint8_t version) {
+  switch (version) {
+    case 1: return offsetof(Settings, rotation);
+    case SETTINGS_VERSION: return sizeof(Settings);
+    default: return -1;
+  }
+}
 
 static Settings s_settings;
 
@@ -269,13 +281,19 @@ static int32_t edge_distance(GRect bounds, int32_t angle) {
 #endif
 }
 
+// An angle on the dial, measured from 12 o'clock, turned by the rotation the
+// wearer has chosen.
+static int32_t dial_angle(int32_t angle) {
+  return angle + TRIG_MAX_ANGLE * s_settings.rotation / 360;
+}
+
 // ---------------------------------------------------------------------------
 // Drawing
 
 static void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
   for (int i = 0; i < 60; i++) {
     const bool hour = i % 5 == 0;
-    const int32_t angle = TRIG_MAX_ANGLE * i / 60;
+    const int32_t angle = dial_angle(TRIG_MAX_ANGLE * i / 60);
     const int32_t outer = edge_distance(bounds, angle);
     const int32_t length = hour ? HOUR_TICK_LENGTH : MINUTE_TICK_LENGTH;
     graphics_context_set_stroke_color(ctx, hour ? s_palette.foreground : s_palette.minor_tick);
@@ -288,16 +306,18 @@ static void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
     return;  // The accent "12" numeral marks the top instead.
   }
 
-  // An accent triangle marks 12 o'clock.
-  const int32_t top = edge_distance(bounds, 0);
+  // An accent triangle marks 12 o'clock, pointing in to the centre.
+  const int32_t up = dial_angle(0);
+  const int32_t top = edge_distance(bounds, up);
   const int16_t size = HOUR_TICK_LENGTH / 2 + 2;
-  const GPoint tip = ray_point(centre, 0, top - HOUR_TICK_LENGTH - 3);
+  const GPoint tip = ray_point(centre, up, top - HOUR_TICK_LENGTH - 3);
+  const GPoint base = ray_point(centre, up, top - HOUR_TICK_LENGTH - 3 + size);
   GPathInfo info = {
     .num_points = 3,
     .points = (GPoint[]) {
-      { tip.x - size, tip.y - size },
-      { tip.x + size, tip.y - size },
-      { tip.x, tip.y },
+      ray_point(base, up - TRIG_MAX_ANGLE / 4, size),
+      ray_point(base, up + TRIG_MAX_ANGLE / 4, size),
+      tip,
     },
   };
   GPath *marker = gpath_create(&info);
@@ -417,7 +437,7 @@ static void draw_hour_numbers(GContext *ctx, GRect bounds, GPoint centre) {
     if (slot >= 0 && s_settings.slots[slot] != SLOT_NONE) {
       continue;
     }
-    const int32_t angle = TRIG_MAX_ANGLE * hour / 12;
+    const int32_t angle = dial_angle(TRIG_MAX_ANGLE * hour / 12);
     const int32_t distance = edge_distance(bounds, angle)
       - HOUR_TICK_LENGTH - 3 - NUMERAL_RADIUS;
     const GPoint at = ray_point(centre, angle, distance);
@@ -506,28 +526,27 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
 
   const int32_t reach_x = edge_distance(bounds, TRIG_MAX_ANGLE / 4);
   const int32_t reach_y = edge_distance(bounds, 0);
-  const int16_t side_offset = reach_x * 52 / 100;
-  const int16_t vertical_offset = reach_y * 50 / 100;
 
-  draw_slot(ctx, s_settings.slots[POSITION_TOP],
-            GPoint(centre.x, centre.y - vertical_offset), SLOT_WIDE_WIDTH, t);
-  draw_slot(ctx, s_settings.slots[POSITION_RIGHT],
-            GPoint(centre.x + side_offset, centre.y), SLOT_SIDE_WIDTH, t);
-  draw_slot(ctx, s_settings.slots[POSITION_BOTTOM],
-            GPoint(centre.x, centre.y + vertical_offset), SLOT_WIDE_WIDTH, t);
-  draw_slot(ctx, s_settings.slots[POSITION_LEFT],
-            GPoint(centre.x - side_offset, centre.y), SLOT_SIDE_WIDTH, t);
+  // Each slot sits part of the way out towards the edge along its turned
+  // direction; its text stays upright.
+  for (int position = 0; position < POSITION_COUNT; position++) {
+    const int32_t angle = dial_angle(TRIG_MAX_ANGLE * position / POSITION_COUNT);
+    const int32_t percent = position % 2 ? 52 : 50;
+    draw_slot(ctx, s_settings.slots[position],
+              ray_point(centre, angle, edge_distance(bounds, angle) * percent / 100),
+              position % 2 ? SLOT_SIDE_WIDTH : SLOT_WIDE_WIDTH, t);
+  }
 
   // Hands on top of everything.
   const int16_t minute_length = (reach_x < reach_y ? reach_x : reach_y) - HOUR_TICK_LENGTH - 4;
   const int16_t hour_length = minute_length * 62 / 100;
-  const int32_t minute_angle = TRIG_MAX_ANGLE * t->tm_min / 60;
-  const int32_t hour_angle = TRIG_MAX_ANGLE * ((t->tm_hour % 12) * 60 + t->tm_min) / 720;
+  const int32_t minute_angle = dial_angle(TRIG_MAX_ANGLE * t->tm_min / 60);
+  const int32_t hour_angle = dial_angle(TRIG_MAX_ANGLE * ((t->tm_hour % 12) * 60 + t->tm_min) / 720);
   draw_hand(ctx, centre, hour_angle, hour_length, HOUR_HAND_WIDTH, 6);
   draw_hand(ctx, centre, minute_angle, minute_length, MINUTE_HAND_WIDTH, 8);
 
   if (s_settings.second_hand) {
-    const int32_t second_angle = TRIG_MAX_ANGLE * t->tm_sec / 60;
+    const int32_t second_angle = dial_angle(TRIG_MAX_ANGLE * t->tm_sec / 60);
     graphics_context_set_stroke_color(ctx, s_palette.accent);
     graphics_context_set_stroke_width(ctx, 1);
     graphics_draw_line(ctx, ray_point(centre, second_angle + TRIG_MAX_ANGLE / 2, 12),
@@ -612,6 +631,11 @@ static bool read_settings(DictionaryIterator *iterator) {
     s_settings.disconnect_vibe = tuple_int(tuple) != 0;
     changed = true;
   }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_ROTATION))) {
+    const int32_t degrees = tuple_int(tuple) % 360;
+    s_settings.rotation = degrees > 180 ? degrees - 360 : degrees < -180 ? degrees + 360 : degrees;
+    changed = true;
+  }
   for (int i = 0; i < POSITION_COUNT; i++) {
     if ((tuple = dict_find(iterator, *slot_keys[i]))) {
       const int32_t kind = tuple_int(tuple);
@@ -669,8 +693,9 @@ static void load_saved_state(void) {
   if (persist_exists(PERSIST_KEY_SETTINGS)) {
     Settings saved;
     const int size = persist_read_data(PERSIST_KEY_SETTINGS, &saved, sizeof(saved));
-    if (size == (int)sizeof(saved) && saved.version == SETTINGS_VERSION) {
-      s_settings = saved;
+    if (size == settings_size(saved.version)) {
+      memcpy(&s_settings, &saved, size);
+      s_settings.version = SETTINGS_VERSION;
     }
   }
   apply_palette();
