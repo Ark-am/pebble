@@ -127,6 +127,7 @@ typedef struct {
   GColor leaf;
   GColor ring;
   GColor connected;
+  GColor disconnected;
   GColor sun;
   GColor rain;
   GColor second_hand;
@@ -328,6 +329,7 @@ static void apply_palette(void) {
   s_palette.leaf = dark ? GColorDarkGray : GColorLightGray;
   s_palette.ring = GColorMintGreen;
   s_palette.connected = GColorPictonBlue;
+  s_palette.disconnected = GColorRed;
   s_palette.sun = GColorChromeYellow;
   s_palette.rain = dark ? GColorPictonBlue : GColorBlue;
   s_palette.second_hand = s_settings.second_hand_argb
@@ -336,6 +338,7 @@ static void apply_palette(void) {
   s_palette.leaf = s_palette.background;
   s_palette.ring = s_palette.foreground;
   s_palette.connected = s_palette.foreground;
+  s_palette.disconnected = s_palette.background;
   s_palette.sun = s_palette.foreground;
   s_palette.rain = s_palette.foreground;
   s_palette.second_hand = s_palette.foreground;
@@ -918,48 +921,51 @@ static void draw_date(GContext *ctx, GPoint at, const struct tm *t) {
   draw_text_line(ctx, date, s_date_font, at, top + DATE_HEIGHT + LINE_GAP, DATE_PAD, DATE_HEIGHT);
 }
 
-// A ring of ten segments shows the battery level; the dot inside it is filled
-// while the phone is connected, and shows a crescent moon during Quiet Time.
+// A ring of ten segments shows the battery level. The dot inside it is blue
+// while the phone is connected and red when it is not (filled and empty on
+// black-and-white watches), and shows a crescent moon during Quiet Time.
 static void draw_battery_ring(GContext *ctx, GPoint at) {
   const int16_t inner = RING_RADIUS * 65 / 100;
   const int filled = (s_battery.charge_percent + 5) / 10;
+
+  // A solid disc behind the segments fills the gaps between them and the dot.
+  graphics_context_set_fill_color(ctx, s_palette.foreground);
+  graphics_fill_circle(ctx, at, inner + 1);
 
   graphics_context_set_stroke_color(ctx, s_palette.foreground);
   graphics_context_set_stroke_width(ctx, 1);
   for (int i = 0; i < RING_SEGMENTS; i++) {
     const int32_t start = TRIG_MAX_ANGLE * i / RING_SEGMENTS;
-    const int32_t end = TRIG_MAX_ANGLE * (i + 1) / RING_SEGMENTS;
-    const int32_t middle = (start + end) / 2;
-    GPoint points[] = {
-      ray_point(at, start, RING_RADIUS),
-      ray_point(at, middle, RING_RADIUS),
-      ray_point(at, end, RING_RADIUS),
-      ray_point(at, end, inner),
-      ray_point(at, middle, inner),
-      ray_point(at, start, inner),
-    };
+    const int32_t step = TRIG_MAX_ANGLE / RING_SEGMENTS / 4;
+    // Five points along each edge keep the ring round.
+    GPoint points[10];
+    for (int k = 0; k < 5; k++) {
+      points[k] = ray_point(at, start + step * k, RING_RADIUS);
+      points[9 - k] = ray_point(at, start + step * k, inner);
+    }
     GPathInfo info = { .num_points = ARRAY_LENGTH(points), .points = points };
     GPath *segment = gpath_create(&info);
-    if (i < filled) {
-      graphics_context_set_fill_color(ctx, s_palette.ring);
-      gpath_draw_filled(ctx, segment);
-    }
+    graphics_context_set_fill_color(ctx, i < filled ? s_palette.ring : s_palette.background);
+    gpath_draw_filled(ctx, segment);
     gpath_draw_outline(ctx, segment);
     gpath_destroy(segment);
   }
+  // A smooth circle over the outer edge rounds off the segments' corners.
+  graphics_draw_circle(ctx, at, RING_RADIUS);
 
-  graphics_context_set_fill_color(ctx, s_bluetooth_connected
-                                  ? s_palette.connected : s_palette.background);
-  graphics_fill_circle(ctx, at, inner - 2);
-  graphics_draw_circle(ctx, at, inner - 2);
+  // The dot, with a border in the text colour.
+  const GColor dot = s_bluetooth_connected ? s_palette.connected : s_palette.disconnected;
+  graphics_context_set_fill_color(ctx, dot);
+  graphics_fill_circle(ctx, at, inner - 1);
+  graphics_draw_circle(ctx, at, inner - 1);
 
   if (quiet_time_is_active()) {
-    const int16_t moon = inner - 4;
-    graphics_context_set_fill_color(ctx, s_bluetooth_connected
-                                    ? s_palette.background : s_palette.foreground);
+    // On black-and-white watches an empty dot needs a filled moon.
+    const bool empty = gcolor_equal(dot, s_palette.background);
+    const int16_t moon = inner - 3;
+    graphics_context_set_fill_color(ctx, empty ? s_palette.foreground : s_palette.background);
     graphics_fill_circle(ctx, at, moon);
-    graphics_context_set_fill_color(ctx, s_bluetooth_connected
-                                    ? s_palette.connected : s_palette.background);
+    graphics_context_set_fill_color(ctx, dot);
     graphics_fill_circle(ctx, GPoint(at.x + moon / 2, at.y - moon / 3), moon * 8 / 10);
   }
 }
