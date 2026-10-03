@@ -72,6 +72,8 @@
 #define DEFAULT_DIAL_NAME "Pebble"
 #define RING_SEGMENTS 10
 // How far along each hand its grey leaf reaches, in percent.
+// The dial-coloured border that separates the minute hand from the hour hand.
+#define HAND_GAP 1
 #define LEAF_PERCENT 70
 
 // How far an item may move to keep clear of the hands: around the centre in
@@ -992,13 +994,22 @@ static void draw_battery_ring(GContext *ctx, GPoint at) {
   }
 }
 
-// A thin line out to the tip, from a leaf-shaped base around the centre.
+// A thin line out to the tip, from a leaf-shaped base around the centre. A
+// hand drawn over another gets a narrow border in the dial colour, so the two
+// read as separate pieces where they cross.
 static void draw_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t length,
-                      int16_t width) {
+                      int16_t width, bool separated) {
   const int16_t leaf = length * LEAF_PERCENT / 100;
+  const GPoint line_start = ray_point(centre, angle, leaf - 2);
+  const GPoint tip = ray_point(centre, angle, length);
+  if (separated) {
+    graphics_context_set_stroke_color(ctx, s_palette.background);
+    graphics_context_set_stroke_width(ctx, width + HAND_GAP * 2);
+    graphics_draw_line(ctx, line_start, tip);
+  }
   graphics_context_set_stroke_color(ctx, s_palette.foreground);
   graphics_context_set_stroke_width(ctx, width);
-  graphics_draw_line(ctx, ray_point(centre, angle, leaf - 2), ray_point(centre, angle, length));
+  graphics_draw_line(ctx, line_start, tip);
 
   // Drawn pointing at 12, then turned into place.
   const int16_t r = LEAF_RADIUS;
@@ -1017,11 +1028,28 @@ static void draw_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t lengt
   GPath *path = gpath_create(&info);
   gpath_rotate_to(path, angle);
   gpath_move_to(path, centre);
+  if (separated) {
+    graphics_context_set_stroke_color(ctx, s_palette.background);
+    graphics_context_set_stroke_width(ctx, LEAF_OUTLINE + HAND_GAP * 2);
+    gpath_draw_outline(ctx, path);
+    graphics_context_set_stroke_color(ctx, s_palette.foreground);
+  }
   graphics_context_set_fill_color(ctx, s_palette.leaf);
   gpath_draw_filled(ctx, path);
   graphics_context_set_stroke_width(ctx, LEAF_OUTLINE);
   gpath_draw_outline(ctx, path);
   gpath_destroy(path);
+}
+
+// A round cap over the centre, where the hands meet.
+static void draw_hub(GContext *ctx, GPoint centre) {
+  graphics_context_set_fill_color(ctx, s_palette.leaf);
+  graphics_fill_circle(ctx, centre, LEAF_RADIUS + 1);
+  graphics_context_set_stroke_color(ctx, s_palette.foreground);
+  graphics_context_set_stroke_width(ctx, LEAF_OUTLINE);
+  graphics_draw_circle(ctx, centre, LEAF_RADIUS + 1);
+  graphics_context_set_fill_color(ctx, s_palette.foreground);
+  graphics_fill_circle(ctx, centre, 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -1318,8 +1346,9 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
     draw_battery_ring(ctx, points[ITEM_BATTERY]);
   }
 
-  draw_hand(ctx, centre, hour_angle, hour_length, HOUR_HAND_WIDTH);
-  draw_hand(ctx, centre, minute_angle, minute_length, MINUTE_HAND_WIDTH);
+  draw_hand(ctx, centre, hour_angle, hour_length, HOUR_HAND_WIDTH, false);
+  draw_hand(ctx, centre, minute_angle, minute_length, MINUTE_HAND_WIDTH, true);
+  draw_hub(ctx, centre);
 
   if (s_settings.second_hand) {
     // A thin line with a short tail, pinned by a dot over the other hands.
