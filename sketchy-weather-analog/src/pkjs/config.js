@@ -24,6 +24,12 @@ module.exports = [
         ]
       },
       {
+        type: 'toggle',
+        messageKey: 'HOUR_NUMBERS',
+        label: 'Show hour numbers',
+        defaultValue: false
+      },
+      {
         type: 'select',
         messageKey: 'BATTERY',
         label: 'Battery',

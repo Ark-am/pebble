@@ -33,6 +33,7 @@ the ring. Emery and Gabbro add the unit (`70°F`).
 ## Settings
 
 - **Background:** Paper (light) or Chalkboard (dark)
+- **Show hour numbers:** off by default; when on, 1 to 12 sit just inside the hour ticks
 - **Battery:** shown when low or charging, or always
 - **Temperature:** Celsius or Fahrenheit
 - **Vibrate when the phone disconnects**

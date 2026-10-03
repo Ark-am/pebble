@@ -17,6 +17,10 @@
 
 #if PBL_DISPLAY_WIDTH >= 200
   #define TEXT_FONT FONT_KEY_GOTHIC_18
+  #define NUMERAL_FONT FONT_KEY_GOTHIC_24
+  #define NUMERAL_HEIGHT 17
+  #define NUMERAL_PAD 7
+  #define NUMERAL_RADIUS 12
   // Visible height of the text and the blank space the font leaves above it.
   #define TEXT_HEIGHT 13
   #define TEXT_PAD 5
@@ -35,6 +39,10 @@
   #define SHOW_UNIT_LETTER true
 #else
   #define TEXT_FONT FONT_KEY_GOTHIC_14
+  #define NUMERAL_FONT FONT_KEY_GOTHIC_18
+  #define NUMERAL_HEIGHT 13
+  #define NUMERAL_PAD 5
+  #define NUMERAL_RADIUS 9
   #define TEXT_HEIGHT 10
   #define TEXT_PAD 4
   #define ICON_SIZE 54
@@ -56,14 +64,26 @@
 #define TEXT_GAP 4
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 1
+#define SETTINGS_VERSION 2
 typedef struct {
   uint8_t version;
   bool dark_theme;
   bool always_show_battery;
   bool disconnect_vibe;
   char temperature_unit;
+  // Added in version 2.
+  bool hour_numbers;
 } Settings;
+
+// How much of the settings each version saved, so older settings carry over
+// and the fields added since keep their defaults.
+static int settings_size(uint8_t version) {
+  switch (version) {
+    case 1: return offsetof(Settings, hour_numbers);
+    case SETTINGS_VERSION: return sizeof(Settings);
+    default: return -1;
+  }
+}
 
 static Settings s_settings;
 
@@ -101,6 +121,7 @@ typedef enum {
 static Window *s_window;
 static Layer *s_canvas;
 static GFont s_text_font;
+static GFont s_numeral_font;
 
 static BatteryChargeState s_battery;
 static bool s_bluetooth_connected;
@@ -118,6 +139,7 @@ static void settings_set_defaults(Settings *settings) {
     .always_show_battery = false,
     .disconnect_vibe = true,
     .temperature_unit = 'C',
+    .hour_numbers = false,
   };
 }
 
@@ -557,6 +579,23 @@ static void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
   }
 }
 
+// Hour numbers sit just inside the hour ticks.
+static void draw_hour_numbers(GContext *ctx, GRect bounds, GPoint centre) {
+  graphics_context_set_text_color(ctx, s_palette.ink);
+  for (int hour = 0; hour < 12; hour++) {
+    const int32_t angle = TRIG_MAX_ANGLE * hour / 12;
+    const int32_t distance = edge_distance(bounds, angle)
+      - HOUR_TICK_LENGTH - 3 - NUMERAL_RADIUS;
+    const GPoint at = ray_point(centre, angle, distance);
+    char text[3];
+    snprintf(text, sizeof(text), "%d", hour == 0 ? 12 : hour);
+    graphics_draw_text(ctx, text, s_numeral_font,
+                       GRect(at.x - NUMERAL_RADIUS * 2, at.y - NUMERAL_HEIGHT / 2 - NUMERAL_PAD,
+                             NUMERAL_RADIUS * 4, NUMERAL_HEIGHT + NUMERAL_PAD * 2),
+                       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+  }
+}
+
 // A hand drawn as a heavy pencil stroke from just outside the ring, with a
 // lighter stroke beside it.
 static void draw_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t from,
@@ -702,13 +741,19 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
 
   draw_ticks(ctx, bounds, centre);
+  if (s_settings.hour_numbers) {
+    draw_hour_numbers(ctx, bounds, centre);
+  }
 
+  // Status icons move further in when hour numbers are shown, to clear them.
   const int32_t corner_right = TRIG_MAX_ANGLE / 8;
   const int32_t corner_left = -TRIG_MAX_ANGLE / 8;
+  const int16_t inset = HOUR_TICK_LENGTH + 12
+    + (s_settings.hour_numbers ? NUMERAL_RADIUS * 2 : 0);
   draw_battery(ctx, ray_point(centre, corner_right,
-                              edge_distance(bounds, corner_right) - HOUR_TICK_LENGTH - 12));
+                              edge_distance(bounds, corner_right) - inset));
   draw_alerts(ctx, ray_point(centre, corner_left,
-                             edge_distance(bounds, corner_left) - HOUR_TICK_LENGTH - 12));
+                             edge_distance(bounds, corner_left) - inset));
 
   // The widget and the ring that keeps the hands out of it.
   sketch_circle(ctx, centre, CLEAR_RADIUS, s_palette.faint, NULL, NULL);
@@ -778,6 +823,10 @@ static bool read_settings(DictionaryIterator *iterator) {
     s_settings.always_show_battery = tuple_int(tuple) == 1;
     changed = true;
   }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_HOUR_NUMBERS))) {
+    s_settings.hour_numbers = tuple_int(tuple) != 0;
+    changed = true;
+  }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_DISCONNECT_VIBE))) {
     s_settings.disconnect_vibe = tuple_int(tuple) != 0;
     changed = true;
@@ -842,8 +891,9 @@ static void load_saved_state(void) {
   if (persist_exists(PERSIST_KEY_SETTINGS)) {
     Settings saved;
     const int size = persist_read_data(PERSIST_KEY_SETTINGS, &saved, sizeof(saved));
-    if (size == sizeof(saved) && saved.version == SETTINGS_VERSION) {
-      s_settings = saved;
+    if (size == settings_size(saved.version)) {
+      memcpy(&s_settings, &saved, size);
+      s_settings.version = SETTINGS_VERSION;
     }
   }
   apply_palette();
@@ -861,6 +911,7 @@ static void load_saved_state(void) {
 
 static void init(void) {
   s_text_font = fonts_get_system_font(TEXT_FONT);
+  s_numeral_font = fonts_get_system_font(NUMERAL_FONT);
   load_saved_state();
   s_battery = battery_state_service_peek();
   s_bluetooth_connected = connection_service_peek_pebble_app_connection();

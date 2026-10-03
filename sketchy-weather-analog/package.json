@@ -35,6 +35,7 @@
       "THEME",
       "TEMPERATURE_UNIT",
       "BATTERY",
+      "HOUR_NUMBERS",
       "DISCONNECT_VIBE"
     ],
     "resources": {
