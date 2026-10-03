@@ -28,6 +28,9 @@
     ],
     "messageKeys": [
       "THEME",
+      "BACKGROUND_COLOR",
+      "TIME_COLOR",
+      "TIME_FORMAT",
       "ACCENT_COLOR",
       "CITY_1_NAME",
       "CITY_1_ZONE",

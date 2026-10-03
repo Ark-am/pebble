@@ -7,12 +7,17 @@ Below it, each city shows its name, its time, and how it relates to yours:
 (`Sun +13h`). Half-hour and 45-minute time zones show as, for example,
 `Today +9h30`.
 
-The face follows the watch's 12- or 24-hour setting. In 12-hour mode, AM or
-PM appears under the date and under each city's time.
+In 12-hour mode, AM or PM appears under the date and under each city's time.
 
 ## Settings
 
-- **Background:** light or dark
+- **Time format:** the same as the watch (the default), 12-hour or 24-hour
+- **Background colour:** white, cream, light or dark grey, black, navy, dark
+  green, burgundy or purple. The date, details and dividers turn black or
+  white, whichever suits it. Black-and-white watches offer light or dark.
+- **Time colour:** for your time and the cities' times: automatic (black or
+  white to suit the background) or one of eleven colours (colour watches
+  only)
 - **Accent colour:** for the city names, the day and the divider (colour
   watches only)
 - **City 1 and City 2:** a time zone from a list of 49 major cities, and an

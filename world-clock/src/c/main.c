@@ -53,21 +53,48 @@
 #define LINE_GAP 3
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 1
+#define SETTINGS_VERSION 2
+
+// Values match the TIME_FORMAT options in src/pkjs/config.js.
+typedef enum {
+  TIME_FORMAT_WATCH,
+  TIME_FORMAT_12H,
+  TIME_FORMAT_24H,
+} TimeFormat;
+
 typedef struct {
   uint8_t version;
+  // Black-and-white watches only; colour watches use background_argb.
   bool dark_theme;
   uint8_t accent_argb;
   char labels[CITY_COUNT][LABEL_LENGTH];
   // Minutes each city is ahead of UTC.
   int16_t offsets[CITY_COUNT];
+  // Added in version 2.
+  uint8_t time_format;
+  uint8_t background_argb;
+  // Colour of the times; automatic (black or white, whichever suits the
+  // background) unless one is chosen.
+  bool time_color_auto;
+  uint8_t time_argb;
 } Settings;
+
+// How much of the settings each version saved, so older settings carry over
+// and the fields added since keep their defaults.
+static int settings_size(uint8_t version) {
+  switch (version) {
+    case 1: return offsetof(Settings, time_format);
+    case SETTINGS_VERSION: return sizeof(Settings);
+    default: return -1;
+  }
+}
 
 static Settings s_settings;
 
 typedef struct {
   GColor background;
   GColor foreground;
+  GColor time;
   GColor detail;
   GColor accent;
 } Palette;
@@ -92,24 +119,52 @@ static void settings_set_defaults(Settings *settings) {
     .accent_argb = GColorTiffanyBlueARGB8,
     .labels = { "London", "Tokyo" },
     .offsets = { 60, 540 },
+    .time_format = TIME_FORMAT_WATCH,
+    .background_argb = GColorWhiteARGB8,
+    .time_color_auto = true,
+    .time_argb = GColorBlackARGB8,
   };
 }
 
+#if defined(PBL_COLOR)
+// Whether a colour is light enough to need dark text on it.
+static bool is_light(GColor color) {
+  // Each channel is 0 to 3; weighted roughly by how bright it looks.
+  return color.r * 3 + color.g * 6 + color.b > 15;
+}
+#endif
+
 static void apply_palette(void) {
+#if defined(PBL_COLOR)
+  s_palette.background = (GColor) { .argb = s_settings.background_argb };
+  const bool light = is_light(s_palette.background);
+  s_palette.foreground = light ? GColorBlack : GColorWhite;
+  s_palette.detail = light ? GColorDarkGray : GColorLightGray;
+  s_palette.accent = (GColor) { .argb = s_settings.accent_argb };
+  s_palette.time = s_settings.time_color_auto
+    ? s_palette.foreground
+    : (GColor) { .argb = s_settings.time_argb };
+#else
   const bool dark = s_settings.dark_theme;
   s_palette.background = dark ? GColorBlack : GColorWhite;
   s_palette.foreground = dark ? GColorWhite : GColorBlack;
-#if defined(PBL_COLOR)
-  s_palette.detail = dark ? GColorLightGray : GColorDarkGray;
-  s_palette.accent = (GColor) { .argb = s_settings.accent_argb };
-#else
   s_palette.detail = s_palette.foreground;
   s_palette.accent = s_palette.foreground;
+  s_palette.time = s_palette.foreground;
 #endif
 }
 
 // ---------------------------------------------------------------------------
 // Time
+
+// Whether to show 24-hour times: as chosen, or following the watch.
+static bool use_24h(void) {
+  switch (s_settings.time_format) {
+    case TIME_FORMAT_12H: return false;
+    case TIME_FORMAT_24H: return true;
+    default: return clock_is_24h_style();
+  }
+}
 
 // Minutes the watch's own time zone is ahead of UTC, worked out by comparing
 // its local time with UTC.
@@ -124,7 +179,7 @@ static int32_t local_offset_minutes(time_t now) {
 }
 
 static void format_time(const struct tm *t, char *buffer, size_t size) {
-  if (clock_is_24h_style()) {
+  if (use_24h()) {
     strftime(buffer, size, "%H:%M", t);
   } else {
     const int hour = t->tm_hour % 12;
@@ -191,7 +246,7 @@ static void draw_local_time(GContext *ctx, GRect area, int16_t top, const struct
   strftime(month, sizeof(month), "%b", t);
   uppercase(month);
   snprintf(date, sizeof(date), "%s %d", month, t->tm_mday);
-  const char *meridiem = clock_is_24h_style() ? NULL : t->tm_hour < 12 ? "AM" : "PM";
+  const char *meridiem = use_24h() ? NULL : t->tm_hour < 12 ? "AM" : "PM";
 
   const int16_t time_w = text_width(time_text, s_time_font);
   int16_t column_w = text_width(day, s_date_font);
@@ -200,7 +255,7 @@ static void draw_local_time(GContext *ctx, GRect area, int16_t top, const struct
   const int16_t gap = GAP;
   const int16_t left = area.origin.x + (area.size.w - time_w - gap - column_w) / 2;
 
-  draw_text(ctx, time_text, s_time_font, s_palette.foreground,
+  draw_text(ctx, time_text, s_time_font, s_palette.time,
             GRect(left, top, time_w + 2, TIME_HEIGHT), TIME_PAD, GTextAlignmentLeft);
 
   // The column's lines are centred on the time.
@@ -236,13 +291,13 @@ static void draw_city(GContext *ctx, GRect area, int16_t top, int city, time_t n
   const int16_t row_h = CITY_HEIGHT + LINE_GAP + DETAIL_HEIGHT;
   const int16_t time_w = text_width(time_text, s_city_time_font);
   const int16_t time_x = area.origin.x + area.size.w - time_w;
-  const int16_t time_top = clock_is_24h_style()
+  const int16_t time_top = use_24h()
     ? top + (row_h - CITY_TIME_HEIGHT) / 2
     : top;
-  draw_text(ctx, time_text, s_city_time_font, s_palette.foreground,
+  draw_text(ctx, time_text, s_city_time_font, s_palette.time,
             GRect(time_x - 2, time_top, time_w + 4, CITY_TIME_HEIGHT), CITY_TIME_PAD,
             GTextAlignmentRight);
-  if (!clock_is_24h_style()) {
+  if (!use_24h()) {
     draw_text(ctx, there.tm_hour < 12 ? "AM" : "PM", s_detail_font, s_palette.detail,
               GRect(time_x - 10, top + row_h - DETAIL_HEIGHT, time_w + 10, DETAIL_HEIGHT),
               DETAIL_PAD, GTextAlignmentRight);
@@ -333,6 +388,25 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
     s_settings.dark_theme = tuple_int(tuple) == 1;
     changed = true;
   }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_TIME_FORMAT))) {
+    const int32_t format = tuple_int(tuple);
+    s_settings.time_format = format >= TIME_FORMAT_WATCH && format <= TIME_FORMAT_24H
+      ? format : TIME_FORMAT_WATCH;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_BACKGROUND_COLOR))) {
+    s_settings.background_argb = GColorFromHEX(tuple_int(tuple)).argb;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_TIME_COLOR))) {
+    // -1 means automatic.
+    const int32_t color = tuple_int(tuple);
+    s_settings.time_color_auto = color < 0;
+    if (color >= 0) {
+      s_settings.time_argb = GColorFromHEX(color).argb;
+    }
+    changed = true;
+  }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_ACCENT_COLOR))) {
     s_settings.accent_argb = GColorFromHEX(tuple_int(tuple)).argb;
     changed = true;
@@ -381,9 +455,16 @@ static void load_settings(void) {
   settings_set_defaults(&s_settings);
   if (persist_exists(PERSIST_KEY_SETTINGS)) {
     Settings saved;
-    if (persist_read_data(PERSIST_KEY_SETTINGS, &saved, sizeof(saved)) == sizeof(saved)
-        && saved.version == SETTINGS_VERSION) {
-      s_settings = saved;
+    const int size = persist_read_data(PERSIST_KEY_SETTINGS, &saved, sizeof(saved));
+    if (size == settings_size(saved.version)) {
+      memcpy(&s_settings, &saved, size);
+      s_settings.version = SETTINGS_VERSION;
+#if defined(PBL_COLOR)
+      // Before version 2, colour watches had a light or dark background.
+      if (saved.version == 1 && saved.dark_theme) {
+        s_settings.background_argb = GColorBlackARGB8;
+      }
+#endif
     }
   }
   apply_palette();
