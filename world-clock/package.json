@@ -1,0 +1,56 @@
+{
+  "name": "world-clock",
+  "author": "ark-am",
+  "version": "1.0.0",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "pebble": {
+    "displayName": "World Clock",
+    "uuid": "6f1cb4ce-c56e-451a-9577-e51318a9a6de",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": true
+    },
+    "capabilities": [
+      "configurable"
+    ],
+    "messageKeys": [
+      "THEME",
+      "ACCENT_COLOR",
+      "CITY_1_NAME",
+      "CITY_1_ZONE",
+      "CITY_2_NAME",
+      "CITY_2_ZONE",
+      "CITY_1_LABEL",
+      "CITY_1_OFFSET",
+      "CITY_2_LABEL",
+      "CITY_2_OFFSET",
+      "REQUEST_OFFSETS"
+    ],
+    "resources": {
+      "media": [
+        {
+          "type": "png",
+          "name": "IMAGE_MENU_ICON",
+          "file": "images/menu_icon.png",
+          "menuIcon": true
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "@rebble/clay": "^1.1.0"
+  }
+}

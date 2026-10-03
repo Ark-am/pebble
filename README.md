@@ -14,6 +14,7 @@ build output, and documentation.
 | [Gnomon 2](./epoch/) | Classic analog watchface with turned hour numbers and tapered hands, plus weather, health data, the date, a battery ring, and connection and Quiet Time alerts. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Baltic](./baltic/) | Dress-watch face with Breguet-style numbers, a minute scale, a small seconds dial, and five dial colours. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Sketchy Weather Analog](./sketchy-weather-analog/) | Pencil-sketch analog watchface with a hand-drawn weather widget in the centre that the hands stay clear of. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
+| [World Clock](./world-clock/) | Digital face with your time large at the top beside the date, and the time in two other cities below. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 
 Follow a project's link for its requirements, build instructions, testing
 steps, and platform-specific notes.
@@ -29,6 +30,7 @@ steps, and platform-specific notes.
 ├── epoch/               # Classic analog watchface
 ├── baltic/              # Dress-watch face
 ├── sketchy-weather-analog/  # Pencil-sketch weather watchface
+├── world-clock/         # Digital world clock
 └── README.md            # Repository overview
 ```
 
