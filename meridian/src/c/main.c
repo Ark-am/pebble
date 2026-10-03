@@ -85,6 +85,16 @@ static int settings_size(uint8_t version) {
 
 static Settings s_settings;
 
+// Whether any of the four positions shows a kind of information.
+static bool slot_shown(SlotKind kind) {
+  for (int i = 0; i < POSITION_COUNT; i++) {
+    if (s_settings.slots[i] == kind) {
+      return true;
+    }
+  }
+  return false;
+}
+
 typedef struct {
   GColor background;
   GColor foreground;
@@ -211,12 +221,15 @@ static Metric next_available_metric(Metric from) {
 }
 
 static void health_handler(HealthEventType event, void *context) {
-  if (event != HealthEventSleepUpdate || s_metric == METRIC_SLEEP) {
+  if (slot_shown(SLOT_HEALTH) && (event != HealthEventSleepUpdate || s_metric == METRIC_SLEEP)) {
     layer_mark_dirty(s_canvas);
   }
 }
 
 static void tap_handler(AccelAxisType axis, int32_t direction) {
+  if (!slot_shown(SLOT_HEALTH)) {
+    return;
+  }
   s_metric = next_available_metric(s_metric);
   persist_write_int(PERSIST_KEY_METRIC, s_metric);
   layer_mark_dirty(s_canvas);
@@ -573,7 +586,7 @@ static void request_weather(void) {
 
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   layer_mark_dirty(s_canvas);
-  if ((units_changed & MINUTE_UNIT) && tick_time->tm_sec == 0
+  if (slot_shown(SLOT_WEATHER) && (units_changed & MINUTE_UNIT)
       && tick_time->tm_min % WEATHER_REFRESH_MINUTES == 0) {
     request_weather();
   }

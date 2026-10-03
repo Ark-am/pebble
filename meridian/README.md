@@ -1,17 +1,18 @@
 # Meridian
 
 A clean analog watchface that shows everything the watch can report in four
-complications around the dial:
+complications around the dial. Each position can show any of them, or nothing,
+from the settings; by default they are:
 
 | Position | Shows |
 | --- | --- |
-| 12 o'clock | Current temperature (°C) and conditions for the phone's location |
+| 12 o'clock | Current temperature (°C or °F) and conditions for the phone's location |
 | 3 o'clock | Date and day of the week |
 | 6 o'clock | Today's health data: steps, distance, active calories, active minutes, sleep, and heart rate (on watches with a sensor). **Tap the watch** to cycle through them. |
 | 9 o'clock | Battery percentage and gauge (red when low, green while charging), plus alerts for a disconnected phone and Quiet Time |
 
 The watch vibrates twice if the phone disconnects, except during Quiet Time.
-Aplite has no health data, so its 6 o'clock position shows the month and year.
+Aplite has no health data, so its health position shows the month and year.
 
 On rectangular watches the minute track follows the edge of the screen; on
 round watches it follows the circle. When a Timeline Quick View covers part of
@@ -27,7 +28,8 @@ all turn together; the text stays upright.
 The companion JavaScript runs in the Pebble phone app. It asks the phone for
 its location and fetches the weather from [Open-Meteo](https://open-meteo.com/),
 which needs no account or API key. The watch requests an update every 30
-minutes and keeps the last reading if the phone is unavailable.
+minutes and keeps the last reading if the phone is unavailable. When no
+position shows the weather, the phone does not ask for the location at all.
 
 ## Build
 

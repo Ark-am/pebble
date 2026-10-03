@@ -25,13 +25,24 @@ function conditionName(code) {
   return 'WEATHER';
 }
 
-function useFahrenheit() {
+function savedSettings() {
   try {
-    var settings = JSON.parse(localStorage.getItem('clay-settings')) || {};
-    return settings.TEMPERATURE_UNIT === 'F';
+    return JSON.parse(localStorage.getItem('clay-settings')) || {};
   } catch (error) {
-    return false;
+    return {};
   }
+}
+
+// Whether any position shows the weather (slot value 1, see src/pkjs/config.js).
+// Before the settings are first saved, the default layout shows it at 12.
+function weatherShown() {
+  var settings = savedSettings();
+  if (!('SLOT_TOP' in settings)) {
+    return true;
+  }
+  return ['SLOT_TOP', 'SLOT_RIGHT', 'SLOT_BOTTOM', 'SLOT_LEFT'].some(function (key) {
+    return String(settings[key]) === '1';
+  });
 }
 
 function sendWeather(position) {
@@ -39,7 +50,7 @@ function sendWeather(position) {
     '?latitude=' + position.coords.latitude.toFixed(3) +
     '&longitude=' + position.coords.longitude.toFixed(3) +
     '&current=temperature_2m,weather_code' +
-    (useFahrenheit() ? '&temperature_unit=fahrenheit' : '');
+    (savedSettings().TEMPERATURE_UNIT === 'F' ? '&temperature_unit=fahrenheit' : '');
 
   var request = new XMLHttpRequest();
   request.onload = function () {
@@ -68,13 +79,20 @@ function fetchWeather() {
   }, LOCATION_OPTIONS);
 }
 
-Pebble.addEventListener('ready', fetchWeather);
+// Only ask for the location while the weather is shown.
+function fetchWeatherIfShown() {
+  if (weatherShown()) {
+    fetchWeather();
+  }
+}
 
-// Runs after Clay has saved the settings, so a new temperature unit applies
-// straight away.
+Pebble.addEventListener('ready', fetchWeatherIfShown);
+
+// Runs after Clay has saved the settings, so showing the weather or a new
+// temperature unit applies straight away.
 Pebble.addEventListener('webviewclosed', function (event) {
   if (event && event.response) {
-    fetchWeather();
+    fetchWeatherIfShown();
   }
 });
 
