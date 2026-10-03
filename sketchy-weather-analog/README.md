@@ -8,10 +8,16 @@ start just outside a sketched ring around the widget, so they never cover it.
 On rectangular watches the screen has heavily rounded corners, and the ticks
 and hour numbers follow the rounded edge. Round watches use the full circle.
 
-The hands are slim dauphine hands and the hour markers small matching
-wedges, each with one solid and one shaded side; 12 o'clock has a pair. The
-optional hour numbers are set in Noto Serif Display, a fine high-contrast
-serif.
+The dial comes in two styles:
+
+- **Elegant** (default): slim dauphine hands and small matching wedge
+  markers, each with one solid and one shaded side (12 o'clock has a pair),
+  a smooth ring around the centre, and hour numbers in Noto Serif Display, a
+  fine high-contrast serif.
+- **Sketchy**: pencil-stroke hands and markers, a hand-drawn ring, and hour
+  numbers in the watch's own font.
+
+The centre widget is drawn in the pencil-sketch style either way.
 
 ## Centre screens
 
@@ -63,6 +69,7 @@ battery, choose it as one of the centre screen items.
 
 - **Background:** Paper (light) or Chalkboard (dark)
 - **Centre circle:** the four screens and whether they change every minute (see above)
+- **Dial style:** Elegant or Sketchy
 - **Show hour numbers:** off by default; when on, 1 to 12 sit just inside the hour ticks
 - **Temperature:** Celsius or Fahrenheit
 - **Vibrate when the phone disconnects**

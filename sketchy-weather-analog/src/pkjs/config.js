@@ -57,6 +57,17 @@ module.exports = [
         ]
       },
       {
+        type: 'select',
+        messageKey: 'DIAL_STYLE',
+        label: 'Dial style',
+        description: 'The hands, hour markers, hour numbers and centre ring.',
+        defaultValue: '0',
+        options: [
+          { label: 'Elegant', value: '0' },
+          { label: 'Sketchy', value: '1' }
+        ]
+      },
+      {
         type: 'toggle',
         messageKey: 'HOUR_NUMBERS',
         label: 'Show hour numbers',
