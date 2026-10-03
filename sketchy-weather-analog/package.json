@@ -25,6 +25,7 @@
     },
     "capabilities": [
       "location",
+      "health",
       "configurable"
     ],
     "messageKeys": [
@@ -36,6 +37,15 @@
       "TEMPERATURE_UNIT",
       "BATTERY",
       "HOUR_NUMBERS",
+      "SCREEN_1_MAIN",
+      "SCREEN_1_SECOND",
+      "SCREEN_2_MAIN",
+      "SCREEN_2_SECOND",
+      "SCREEN_3_MAIN",
+      "SCREEN_3_SECOND",
+      "SCREEN_4_MAIN",
+      "SCREEN_4_SECOND",
+      "ROTATE_SCREENS",
       "DISCONNECT_VIBE"
     ],
     "resources": {

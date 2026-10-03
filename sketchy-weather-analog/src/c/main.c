@@ -1,10 +1,12 @@
 #include <pebble.h>
 
-// An analog watchface drawn in a hand-sketched style. A pencil-drawn weather
-// widget sits in the centre: an icon for the current conditions above the
-// date and temperature. The hour and minute hands start outside a sketched
-// ring around it, so they never cover the widget. Settings come from the
-// phone (see src/pkjs).
+// An analog watchface drawn in a hand-sketched style. A pencil-drawn widget
+// sits in the centre: a picture above one or two values, such as the weather
+// icon above the date and temperature. The widget has up to four screens,
+// each pairing two kinds of information; they change every minute if chosen,
+// and a tap on the watch moves to the next one. The hour and minute hands
+// start outside a sketched ring around the widget, so they never cover it.
+// Settings come from the phone (see src/pkjs).
 
 #define PERSIST_KEY_TEMPERATURE 1
 #define PERSIST_KEY_CONDITION 2
@@ -21,6 +23,9 @@
   #define NUMERAL_HEIGHT 17
   #define NUMERAL_PAD 7
   #define NUMERAL_RADIUS 12
+  #define DAY_FONT FONT_KEY_GOTHIC_18_BOLD
+  #define DAY_HEIGHT 13
+  #define DAY_PAD 5
   // Visible height of the text and the blank space the font leaves above it.
   #define TEXT_HEIGHT 13
   #define TEXT_PAD 5
@@ -36,35 +41,47 @@
   #define HOUR_HAND_WIDTH 6
   #define MINUTE_HAND_WIDTH 4
   #define HATCH_SPACING 4
-  #define SHOW_UNIT_LETTER true
 #else
   #define TEXT_FONT FONT_KEY_GOTHIC_14
   #define NUMERAL_FONT FONT_KEY_GOTHIC_18
   #define NUMERAL_HEIGHT 13
   #define NUMERAL_PAD 5
   #define NUMERAL_RADIUS 9
+  #define DAY_FONT FONT_KEY_GOTHIC_14_BOLD
+  #define DAY_HEIGHT 10
+  #define DAY_PAD 4
   #define TEXT_HEIGHT 10
   #define TEXT_PAD 4
   #define ICON_SIZE 54
   #define ICON_RISE 11
   #define RULE_DROP 10
-  #define CLEAR_RADIUS 37
+  #define CLEAR_RADIUS 40
   #define HOUR_TICK_LENGTH 6
   #define MINUTE_TICK_LENGTH 3
   #define HOUR_HAND_WIDTH 5
   #define MINUTE_HAND_WIDTH 3
   #define HATCH_SPACING 3
-  // The ring is tight on smaller screens, so the temperature is shown as
-  // just a number and a degree sign.
-  #define SHOW_UNIT_LETTER false
 #endif
+
+#define SCREEN_COUNT 4
 
 #define EDGE_INSET 2
 #define HAND_GAP 3
 #define TEXT_GAP 4
 
+// What the centre widget can show. Values match the options in src/pkjs/config.js.
+typedef enum {
+  ITEM_NONE,
+  ITEM_WEATHER,
+  ITEM_DATE,
+  ITEM_BATTERY,
+  ITEM_STEPS,
+  ITEM_HEART_RATE,
+  ITEM_COUNT,
+} Item;
+
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 2
+#define SETTINGS_VERSION 3
 typedef struct {
   uint8_t version;
   bool dark_theme;
@@ -73,6 +90,10 @@ typedef struct {
   char temperature_unit;
   // Added in version 2.
   bool hour_numbers;
+  // Added in version 3: the main and second item of each widget screen, and
+  // whether the screens change every minute.
+  uint8_t screens[SCREEN_COUNT][2];
+  bool rotate_screens;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -80,6 +101,7 @@ typedef struct {
 static int settings_size(uint8_t version) {
   switch (version) {
     case 1: return offsetof(Settings, hour_numbers);
+    case 2: return offsetof(Settings, screens);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -100,6 +122,8 @@ typedef struct {
   GColor bolt;
   GColor warning;
   GColor charging;
+  GColor heart;
+  GColor calendar;
 } Palette;
 
 static Palette s_palette;
@@ -122,12 +146,15 @@ static Window *s_window;
 static Layer *s_canvas;
 static GFont s_text_font;
 static GFont s_numeral_font;
+static GFont s_day_font;
 
 static BatteryChargeState s_battery;
 static bool s_bluetooth_connected;
 static int32_t s_temperature = NO_TEMPERATURE;
 static char s_condition[16];
 static bool s_daytime = true;
+// The widget screen being shown.
+static int s_screen;
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -140,6 +167,13 @@ static void settings_set_defaults(Settings *settings) {
     .disconnect_vibe = true,
     .temperature_unit = 'C',
     .hour_numbers = false,
+    .screens = {
+      { ITEM_WEATHER, ITEM_DATE },
+      { ITEM_DATE, ITEM_BATTERY },
+      { ITEM_STEPS, ITEM_HEART_RATE },
+      { ITEM_NONE, ITEM_NONE },
+    },
+    .rotate_screens = false,
   };
 }
 
@@ -158,6 +192,8 @@ static void apply_palette(void) {
   s_palette.bolt = GColorYellow;
   s_palette.warning = GColorRed;
   s_palette.charging = GColorGreen;
+  s_palette.heart = GColorRed;
+  s_palette.calendar = GColorRed;
 #else
   // Black and white: shapes are left unfilled and the pencil hatching gives
   // the sun and moon their tone.
@@ -171,6 +207,8 @@ static void apply_palette(void) {
   s_palette.bolt = s_palette.background;
   s_palette.warning = s_palette.ink;
   s_palette.charging = s_palette.ink;
+  s_palette.heart = s_palette.ink;
+  s_palette.calendar = s_palette.ink;
 #endif
 }
 
@@ -506,8 +544,7 @@ static void draw_small_sky(GContext *ctx, int16_t x, int16_t y) {
   }
 }
 
-static void draw_weather_icon(GContext *ctx, GPoint centre, Weather weather) {
-  s_icon_centre = centre;
+static void draw_weather_icon(GContext *ctx, Weather weather) {
   switch (weather) {
     case WEATHER_CLEAR:
       if (s_daytime) {
@@ -613,50 +650,340 @@ static void draw_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t from,
                      ray_point(ray_point(centre, angle, to - 2), side, offset - 1));
 }
 
-// The date and temperature, side by side under a pencil rule with a short
-// upright stroke between them.
-static void draw_date_and_temperature(GContext *ctx, GPoint centre, const struct tm *t) {
-  char date[8];
-  strftime(date, sizeof(date), "%b %d", t);
-  char temperature[16];
-  if (s_temperature == NO_TEMPERATURE) {
-    snprintf(temperature, sizeof(temperature), "--\xc2\xb0");
-  } else if (SHOW_UNIT_LETTER) {
-    snprintf(temperature, sizeof(temperature), "%d\xc2\xb0%c", (int)s_temperature,
-             s_settings.temperature_unit);
-  } else {
-    snprintf(temperature, sizeof(temperature), "%d\xc2\xb0", (int)s_temperature);
-  }
+// ---------------------------------------------------------------------------
+// Other widget pictures, on the same 100 x 100 unit grid as the weather icons
 
-  const GRect measure = GRect(0, 0, 100, 40);
-  const int16_t date_w = graphics_text_layout_get_content_size(
-    date, s_text_font, measure, GTextOverflowModeFill, GTextAlignmentLeft).w;
-  const int16_t temp_w = graphics_text_layout_get_content_size(
-    temperature, s_text_font, measure, GTextOverflowModeFill, GTextAlignmentLeft).w;
-  const int16_t total = date_w + TEXT_GAP * 2 + temp_w;
-  const int16_t left = centre.x - total / 2;
-  const int16_t divider = left + date_w + TEXT_GAP;
+static void sketch_polygon(GContext *ctx, const GPoint *points, size_t count, GColor color) {
+  for (size_t i = 0; i < count; i++) {
+    sketch_line(ctx, points[i], points[(i + 1) % count], color);
+  }
+}
+
+static void draw_text_centred(GContext *ctx, const char *text, GFont font, GPoint centre,
+                              int16_t width, int16_t height, int16_t pad) {
+  graphics_draw_text(ctx, text, font,
+                     GRect(centre.x - width / 2, centre.y - height / 2 - pad, width,
+                           height + pad * 2),
+                     GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+}
+
+// A tear-off calendar page with the day of the week on it.
+static void draw_calendar(GContext *ctx, const struct tm *t) {
+  const GPoint top_left = icon_point(22, 20);
+  const GPoint bottom_right = icon_point(78, 84);
+  const int16_t band = icon_point(0, 34).y;
+  graphics_context_set_fill_color(ctx, s_palette.background);
+  graphics_fill_rect(ctx, GRect(top_left.x, top_left.y, bottom_right.x - top_left.x,
+                                bottom_right.y - top_left.y), 0, GCornerNone);
+  graphics_context_set_fill_color(ctx, s_palette.calendar);
+  graphics_fill_rect(ctx, GRect(top_left.x, top_left.y, bottom_right.x - top_left.x,
+                                band - top_left.y), 0, GCornerNone);
+  const GPoint page[] = {
+    top_left, GPoint(bottom_right.x, top_left.y), bottom_right, GPoint(top_left.x, bottom_right.y),
+  };
+  sketch_polygon(ctx, page, ARRAY_LENGTH(page), s_palette.ink);
+  sketch_line(ctx, GPoint(top_left.x, band), GPoint(bottom_right.x, band), s_palette.ink);
+  // Binder rings.
+  sketch_line(ctx, icon_point(36, 13), icon_point(36, 26), s_palette.ink);
+  sketch_line(ctx, icon_point(64, 13), icon_point(64, 26), s_palette.ink);
+
+  char day[4];
+  strftime(day, sizeof(day), "%a", t);
+  for (char *c = day; *c; c++) {
+    if (*c >= 'a' && *c <= 'z') {
+      *c -= 'a' - 'A';
+    }
+  }
+  graphics_context_set_text_color(ctx, s_palette.ink);
+  draw_text_centred(ctx, day, s_day_font, icon_point(50, 60), bottom_right.x - top_left.x,
+                    DAY_HEIGHT, DAY_PAD);
+}
+
+// A large battery, filled to the charge level.
+static void draw_battery_picture(GContext *ctx) {
+  const GPoint top_left = icon_point(16, 32);
+  const GPoint bottom_right = icon_point(78, 68);
+  const bool low = s_battery.charge_percent <= LOW_BATTERY_PERCENT;
+  const GColor level_color = s_battery.is_charging ? s_palette.charging
+    : low ? s_palette.warning : s_palette.ink;
+
+  const int16_t inner_left = top_left.x + 3;
+  const int16_t inner_w = bottom_right.x - 3 - inner_left;
+  const int16_t level = inner_w * s_battery.charge_percent / 100;
+  graphics_context_set_fill_color(ctx, level_color);
+  graphics_fill_rect(ctx, GRect(inner_left, top_left.y + 3, level > 0 ? level : 1,
+                                bottom_right.y - top_left.y - 5), 0, GCornerNone);
+
+  const GPoint body[] = {
+    top_left, GPoint(bottom_right.x, top_left.y), bottom_right, GPoint(top_left.x, bottom_right.y),
+  };
+  sketch_polygon(ctx, body, ARRAY_LENGTH(body), s_palette.ink);
+  const GPoint nub_top = icon_point(78, 42);
+  const GPoint nub_bottom = icon_point(85, 58);
+  graphics_context_set_fill_color(ctx, s_palette.ink);
+  graphics_fill_rect(ctx, GRect(nub_top.x, nub_top.y, nub_bottom.x - nub_top.x,
+                                nub_bottom.y - nub_top.y), 0, GCornerNone);
+}
+
+// One footprint: a sole, a heel and three toes.
+static void draw_foot(GContext *ctx, int16_t x, int16_t y) {
+  static const int8_t toes[][2] = { { -8, -16 }, { -1, -19 }, { 6, -17 } };
+  graphics_context_set_fill_color(ctx, s_palette.ink);
+  graphics_fill_circle(ctx, icon_point(x, y), icon_length(10));
+  graphics_fill_circle(ctx, icon_point(x + 2, y + 17), icon_length(7));
+  for (size_t i = 0; i < ARRAY_LENGTH(toes); i++) {
+    graphics_fill_circle(ctx, icon_point(x + toes[i][0], y + toes[i][1]), icon_length(4));
+  }
+  sketch_circle(ctx, icon_point(x, y), icon_length(10), s_palette.ink, NULL, NULL);
+}
+
+static void draw_footprints(GContext *ctx) {
+  draw_foot(ctx, 34, 62);
+  draw_foot(ctx, 64, 38);
+}
+
+typedef struct {
+  GPoint other;
+  int16_t other_radius;
+  int16_t below;
+} HeartFilter;
+
+// The visible part of each lobe: outside the other lobe and above the point
+// where the sides run down to the tip.
+static bool heart_filter(GPoint point, const void *data) {
+  const HeartFilter *filter = data;
+  const int16_t r = filter->other_radius - 1;
+  return point.y <= filter->below && distance_squared(point, filter->other) >= r * r;
+}
+
+static void draw_heart(GContext *ctx) {
+  const GPoint left = icon_point(37, 38);
+  const GPoint right = icon_point(63, 38);
+  const int16_t r = icon_length(14);
+  GPoint sides[] = { icon_point(24, 45), icon_point(50, 80), icon_point(76, 45) };
+
+  graphics_context_set_fill_color(ctx, s_palette.heart);
+  graphics_fill_circle(ctx, left, r);
+  graphics_fill_circle(ctx, right, r);
+  GPathInfo info = { .num_points = ARRAY_LENGTH(sides), .points = sides };
+  GPath *point = gpath_create(&info);
+  gpath_draw_filled(ctx, point);
+  gpath_destroy(point);
+
+  const int16_t below = sides[0].y;
+  const HeartFilter left_filter = { right, r, below };
+  const HeartFilter right_filter = { left, r, below };
+  sketch_circle(ctx, left, r, s_palette.ink, heart_filter, &left_filter);
+  sketch_circle(ctx, right, r, s_palette.ink, heart_filter, &right_filter);
+  sketch_line(ctx, sides[0], sides[1], s_palette.ink);
+  sketch_line(ctx, sides[1], sides[2], s_palette.ink);
+}
+
+static void draw_item_picture(GContext *ctx, Item item, GPoint centre, const struct tm *t) {
+  s_icon_centre = centre;
+  switch (item) {
+    case ITEM_WEATHER: draw_weather_icon(ctx, weather_from_condition(s_condition)); break;
+    case ITEM_DATE: draw_calendar(ctx, t); break;
+    case ITEM_BATTERY: draw_battery_picture(ctx); break;
+    case ITEM_STEPS: draw_footprints(ctx); break;
+    case ITEM_HEART_RATE: draw_heart(ctx); break;
+    default: break;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Widget values
+
+static int32_t steps_today(void) {
+#if defined(PBL_HEALTH)
+  const time_t start = time_start_of_today();
+  if (health_service_metric_accessible(HealthMetricStepCount, start, time(NULL))
+      & HealthServiceAccessibilityMaskAvailable) {
+    return health_service_sum_today(HealthMetricStepCount);
+  }
+#endif
+  return -1;
+}
+
+static int32_t heart_rate(void) {
+#if defined(PBL_HEALTH)
+  const time_t now = time(NULL);
+  if (health_service_metric_accessible(HealthMetricHeartRateBPM, now, now)
+      & HealthServiceAccessibilityMaskAvailable) {
+    const int32_t bpm = health_service_peek_current_value(HealthMetricHeartRateBPM);
+    return bpm > 0 ? bpm : -1;
+  }
+#endif
+  return -1;
+}
+
+// Writes an item's value as text. The short form drops units and shortens
+// large numbers, for when the full form will not fit inside the ring.
+static void format_item(Item item, bool brief, const struct tm *t, char *text, size_t size) {
+  switch (item) {
+    case ITEM_WEATHER:
+      if (s_temperature == NO_TEMPERATURE) {
+        snprintf(text, size, "--\xc2\xb0");
+      } else if (brief) {
+        snprintf(text, size, "%d\xc2\xb0", (int)s_temperature);
+      } else {
+        snprintf(text, size, "%d\xc2\xb0%c", (int)s_temperature, s_settings.temperature_unit);
+      }
+      break;
+    case ITEM_DATE: {
+      char month[4];
+      strftime(month, sizeof(month), "%b", t);
+      snprintf(text, size, brief ? "%s %d" : "%s %02d", month, t->tm_mday);
+      break;
+    }
+    case ITEM_BATTERY:
+      snprintf(text, size, "%d%%", s_battery.charge_percent);
+      break;
+    case ITEM_STEPS: {
+      const int32_t steps = steps_today();
+      if (steps < 0) {
+        snprintf(text, size, "--");
+      } else if (steps < 1000) {
+        snprintf(text, size, "%d", (int)steps);
+      } else if (!brief) {
+        snprintf(text, size, "%d,%03d", (int)(steps / 1000), (int)(steps % 1000));
+      } else if (steps < 10000) {
+        snprintf(text, size, "%d.%dk", (int)(steps / 1000), (int)(steps % 1000 / 100));
+      } else {
+        snprintf(text, size, "%dk", (int)(steps / 1000));
+      }
+      break;
+    }
+    case ITEM_HEART_RATE: {
+      const int32_t bpm = heart_rate();
+      if (bpm < 0) {
+        snprintf(text, size, "--");
+      } else {
+        snprintf(text, size, brief ? "%d" : "%d bpm", (int)bpm);
+      }
+      break;
+    }
+    default:
+      text[0] = '\0';
+      break;
+  }
+}
+
+static int16_t text_width(const char *text) {
+  return graphics_text_layout_get_content_size(text, s_text_font, GRect(0, 0, 200, 40),
+                                               GTextOverflowModeFill, GTextAlignmentLeft).w;
+}
+
+// Half the width of the ring at a distance below its centre.
+static int16_t ring_half_width(int16_t below) {
+  return isqrt(CLEAR_RADIUS * CLEAR_RADIUS - below * below);
+}
+
+// One or two values under a pencil rule, split by a short upright stroke.
+// Values switch to their short forms if they would not fit inside the ring.
+static void draw_values(GContext *ctx, GPoint centre, Item main, Item second,
+                        const struct tm *t) {
   const int16_t rule_y = centre.y + RULE_DROP;
   const int16_t text_top = rule_y + 3;
+  const int16_t room = ring_half_width(RULE_DROP + 3 + TEXT_HEIGHT) * 2 - 6;
 
-  sketch_line(ctx, GPoint(left - 3, rule_y), GPoint(left + total + 3, rule_y), s_palette.ink);
-  sketch_line(ctx, GPoint(divider, rule_y + 1), GPoint(divider, text_top + TEXT_HEIGHT + 1),
+  char first[16];
+  char other[16];
+  int16_t first_w = 0;
+  int16_t other_w = 0;
+  int16_t total = 0;
+  // Try the full forms, then a short second value, then both short.
+  for (int attempt = 0; attempt < 3; attempt++) {
+    format_item(main, attempt == 2, t, first, sizeof(first));
+    format_item(second, attempt >= 1, t, other, sizeof(other));
+    first_w = text_width(first);
+    other_w = second != ITEM_NONE ? text_width(other) : 0;
+    total = first_w + (second != ITEM_NONE ? TEXT_GAP * 2 + other_w : 0);
+    if (total <= room) {
+      break;
+    }
+  }
+
+  const int16_t left = centre.x - total / 2;
+  const int16_t rule_half_max = ring_half_width(RULE_DROP) - 3;
+  const int16_t rule_half = total / 2 + 3 < rule_half_max ? total / 2 + 3 : rule_half_max;
+  sketch_line(ctx, GPoint(centre.x - rule_half, rule_y), GPoint(centre.x + rule_half, rule_y),
               s_palette.ink);
 
   graphics_context_set_text_color(ctx, s_palette.ink);
-  graphics_draw_text(ctx, date, s_text_font,
-                     GRect(left, text_top - TEXT_PAD, date_w + 2, TEXT_HEIGHT + TEXT_PAD * 2),
+  graphics_draw_text(ctx, first, s_text_font,
+                     GRect(left, text_top - TEXT_PAD, first_w + 2, TEXT_HEIGHT + TEXT_PAD * 2),
                      GTextOverflowModeFill, GTextAlignmentLeft, NULL);
-  graphics_draw_text(ctx, temperature, s_text_font,
-                     GRect(divider + TEXT_GAP, text_top - TEXT_PAD, temp_w + 2,
+  if (second == ITEM_NONE) {
+    return;
+  }
+  const int16_t divider = left + first_w + TEXT_GAP;
+  sketch_line(ctx, GPoint(divider, rule_y + 1), GPoint(divider, text_top + TEXT_HEIGHT + 1),
+              s_palette.ink);
+  graphics_draw_text(ctx, other, s_text_font,
+                     GRect(divider + TEXT_GAP, text_top - TEXT_PAD, other_w + 2,
                            TEXT_HEIGHT + TEXT_PAD * 2),
                      GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 }
 
 // ---------------------------------------------------------------------------
+// Widget screens
+
+static bool screen_used(int screen) {
+  return s_settings.screens[screen][0] != ITEM_NONE || s_settings.screens[screen][1] != ITEM_NONE;
+}
+
+// The next screen with something on it, or the same one if it is the only one.
+static int next_screen(int from) {
+  for (int i = 1; i <= SCREEN_COUNT; i++) {
+    const int candidate = (from + i) % SCREEN_COUNT;
+    if (screen_used(candidate)) {
+      return candidate;
+    }
+  }
+  return from;
+}
+
+// The items on the current screen. A screen with only a second item shows
+// it as the main one, and with nothing chosen anywhere the weather and date
+// are shown.
+static void screen_items(Item *main, Item *second) {
+  if (!screen_used(s_screen)) {
+    s_screen = next_screen(s_screen);
+  }
+  *main = s_settings.screens[s_screen][0];
+  *second = s_settings.screens[s_screen][1];
+  if (*main == ITEM_NONE) {
+    *main = *second;
+    *second = ITEM_NONE;
+  }
+  if (*main == ITEM_NONE) {
+    *main = ITEM_WEATHER;
+    *second = ITEM_DATE;
+  }
+}
+
+#if defined(PBL_HEALTH)
+static bool item_shown(Item item) {
+  Item main;
+  Item second;
+  screen_items(&main, &second);
+  return main == item || second == item;
+}
+#endif
+
+static void draw_widget(GContext *ctx, GPoint centre, const struct tm *t) {
+  Item main;
+  Item second;
+  screen_items(&main, &second);
+  draw_item_picture(ctx, main, GPoint(centre.x, centre.y - ICON_RISE), t);
+  draw_values(ctx, centre, main, second, t);
+}
+
+// ---------------------------------------------------------------------------
 // Status icons, tucked inside the ticks at 1:30 and 10:30
 
-static void draw_battery(GContext *ctx, GPoint centre) {
+static void draw_battery_status(GContext *ctx, GPoint centre) {
   const bool low = s_battery.charge_percent <= LOW_BATTERY_PERCENT;
   if (!s_settings.always_show_battery && !low && !s_battery.is_charging) {
     return;
@@ -750,16 +1077,14 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   const int32_t corner_left = -TRIG_MAX_ANGLE / 8;
   const int16_t inset = HOUR_TICK_LENGTH + 12
     + (s_settings.hour_numbers ? NUMERAL_RADIUS * 2 : 0);
-  draw_battery(ctx, ray_point(centre, corner_right,
-                              edge_distance(bounds, corner_right) - inset));
+  draw_battery_status(ctx, ray_point(centre, corner_right,
+                                     edge_distance(bounds, corner_right) - inset));
   draw_alerts(ctx, ray_point(centre, corner_left,
                              edge_distance(bounds, corner_left) - inset));
 
   // The widget and the ring that keeps the hands out of it.
   sketch_circle(ctx, centre, CLEAR_RADIUS, s_palette.faint, NULL, NULL);
-  draw_weather_icon(ctx, GPoint(centre.x, centre.y - ICON_RISE),
-                    weather_from_condition(s_condition));
-  draw_date_and_temperature(ctx, centre, t);
+  draw_widget(ctx, centre, t);
 
   // The hands run from just outside the ring towards the ticks.
   const int32_t reach_x = edge_distance(bounds, TRIG_MAX_ANGLE / 4);
@@ -786,11 +1111,31 @@ static void request_weather(void) {
 }
 
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
+  if (s_settings.rotate_screens) {
+    s_screen = next_screen(s_screen);
+  }
   layer_mark_dirty(s_canvas);
   if (tick_time->tm_min % WEATHER_REFRESH_MINUTES == 0) {
     request_weather();
   }
 }
+
+// A tap on the watch moves to the next widget screen.
+static void tap_handler(AccelAxisType axis, int32_t direction) {
+  const int next = next_screen(s_screen);
+  if (next != s_screen) {
+    s_screen = next;
+    layer_mark_dirty(s_canvas);
+  }
+}
+
+#if defined(PBL_HEALTH)
+static void health_handler(HealthEventType event, void *context) {
+  if (item_shown(ITEM_STEPS) || item_shown(ITEM_HEART_RATE)) {
+    layer_mark_dirty(s_canvas);
+  }
+}
+#endif
 
 static void battery_handler(BatteryChargeState state) {
   s_battery = state;
@@ -812,8 +1157,28 @@ static int32_t tuple_int(const Tuple *tuple) {
 }
 
 static bool read_settings(DictionaryIterator *iterator) {
+  static const uint32_t *screen_keys[SCREEN_COUNT][2] = {
+    { &MESSAGE_KEY_SCREEN_1_MAIN, &MESSAGE_KEY_SCREEN_1_SECOND },
+    { &MESSAGE_KEY_SCREEN_2_MAIN, &MESSAGE_KEY_SCREEN_2_SECOND },
+    { &MESSAGE_KEY_SCREEN_3_MAIN, &MESSAGE_KEY_SCREEN_3_SECOND },
+    { &MESSAGE_KEY_SCREEN_4_MAIN, &MESSAGE_KEY_SCREEN_4_SECOND },
+  };
   bool changed = false;
   const Tuple *tuple;
+
+  for (int screen = 0; screen < SCREEN_COUNT; screen++) {
+    for (int slot = 0; slot < 2; slot++) {
+      if ((tuple = dict_find(iterator, *screen_keys[screen][slot]))) {
+        const int32_t item = tuple_int(tuple);
+        s_settings.screens[screen][slot] = item >= 0 && item < ITEM_COUNT ? item : ITEM_NONE;
+        changed = true;
+      }
+    }
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_ROTATE_SCREENS))) {
+    s_settings.rotate_screens = tuple_int(tuple) != 0;
+    changed = true;
+  }
 
   if ((tuple = dict_find(iterator, MESSAGE_KEY_THEME))) {
     s_settings.dark_theme = tuple_int(tuple) == 1;
@@ -859,6 +1224,7 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
   }
 
   if (read_settings(iterator)) {
+    s_screen = 0;
     persist_write_data(PERSIST_KEY_SETTINGS, &s_settings, sizeof(s_settings));
     apply_palette();
     window_set_background_color(s_window, s_palette.background);
@@ -912,6 +1278,7 @@ static void load_saved_state(void) {
 static void init(void) {
   s_text_font = fonts_get_system_font(TEXT_FONT);
   s_numeral_font = fonts_get_system_font(NUMERAL_FONT);
+  s_day_font = fonts_get_system_font(DAY_FONT);
   load_saved_state();
   s_battery = battery_state_service_peek();
   s_bluetooth_connected = connection_service_peek_pebble_app_connection();
@@ -929,6 +1296,10 @@ static void init(void) {
   connection_service_subscribe((ConnectionHandlers) {
     .pebble_app_connection_handler = bluetooth_handler,
   });
+  accel_tap_service_subscribe(tap_handler);
+#if defined(PBL_HEALTH)
+  health_service_events_subscribe(health_handler, NULL);
+#endif
 #if !defined(PBL_PLATFORM_APLITE)
   unobstructed_area_service_subscribe((UnobstructedAreaHandlers) {
     .change = unobstructed_change,
@@ -943,6 +1314,10 @@ static void deinit(void) {
   tick_timer_service_unsubscribe();
   battery_state_service_unsubscribe();
   connection_service_unsubscribe();
+  accel_tap_service_unsubscribe();
+#if defined(PBL_HEALTH)
+  health_service_events_unsubscribe();
+#endif
   window_destroy(s_window);
 }
 

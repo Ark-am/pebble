@@ -1,9 +1,35 @@
 # Sketchy Weather Analog
 
-An analog watchface drawn in a pencil-sketch style. A hand-drawn weather
-widget sits in the centre of the dial: an icon for the current conditions,
-with the date and temperature underneath. The hour and minute hands start
-just outside a sketched ring around the widget, so they never cover it.
+An analog watchface drawn in a pencil-sketch style. A hand-drawn widget sits
+in the centre of the dial: a picture with one or two values underneath, such
+as the weather icon above the temperature and date. The hour and minute hands
+start just outside a sketched ring around the widget, so they never cover it.
+
+## Centre screens
+
+The widget has up to four screens. Each screen has a main item, which sets
+the picture and the first value, and an optional second value after the
+divider. By default they are:
+
+| Screen | Picture | Values |
+| --- | --- | --- |
+| 1 | Weather icon | Temperature, date |
+| 2 | Calendar page with the day of the week | Date, battery |
+| 3 | Footprints | Steps today, heart rate |
+| 4 | (not used) | |
+
+The items are weather, date, battery (a gauge, red when low and green while
+charging), steps, and heart rate (a heart). **Tap the watch** to move to the
+next screen, or turn on **Change screen every minute** to cycle through them
+automatically. Set both items on a screen to Nothing to skip it.
+
+If both values do not fit inside the ring, the second, then the first,
+switches to a short form: `17°` instead of `17°C`, `Oct 3` instead of
+`Oct 03`, `8.4k` instead of `8,432`, `72` instead of `72 bpm`. Steps show
+`--` on Aplite, and heart rate shows `--` on watches without a heart-rate
+sensor.
+
+## Weather icons
 
 | Conditions | Icon |
 | --- | --- |
@@ -26,13 +52,10 @@ disconnected, and a crescent shows during Quiet Time. A battery gauge at
 time if you choose. The watch vibrates twice when the phone disconnects,
 except during Quiet Time.
 
-On 144-pixel-wide watches (Aplite, Basalt, Diorite, Flint) and on Chalk, the
-temperature is shown as just the number and degree sign (`70°`) to fit inside
-the ring. Emery and Gabbro add the unit (`70°F`).
-
 ## Settings
 
 - **Background:** Paper (light) or Chalkboard (dark)
+- **Centre circle:** the four screens and whether they change every minute (see above)
 - **Show hour numbers:** off by default; when on, 1 to 12 sit just inside the hour ticks
 - **Battery:** shown when low or charging, or always
 - **Temperature:** Celsius or Fahrenheit
@@ -73,6 +96,9 @@ Useful checks in a second terminal:
 pebble emu-battery --emulator basalt --percent 15          # low battery
 pebble emu-battery --emulator basalt --percent 60 --charging
 pebble emu-bt-connection --emulator basalt --connected no  # disconnected alert
+pebble emu-tap --emulator basalt                           # next centre screen
+pebble emu-steps --emulator basalt 8432                    # set today's steps
+pebble emu-heart-rate --emulator emery 72                  # heart rate (emery)
 pebble emu-set-timeline-quick-view --emulator basalt on    # Quick View layout
 ```
 
