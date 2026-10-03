@@ -2,9 +2,10 @@
 
 // A classic analog watchface: a minute track that follows the edge of the
 // screen, hour numbers and indices, and tapered hands. The weather (with an
-// icon for the conditions) and health data sit above the centre, the date and a battery ring below it; tap the
-// watch to cycle the health metric. The background, the style of the hour
-// numbers and the other options are configurable from the phone (see src/pkjs).
+// icon for the conditions) and health data sit above the centre, the date and
+// a battery ring below it; tap the watch to cycle the health metric. The
+// background, the style of the hour numbers and the other options are
+// configurable from the phone (see src/pkjs).
 
 #define PERSIST_KEY_SETTINGS 1
 #define PERSIST_KEY_METRIC 2
@@ -72,9 +73,9 @@
 #define DEFAULT_DIAL_NAME "Pebble"
 #define RING_SEGMENTS 10
 // How far along each hand its grey leaf reaches, in percent.
+#define LEAF_PERCENT 70
 // The dial-coloured border that separates the minute hand from the hour hand.
 #define HAND_GAP 1
-#define LEAF_PERCENT 70
 
 // How far an item may move to keep clear of the hands: around the centre in
 // steps of 3 degrees, and outward in steps of a sixth of its distance. A step
@@ -291,12 +292,15 @@ static Metric next_available_metric(Metric from) {
 }
 
 static void health_handler(HealthEventType event, void *context) {
-  if (event != HealthEventSleepUpdate || s_metric == METRIC_SLEEP) {
+  if (s_settings.show_health && (event != HealthEventSleepUpdate || s_metric == METRIC_SLEEP)) {
     layer_mark_dirty(s_canvas);
   }
 }
 
 static void tap_handler(AccelAxisType axis, int32_t direction) {
+  if (!s_settings.show_health) {
+    return;
+  }
   s_metric = next_available_metric(s_metric);
   persist_write_int(PERSIST_KEY_METRIC, s_metric);
   layer_mark_dirty(s_canvas);
@@ -488,10 +492,12 @@ static bool line_crosses_rect(GPoint a, GPoint b, GRect rect) {
     || lines_cross(a, b, top_right, bottom_left);
 }
 
+#if !defined(PBL_COLOR)
 // ---------------------------------------------------------------------------
-// Classic numerals
+// Classic numerals for black-and-white watches
 //
-// The system fonts cannot be rotated, so the classic numerals are drawn as
+// The system fonts cannot be rotated, and these watches cannot show the soft
+// edges of the images colour watches use, so the classic numerals are drawn as
 // strokes. Each glyph is a list of x, y points on a 16 x 32 grid; PEN_UP
 // starts a new stroke and GLYPH_END finishes the glyph.
 
@@ -571,9 +577,16 @@ static void draw_classic_numeral(GContext *ctx, const char *text, GPoint at, int
     }
   }
 }
+#endif
 
 // ---------------------------------------------------------------------------
 // Drawing
+
+static int16_t text_width(const char *text, GFont font) {
+  return graphics_text_layout_get_content_size(
+    text, font, GRect(0, 0, TEXT_BOX_WIDTH, 40),
+    GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter).w;
+}
 
 static void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
   for (int i = 0; i < 60; i++) {
@@ -600,16 +613,9 @@ static void draw_modern_numeral(GContext *ctx, const char *text, GPoint at) {
                      GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 }
 
-// Hour numbers sit just inside the ticks, with a long index at every other
-// hour.
-static int16_t modern_numeral_width(const char *text) {
-  return graphics_text_layout_get_content_size(
-    text, s_modern_font, GRect(0, 0, 60, MODERN_HEIGHT + MODERN_PAD * 2),
-    GTextOverflowModeFill, GTextAlignmentCenter).w;
-}
-
-// The area an hour number covers. Classic numbers turn with the dial, so they
-// are given a square as wide as the number.
+// The area an hour number covers, just inside the ticks. Classic numbers turn
+// with the dial: colour watches use the size of their image, and black-and-
+// white watches a square as wide as the number.
 static GRect numeral_rect(GRect bounds, GPoint centre, int hour) {
   const int32_t angle = TRIG_MAX_ANGLE * hour / 12;
   const int32_t edge = edge_distance(bounds, angle);
@@ -619,26 +625,43 @@ static GRect numeral_rect(GRect bounds, GPoint centre, int hour) {
   int16_t height;
   int32_t reach;
   if (s_settings.modern_numerals) {
-    width = modern_numeral_width(text);
+    width = text_width(text, s_modern_font);
     height = MODERN_HEIGHT;
     // Numbers at 3 and 9 reach the ticks with their width, not their height.
     reach = hour % 6 == 0 ? MODERN_HEIGHT / 2 : width / 2;
   } else {
+#if defined(PBL_COLOR)
+    const GSize size = gbitmap_get_bounds(s_numerals[hour / 2]).size;
+    width = size.w;
+    height = size.h;
+#else
     const int length = strlen(text);
     width = (length * GLYPH_WIDTH + (length - 1) * GLYPH_GAP) * CLASSIC_HEIGHT / GLYPH_HEIGHT;
     if (width < CLASSIC_HEIGHT) {
       width = CLASSIC_HEIGHT;
     }
     height = width;
+#endif
     reach = CLASSIC_HEIGHT / 2;
   }
   const GPoint at = ray_point(centre, angle, edge - HOUR_TICK_LENGTH - NUMERAL_GAP - reach);
   return GRect(at.x - width / 2, at.y - height / 2, width, height);
 }
 
-static bool covered(GRect rect, const GRect *covers, int count) {
+// Whether a rectangle or a line runs into any of the given areas. Empty areas,
+// for things not shown, never count.
+static bool rect_covered(GRect rect, const GRect *covers, int count) {
   for (int i = 0; i < count; i++) {
     if (covers[i].size.w && rects_overlap(rect, covers[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool line_covered(GPoint a, GPoint b, const GRect *covers, int count) {
+  for (int i = 0; i < count; i++) {
+    if (covers[i].size.w && line_crosses_rect(a, b, rect_grow(covers[i], 1))) {
       return true;
     }
   }
@@ -655,11 +678,7 @@ static void draw_hours(GContext *ctx, GRect bounds, GPoint centre, const GRect *
       const int32_t edge = edge_distance(bounds, angle);
       const GPoint inner = ray_point(centre, angle, edge * 64 / 100);
       const GPoint outer = ray_point(centre, angle, edge * 82 / 100);
-      bool hidden = false;
-      for (int i = 0; i < cover_count && !hidden; i++) {
-        hidden = covers[i].size.w && line_crosses_rect(inner, outer, rect_grow(covers[i], 1));
-      }
-      if (!hidden) {
+      if (!line_covered(inner, outer, covers, cover_count)) {
         graphics_context_set_stroke_color(ctx, s_palette.foreground);
         graphics_context_set_stroke_width(ctx, 1);
         graphics_draw_line(ctx, inner, outer);
@@ -668,31 +687,27 @@ static void draw_hours(GContext *ctx, GRect bounds, GPoint centre, const GRect *
     }
 
     const GRect area = numeral_rect(bounds, centre, hour);
-    if (covered(area, covers, cover_count)) {
+    if (rect_covered(area, covers, cover_count)) {
       continue;
     }
     char text[3];
     snprintf(text, sizeof(text), "%d", hour == 0 ? 12 : hour);
-    const GPoint at = grect_center_point(&area);
     if (s_settings.modern_numerals) {
-      draw_modern_numeral(ctx, text, at);
-    } else {
-      // The tops of the numbers face outward, except on the lower half of the
-      // dial, where that would turn them upside down.
-      const bool lower = hour > 3 && hour < 9;
-#if defined(PBL_COLOR)
-      GBitmap *image = s_numerals[hour / 2];
-      if (image) {
-        const GSize size = gbitmap_get_bounds(image).size;
-        graphics_context_set_compositing_mode(ctx, GCompOpSet);
-        graphics_draw_bitmap_in_rect(ctx, image, GRect(at.x - size.w / 2, at.y - size.h / 2,
-                                                       size.w, size.h));
-        graphics_context_set_compositing_mode(ctx, GCompOpAssign);
-        continue;
-      }
-#endif
-      draw_classic_numeral(ctx, text, at, lower ? angle - TRIG_MAX_ANGLE / 2 : angle);
+      draw_modern_numeral(ctx, text, grect_center_point(&area));
+      continue;
     }
+#if defined(PBL_COLOR)
+    // The images are already turned and sized to fill the area.
+    graphics_context_set_compositing_mode(ctx, GCompOpSet);
+    graphics_draw_bitmap_in_rect(ctx, s_numerals[hour / 2], area);
+    graphics_context_set_compositing_mode(ctx, GCompOpAssign);
+#else
+    // The tops of the numbers face outward, except on the lower half of the
+    // dial, where that would turn them upside down.
+    const bool lower = hour > 3 && hour < 9;
+    draw_classic_numeral(ctx, text, grect_center_point(&area),
+                         lower ? angle - TRIG_MAX_ANGLE / 2 : angle);
+#endif
   }
 }
 
@@ -761,8 +776,8 @@ static int16_t icon_size(int16_t size) {
 
 // A cloud resting on a point: a large puff between a small one on the left and
 // a medium one on the right, over a flat base. It is about three and a quarter
-// times as wide as the radius and twice as tall. Growing it gives the outline that separates
-// it from a sun or moon behind it.
+// times as wide as the radius and twice as tall. Growing it gives the outline
+// that separates it from a sun or moon behind it.
 static void draw_cloud(GContext *ctx, GPoint bottom, int16_t radius, int16_t grow,
                        GColor color) {
   const int16_t left_radius = radius * 55 / 100;
@@ -885,8 +900,6 @@ static void draw_weather_icon(GContext *ctx, GPoint centre, Weather weather) {
   }
 }
 
-// The temperature above an icon for the conditions. Conditions without an
-// icon, and the time before the first reading, are written out instead.
 static void format_temperature(char *buffer, size_t size) {
   if (s_temperature == NO_TEMPERATURE) {
     snprintf(buffer, size, "--\xc2\xb0");
@@ -899,6 +912,8 @@ static const char *weather_label(void) {
   return s_condition[0] ? s_condition : "WEATHER";
 }
 
+// The temperature above an icon for the conditions. Conditions without an
+// icon, and the time before the first reading, are written out instead.
 static void draw_weather(GContext *ctx, GPoint at) {
   char temperature[16];
   format_temperature(temperature, sizeof(temperature));
@@ -1090,12 +1105,6 @@ static bool item_shown(Item item) {
     case ITEM_BATTERY: return s_settings.show_battery;
     default: return false;
   }
-}
-
-static int16_t text_width(const char *text, GFont font) {
-  return graphics_text_layout_get_content_size(
-    text, font, GRect(0, 0, TEXT_BOX_WIDTH, 40),
-    GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter).w;
 }
 
 // The area an item covers, relative to the point it is drawn at.

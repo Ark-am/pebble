@@ -26,12 +26,11 @@ function conditionName(code) {
   return 'WEATHER';
 }
 
-function useFahrenheit() {
+function savedSettings() {
   try {
-    var settings = JSON.parse(localStorage.getItem('clay-settings')) || {};
-    return settings.TEMPERATURE_UNIT === 'F';
+    return JSON.parse(localStorage.getItem('clay-settings')) || {};
   } catch (error) {
-    return false;
+    return {};
   }
 }
 
@@ -40,7 +39,7 @@ function sendWeather(position) {
     '?latitude=' + position.coords.latitude.toFixed(3) +
     '&longitude=' + position.coords.longitude.toFixed(3) +
     '&current=temperature_2m,weather_code,is_day' +
-    (useFahrenheit() ? '&temperature_unit=fahrenheit' : '');
+    (savedSettings().TEMPERATURE_UNIT === 'F' ? '&temperature_unit=fahrenheit' : '');
 
   var request = new XMLHttpRequest();
   request.onload = function () {
@@ -70,13 +69,22 @@ function fetchWeather() {
   }, LOCATION_OPTIONS);
 }
 
-Pebble.addEventListener('ready', fetchWeather);
+// Only ask for the location while the weather is shown; it is on unless the
+// settings page has turned it off.
+function fetchWeatherIfShown() {
+  var shown = savedSettings().SHOW_WEATHER;
+  if (shown !== false && shown !== 0 && shown !== '0' && shown !== 'false') {
+    fetchWeather();
+  }
+}
 
-// Runs after Clay has saved the settings, so a new temperature unit applies
-// straight away.
+Pebble.addEventListener('ready', fetchWeatherIfShown);
+
+// Runs after Clay has saved the settings, so turning the weather on or a new
+// temperature unit applies straight away.
 Pebble.addEventListener('webviewclosed', function (event) {
   if (event && event.response) {
-    fetchWeather();
+    fetchWeatherIfShown();
   }
 });
 
