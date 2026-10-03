@@ -634,21 +634,43 @@ static GRect numeral_rect(GRect bounds, GPoint centre, int hour) {
   return GRect(at.x - width / 2, at.y - height / 2, width, height);
 }
 
-static void draw_hours(GContext *ctx, GRect bounds, GPoint centre) {
+static bool covered(GRect rect, const GRect *covers, int count) {
+  for (int i = 0; i < count; i++) {
+    if (covers[i].size.w && rects_overlap(rect, covers[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Hour numbers and the index lines between them. Any that would run into the
+// information on the dial are left out.
+static void draw_hours(GContext *ctx, GRect bounds, GPoint centre, const GRect *covers,
+                       int cover_count) {
   for (int hour = 0; hour < 12; hour++) {
     const int32_t angle = TRIG_MAX_ANGLE * hour / 12;
     if (!hour_has_numeral(hour)) {
       const int32_t edge = edge_distance(bounds, angle);
-      graphics_context_set_stroke_color(ctx, s_palette.foreground);
-      graphics_context_set_stroke_width(ctx, 1);
-      graphics_draw_line(ctx, ray_point(centre, angle, edge * 64 / 100),
-                         ray_point(centre, angle, edge * 82 / 100));
+      const GPoint inner = ray_point(centre, angle, edge * 64 / 100);
+      const GPoint outer = ray_point(centre, angle, edge * 82 / 100);
+      bool hidden = false;
+      for (int i = 0; i < cover_count && !hidden; i++) {
+        hidden = covers[i].size.w && line_crosses_rect(inner, outer, rect_grow(covers[i], 1));
+      }
+      if (!hidden) {
+        graphics_context_set_stroke_color(ctx, s_palette.foreground);
+        graphics_context_set_stroke_width(ctx, 1);
+        graphics_draw_line(ctx, inner, outer);
+      }
       continue;
     }
 
+    const GRect area = numeral_rect(bounds, centre, hour);
+    if (covered(area, covers, cover_count)) {
+      continue;
+    }
     char text[3];
     snprintf(text, sizeof(text), "%d", hour == 0 ? 12 : hour);
-    const GRect area = numeral_rect(bounds, centre, hour);
     const GPoint at = grect_center_point(&area);
     if (s_settings.modern_numerals) {
       draw_modern_numeral(ctx, text, at);
@@ -1222,7 +1244,6 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   fill_dial(ctx, layer_get_bounds(layer), bounds);
 
   draw_ticks(ctx, bounds, centre);
-  draw_hours(ctx, bounds, centre);
 
   const int32_t reach_x = edge_distance(bounds, TRIG_MAX_ANGLE / 4);
   const int32_t reach_y = edge_distance(bounds, 0);
@@ -1253,6 +1274,16 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
     [ITEM_DATE] = GPoint(centre.x - reach_x * 30 / 100, centre.y + row),
     [ITEM_BATTERY] = GPoint(centre.x + reach_x * 25 / 100, centre.y + row),
   };
+  // Where each item sits; the name comes last, for the hour numbers to avoid.
+  GRect extents[ITEM_COUNT];
+  GRect covers[ITEM_COUNT + 1];
+  for (int i = 0; i < ITEM_COUNT; i++) {
+    extents[i] = item_shown(i) ? item_extent(i, t) : GRectZero;
+    covers[i] = GRect(points[i].x + extents[i].origin.x, points[i].y + extents[i].origin.y,
+                      extents[i].size.w, extents[i].size.h);
+  }
+  covers[ITEM_COUNT] = name;
+
   if (s_settings.avoid_hands) {
     // Kept off the stack, which is small on the oldest watches.
     static Obstacles o;
@@ -1268,15 +1299,9 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
     for (int hour = 0; hour < 12; hour++) {
       o.numerals[hour] = hour_has_numeral(hour) ? numeral_rect(bounds, centre, hour) : GRectZero;
     }
-    GRect extents[ITEM_COUNT];
-    GRect rects[ITEM_COUNT];
-    for (int i = 0; i < ITEM_COUNT; i++) {
-      extents[i] = item_shown(i) ? item_extent(i, t) : GRectZero;
-      rects[i] = GRect(points[i].x + extents[i].origin.x, points[i].y + extents[i].origin.y,
-                       extents[i].size.w, extents[i].size.h);
-    }
-    avoid_hands(points, rects, extents, &o);
+    avoid_hands(points, covers, extents, &o);
   }
+  draw_hours(ctx, bounds, centre, covers, ITEM_COUNT + 1);
 
   if (item_shown(ITEM_WEATHER)) {
     draw_weather(ctx, points[ITEM_WEATHER]);

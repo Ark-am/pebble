@@ -32,7 +32,8 @@ Open the watchface's settings in the Pebble phone app:
 | Temperature | Celsius (default) or Fahrenheit |
 | Vibrate when the phone disconnects | On (default) or off |
 
-Hours without a number get a long index line instead.
+Hours without a number get a long index line instead. Any hour number or index
+line that would run into the information or the name is left out.
 
 Pebble's fonts cannot be rotated and are drawn without smoothing, so on colour
 watches the classic numbers are images with soft edges, already turned to
