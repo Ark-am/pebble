@@ -19,10 +19,8 @@
 
 #if PBL_DISPLAY_WIDTH >= 200
   #define TEXT_FONT FONT_KEY_GOTHIC_18
-  #define NUMERAL_FONT FONT_KEY_GOTHIC_24
-  #define NUMERAL_HEIGHT 17
-  #define NUMERAL_PAD 7
-  #define NUMERAL_RADIUS 12
+  // Height of the hour number images (see tools/make_numerals.py).
+  #define NUMERAL_HEIGHT 16
   #define DAY_FONT FONT_KEY_GOTHIC_18_BOLD
   #define DAY_HEIGHT 13
   #define DAY_PAD 5
@@ -36,17 +34,17 @@
   #define RULE_DROP 14
   // Radius of the sketched ring the hands start outside of.
   #define CLEAR_RADIUS 52
-  #define HOUR_TICK_LENGTH 9
+  #define HOUR_TICK_LENGTH 11
+  // Half the width of an hour marker at the edge of the dial.
+  #define HOUR_MARKER_WIDTH 3
   #define MINUTE_TICK_LENGTH 4
-  #define HOUR_HAND_WIDTH 6
+  // Half the width of each hand at its widest point.
+  #define HOUR_HAND_WIDTH 5
   #define MINUTE_HAND_WIDTH 4
   #define HATCH_SPACING 4
 #else
   #define TEXT_FONT FONT_KEY_GOTHIC_14
-  #define NUMERAL_FONT FONT_KEY_GOTHIC_18
-  #define NUMERAL_HEIGHT 13
-  #define NUMERAL_PAD 5
-  #define NUMERAL_RADIUS 9
+  #define NUMERAL_HEIGHT 12
   #define DAY_FONT FONT_KEY_GOTHIC_14_BOLD
   #define DAY_HEIGHT 10
   #define DAY_PAD 4
@@ -56,9 +54,10 @@
   #define ICON_RISE 11
   #define RULE_DROP 10
   #define CLEAR_RADIUS 40
-  #define HOUR_TICK_LENGTH 6
+  #define HOUR_TICK_LENGTH 8
+  #define HOUR_MARKER_WIDTH 2
   #define MINUTE_TICK_LENGTH 3
-  #define HOUR_HAND_WIDTH 5
+  #define HOUR_HAND_WIDTH 4
   #define MINUTE_HAND_WIDTH 3
   #define HATCH_SPACING 3
 #endif
@@ -66,6 +65,9 @@
 #define SCREEN_COUNT 4
 
 #define EDGE_INSET 2
+// Rectangular screens get heavily rounded corners: the corner radius is this
+// percentage of half the shorter side.
+#define CORNER_PERCENT 55
 #define HAND_GAP 3
 #define TEXT_GAP 4
 
@@ -85,7 +87,8 @@ typedef enum {
 typedef struct {
   uint8_t version;
   bool dark_theme;
-  bool always_show_battery;
+  // No longer used: the corner battery gauge was removed.
+  bool unused_battery;
   bool disconnect_vibe;
   char temperature_unit;
   // Added in version 2.
@@ -124,6 +127,7 @@ typedef struct {
   GColor charging;
   GColor heart;
   GColor calendar;
+  GColor hand_shade;
 } Palette;
 
 static Palette s_palette;
@@ -145,7 +149,8 @@ typedef enum {
 static Window *s_window;
 static Layer *s_canvas;
 static GFont s_text_font;
-static GFont s_numeral_font;
+// Hour number images, for 1 to 12, matching the background.
+static GBitmap *s_numerals[12];
 static GFont s_day_font;
 
 static BatteryChargeState s_battery;
@@ -157,13 +162,52 @@ static bool s_daytime = true;
 static int s_screen;
 
 // ---------------------------------------------------------------------------
+// Hour number images, made by tools/make_numerals.py
+
+#define NUMERAL_IDS(prefix) { \
+  prefix##1, prefix##2, prefix##3, prefix##4, prefix##5, prefix##6, \
+  prefix##7, prefix##8, prefix##9, prefix##10, prefix##11, prefix##12, \
+}
+
+#if defined(PBL_BW)
+static const uint32_t NUMERAL_BLACK[12] = NUMERAL_IDS(RESOURCE_ID_NUMERAL_BW_BLACK_);
+static const uint32_t NUMERAL_WHITE[12] = NUMERAL_IDS(RESOURCE_ID_NUMERAL_BW_WHITE_);
+#elif PBL_DISPLAY_WIDTH >= 200
+static const uint32_t NUMERAL_BLACK[12] = NUMERAL_IDS(RESOURCE_ID_NUMERAL_LARGE_BLACK_);
+static const uint32_t NUMERAL_WHITE[12] = NUMERAL_IDS(RESOURCE_ID_NUMERAL_LARGE_WHITE_);
+#else
+static const uint32_t NUMERAL_BLACK[12] = NUMERAL_IDS(RESOURCE_ID_NUMERAL_SMALL_BLACK_);
+static const uint32_t NUMERAL_WHITE[12] = NUMERAL_IDS(RESOURCE_ID_NUMERAL_SMALL_WHITE_);
+#endif
+
+static void unload_numerals(void) {
+  for (int i = 0; i < 12; i++) {
+    if (s_numerals[i]) {
+      gbitmap_destroy(s_numerals[i]);
+      s_numerals[i] = NULL;
+    }
+  }
+}
+
+// Loads the numbers only while they are shown, in the background's colour.
+static void load_numerals(void) {
+  unload_numerals();
+  if (!s_settings.hour_numbers) {
+    return;
+  }
+  const uint32_t *ids = s_settings.dark_theme ? NUMERAL_WHITE : NUMERAL_BLACK;
+  for (int i = 0; i < 12; i++) {
+    s_numerals[i] = gbitmap_create_with_resource(ids[i]);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Settings
 
 static void settings_set_defaults(Settings *settings) {
   *settings = (Settings) {
     .version = SETTINGS_VERSION,
     .dark_theme = false,
-    .always_show_battery = false,
     .disconnect_vibe = true,
     .temperature_unit = 'C',
     .hour_numbers = false,
@@ -194,6 +238,7 @@ static void apply_palette(void) {
   s_palette.charging = GColorGreen;
   s_palette.heart = GColorRed;
   s_palette.calendar = GColorRed;
+  s_palette.hand_shade = dark ? GColorLightGray : GColorDarkGray;
 #else
   // Black and white: shapes are left unfilled and the pencil hatching gives
   // the sun and moon their tone.
@@ -209,6 +254,7 @@ static void apply_palette(void) {
   s_palette.charging = s_palette.ink;
   s_palette.heart = s_palette.ink;
   s_palette.calendar = s_palette.ink;
+  s_palette.hand_shade = s_palette.background;
 #endif
 }
 
@@ -222,23 +268,6 @@ static GPoint ray_point(GPoint centre, int32_t angle, int32_t distance) {
   );
 }
 
-// Distance from the centre to the screen edge along an angle. Round screens
-// use a circle; rectangular ones follow the display's edge.
-static int32_t edge_distance(GRect bounds, int32_t angle) {
-  const int32_t half_w = bounds.size.w / 2 - EDGE_INSET;
-  const int32_t half_h = bounds.size.h / 2 - EDGE_INSET;
-#if defined(PBL_ROUND)
-  (void)angle;
-  return half_w < half_h ? half_w : half_h;
-#else
-  const int32_t sin_abs = abs(sin_lookup(angle));
-  const int32_t cos_abs = abs(cos_lookup(angle));
-  const int32_t to_side = sin_abs ? half_w * TRIG_MAX_RATIO / sin_abs : INT32_MAX;
-  const int32_t to_top = cos_abs ? half_h * TRIG_MAX_RATIO / cos_abs : INT32_MAX;
-  return to_side < to_top ? to_side : to_top;
-#endif
-}
-
 static int32_t isqrt(int32_t value) {
   if (value <= 0) {
     return 0;
@@ -250,6 +279,66 @@ static int32_t isqrt(int32_t value) {
     next = (root + value / root) / 2;
   }
   return root;
+}
+
+#if !defined(PBL_ROUND)
+static int16_t corner_radius(GRect bounds) {
+  const int16_t shorter = bounds.size.w < bounds.size.h ? bounds.size.w : bounds.size.h;
+  return shorter / 2 * CORNER_PERCENT / 100;
+}
+#endif
+
+// Distance from the centre to the edge of the dial along an angle. Round
+// screens use a circle; rectangular ones follow a rectangle with heavily
+// rounded corners, just inside the edge of the screen.
+static int32_t edge_distance(GRect bounds, int32_t angle) {
+  const int32_t half_w = bounds.size.w / 2 - EDGE_INSET;
+  const int32_t half_h = bounds.size.h / 2 - EDGE_INSET;
+#if defined(PBL_ROUND)
+  (void)angle;
+  return half_w < half_h ? half_w : half_h;
+#else
+  const int32_t sin_abs = abs(sin_lookup(angle));
+  const int32_t cos_abs = abs(cos_lookup(angle));
+  const int32_t to_side = sin_abs ? half_w * TRIG_MAX_RATIO / sin_abs : INT32_MAX;
+  const int32_t to_top = cos_abs ? half_h * TRIG_MAX_RATIO / cos_abs : INT32_MAX;
+  const int32_t straight = to_side < to_top ? to_side : to_top;
+
+  // Where the ray meets a straight edge, unless that is past where a corner
+  // starts to curve; then it meets the corner's circle instead.
+  const int32_t r = corner_radius(bounds) - EDGE_INSET;
+  const int32_t corner_x = half_w - r;
+  const int32_t corner_y = half_h - r;
+  if (straight * sin_abs / TRIG_MAX_RATIO <= corner_x
+      || straight * cos_abs / TRIG_MAX_RATIO <= corner_y) {
+    return straight;
+  }
+  const int32_t along = (sin_abs * corner_x + cos_abs * corner_y) / TRIG_MAX_RATIO;
+  return along + isqrt(along * along - corner_x * corner_x - corner_y * corner_y + r * r);
+#endif
+}
+
+// Rounds off the screen's corners by filling outside a rounded rectangle.
+static void draw_corners(GContext *ctx, GRect screen) {
+#if defined(PBL_ROUND)
+  (void)ctx;
+  (void)screen;
+#else
+  const int16_t r = corner_radius(screen);
+  const int16_t w = screen.size.w;
+  const int16_t h = screen.size.h;
+  graphics_context_set_fill_color(ctx, GColorBlack);
+  graphics_fill_rect(ctx, screen, 0, GCornerNone);
+  graphics_context_set_fill_color(ctx, s_palette.background);
+  graphics_fill_rect(ctx, GRect(r, 0, w - r * 2, h), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(0, r, w, h - r * 2), 0, GCornerNone);
+  const GPoint centres[] = {
+    GPoint(r, r), GPoint(w - r - 1, r), GPoint(r, h - r - 1), GPoint(w - r - 1, h - r - 1),
+  };
+  for (size_t i = 0; i < ARRAY_LENGTH(centres); i++) {
+    graphics_fill_circle(ctx, centres[i], r);
+  }
+#endif
 }
 
 static int32_t distance_squared(GPoint a, GPoint b) {
@@ -595,18 +684,41 @@ static void draw_weather_icon(GContext *ctx, Weather weather) {
 // ---------------------------------------------------------------------------
 // Dial
 
+static void fill_and_outline(GContext *ctx, GPoint *points, uint32_t count, GColor fill) {
+  GPathInfo info = { .num_points = count, .points = points };
+  GPath *path = gpath_create(&info);
+  graphics_context_set_fill_color(ctx, fill);
+  gpath_draw_filled(ctx, path);
+  graphics_context_set_stroke_color(ctx, s_palette.ink);
+  graphics_context_set_stroke_width(ctx, 1);
+  gpath_draw_outline(ctx, path);
+  gpath_destroy(path);
+}
+
+// An hour marker: a slim wedge from the edge of the dial to a point, with one
+// facet solid and the other shaded, like the hands.
+static void draw_hour_marker(GContext *ctx, GPoint centre, int32_t angle, int32_t outer,
+                             int16_t shift) {
+  const int32_t side = angle + TRIG_MAX_ANGLE / 4;
+  const GPoint base = ray_point(ray_point(centre, angle, outer), side, shift);
+  const GPoint tip = ray_point(ray_point(centre, angle, outer - HOUR_TICK_LENGTH), side, shift);
+  GPoint lit[] = { base, ray_point(base, side, HOUR_MARKER_WIDTH), tip };
+  GPoint shaded[] = { base, tip, ray_point(base, side + TRIG_MAX_ANGLE / 2, HOUR_MARKER_WIDTH) };
+  fill_and_outline(ctx, shaded, ARRAY_LENGTH(shaded), s_palette.hand_shade);
+  fill_and_outline(ctx, lit, ARRAY_LENGTH(lit), s_palette.ink);
+}
+
 static void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
   for (int i = 0; i < 60; i++) {
     const bool hour = i % 5 == 0;
     const int32_t angle = TRIG_MAX_ANGLE * i / 60;
     const int32_t outer = edge_distance(bounds, angle);
-    if (hour) {
-      const GPoint a = ray_point(centre, angle, outer - HOUR_TICK_LENGTH);
-      const GPoint b = ray_point(centre, angle, outer);
-      graphics_context_set_stroke_color(ctx, s_palette.ink);
-      graphics_context_set_stroke_width(ctx, 2);
-      graphics_draw_line(ctx, a, b);
-      sketch_line(ctx, a, b, s_palette.ink);
+    if (i == 0) {
+      // A pair of markers at 12 o'clock.
+      draw_hour_marker(ctx, centre, angle, outer, -HOUR_MARKER_WIDTH - 1);
+      draw_hour_marker(ctx, centre, angle, outer, HOUR_MARKER_WIDTH + 1);
+    } else if (hour) {
+      draw_hour_marker(ctx, centre, angle, outer, 0);
     } else {
       graphics_context_set_stroke_color(ctx, s_palette.faint);
       graphics_context_set_stroke_width(ctx, 1);
@@ -616,38 +728,48 @@ static void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
   }
 }
 
-// Hour numbers sit just inside the hour ticks.
+// Hour numbers sit just inside the hour markers.
 static void draw_hour_numbers(GContext *ctx, GRect bounds, GPoint centre) {
-  graphics_context_set_text_color(ctx, s_palette.ink);
-  for (int hour = 0; hour < 12; hour++) {
+  graphics_context_set_compositing_mode(ctx, GCompOpSet);
+  for (int hour = 1; hour <= 12; hour++) {
+    GBitmap *image = s_numerals[hour - 1];
+    if (!image) {
+      continue;
+    }
+    const GSize size = gbitmap_get_bounds(image).size;
     const int32_t angle = TRIG_MAX_ANGLE * hour / 12;
-    const int32_t distance = edge_distance(bounds, angle)
-      - HOUR_TICK_LENGTH - 3 - NUMERAL_RADIUS;
-    const GPoint at = ray_point(centre, angle, distance);
-    char text[3];
-    snprintf(text, sizeof(text), "%d", hour == 0 ? 12 : hour);
-    graphics_draw_text(ctx, text, s_numeral_font,
-                       GRect(at.x - NUMERAL_RADIUS * 2, at.y - NUMERAL_HEIGHT / 2 - NUMERAL_PAD,
-                             NUMERAL_RADIUS * 4, NUMERAL_HEIGHT + NUMERAL_PAD * 2),
-                       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+    // How far the image reaches towards the edge along this direction.
+    const int32_t reach = (abs(sin_lookup(angle)) * size.w + abs(cos_lookup(angle)) * size.h)
+      / TRIG_MAX_RATIO / 2;
+    const GPoint at = ray_point(centre, angle,
+                                edge_distance(bounds, angle) - HOUR_TICK_LENGTH - 3 - reach);
+    graphics_draw_bitmap_in_rect(ctx, image, GRect(at.x - size.w / 2, at.y - size.h / 2,
+                                                   size.w, size.h));
   }
+  graphics_context_set_compositing_mode(ctx, GCompOpAssign);
 }
 
-// A hand drawn as a heavy pencil stroke from just outside the ring, with a
-// lighter stroke beside it.
+// A slender dauphine hand: it widens briefly from just outside the ring, then
+// tapers in a long straight line to a fine point. One facet is solid and the
+// other shaded, as if lit from one side.
 static void draw_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t from,
-                      int16_t to, int16_t width) {
-  const GPoint start = ray_point(centre, angle, from);
-  const GPoint tip = ray_point(centre, angle, to);
-  graphics_context_set_stroke_color(ctx, s_palette.ink);
-  graphics_context_set_stroke_width(ctx, width);
-  graphics_draw_line(ctx, start, tip);
-
+                      int16_t to, int16_t half_width) {
   const int32_t side = angle + TRIG_MAX_ANGLE / 4;
-  const int16_t offset = width / 2 + 1;
-  graphics_context_set_stroke_width(ctx, 1);
-  graphics_draw_line(ctx, ray_point(ray_point(centre, angle, from + 1), side, offset),
-                     ray_point(ray_point(centre, angle, to - 2), side, offset - 1));
+  const int16_t shoulder_at = from + (to - from) * 18 / 100;
+  const GPoint base = ray_point(centre, angle, from);
+  const GPoint shoulder = ray_point(centre, angle, shoulder_at);
+  const GPoint tip = ray_point(centre, angle, to);
+  const int16_t base_half = half_width * 45 / 100 > 0 ? half_width * 45 / 100 : 1;
+
+  GPoint lit[] = {
+    base, ray_point(base, side, base_half), ray_point(shoulder, side, half_width), tip,
+  };
+  GPoint shaded[] = {
+    base, tip, ray_point(shoulder, side + TRIG_MAX_ANGLE / 2, half_width),
+    ray_point(base, side + TRIG_MAX_ANGLE / 2, base_half),
+  };
+  fill_and_outline(ctx, shaded, ARRAY_LENGTH(shaded), s_palette.hand_shade);
+  fill_and_outline(ctx, lit, ARRAY_LENGTH(lit), s_palette.ink);
 }
 
 // ---------------------------------------------------------------------------
@@ -981,35 +1103,7 @@ static void draw_widget(GContext *ctx, GPoint centre, const struct tm *t) {
 }
 
 // ---------------------------------------------------------------------------
-// Status icons, tucked inside the ticks at 1:30 and 10:30
-
-static void draw_battery_status(GContext *ctx, GPoint centre) {
-  const bool low = s_battery.charge_percent <= LOW_BATTERY_PERCENT;
-  if (!s_settings.always_show_battery && !low && !s_battery.is_charging) {
-    return;
-  }
-  const GRect body = GRect(centre.x - 8, centre.y - 4, 14, 8);
-  const GColor level_color = s_battery.is_charging ? s_palette.charging
-    : low ? s_palette.warning : s_palette.ink;
-
-  const GPoint corners[] = {
-    body.origin, GPoint(body.origin.x + body.size.w, body.origin.y),
-    GPoint(body.origin.x + body.size.w, body.origin.y + body.size.h),
-    GPoint(body.origin.x, body.origin.y + body.size.h),
-  };
-  for (int i = 0; i < 4; i++) {
-    sketch_line(ctx, corners[i], corners[(i + 1) % 4], s_palette.ink);
-  }
-  graphics_context_set_fill_color(ctx, s_palette.ink);
-  graphics_fill_rect(ctx, GRect(body.origin.x + body.size.w + 1, centre.y - 2, 2, 4),
-                     0, GCornerNone);
-
-  const int16_t inner_w = body.size.w - 3;
-  const int16_t level = inner_w * s_battery.charge_percent / 100;
-  graphics_context_set_fill_color(ctx, level_color);
-  graphics_fill_rect(ctx, GRect(body.origin.x + 2, body.origin.y + 2,
-                                level > 0 ? level : 1, body.size.h - 3), 0, GCornerNone);
-}
+// Alerts, tucked inside the ticks at 10:30
 
 // Bluetooth rune, struck through, shown only while the phone is disconnected.
 static void draw_bluetooth_off(GContext *ctx, GPoint origin) {
@@ -1066,19 +1160,17 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   graphics_context_set_antialiased(ctx, true);
   graphics_context_set_fill_color(ctx, s_palette.background);
   graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
+  draw_corners(ctx, layer_get_bounds(layer));
 
   draw_ticks(ctx, bounds, centre);
   if (s_settings.hour_numbers) {
     draw_hour_numbers(ctx, bounds, centre);
   }
 
-  // Status icons move further in when hour numbers are shown, to clear them.
-  const int32_t corner_right = TRIG_MAX_ANGLE / 8;
+  // The alerts move further in when hour numbers are shown, to clear them.
   const int32_t corner_left = -TRIG_MAX_ANGLE / 8;
   const int16_t inset = HOUR_TICK_LENGTH + 12
-    + (s_settings.hour_numbers ? NUMERAL_RADIUS * 2 : 0);
-  draw_battery_status(ctx, ray_point(centre, corner_right,
-                                     edge_distance(bounds, corner_right) - inset));
+    + (s_settings.hour_numbers ? NUMERAL_HEIGHT + 6 : 0);
   draw_alerts(ctx, ray_point(centre, corner_left,
                              edge_distance(bounds, corner_left) - inset));
 
@@ -1086,14 +1178,14 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   sketch_circle(ctx, centre, CLEAR_RADIUS, s_palette.faint, NULL, NULL);
   draw_widget(ctx, centre, t);
 
-  // The hands run from just outside the ring towards the ticks.
-  const int32_t reach_x = edge_distance(bounds, TRIG_MAX_ANGLE / 4);
-  const int32_t reach_y = edge_distance(bounds, 0);
+  // The hands run from just outside the ring towards the ticks, following the
+  // shape of the dial, so they are longest towards the corners.
   const int16_t start = CLEAR_RADIUS + HAND_GAP;
-  const int16_t minute_end = (reach_x < reach_y ? reach_x : reach_y) - HOUR_TICK_LENGTH - 2;
-  const int16_t hour_end = start + (minute_end - start) * 60 / 100;
   const int32_t minute_angle = TRIG_MAX_ANGLE * t->tm_min / 60;
   const int32_t hour_angle = TRIG_MAX_ANGLE * ((t->tm_hour % 12) * 60 + t->tm_min) / 720;
+  const int16_t minute_end = edge_distance(bounds, minute_angle) - HOUR_TICK_LENGTH - 3;
+  const int16_t hour_end = start
+    + (edge_distance(bounds, hour_angle) - HOUR_TICK_LENGTH - 3 - start) * 58 / 100;
   draw_hand(ctx, centre, hour_angle, start, hour_end, HOUR_HAND_WIDTH);
   draw_hand(ctx, centre, minute_angle, start, minute_end, MINUTE_HAND_WIDTH);
 }
@@ -1184,10 +1276,6 @@ static bool read_settings(DictionaryIterator *iterator) {
     s_settings.dark_theme = tuple_int(tuple) == 1;
     changed = true;
   }
-  if ((tuple = dict_find(iterator, MESSAGE_KEY_BATTERY))) {
-    s_settings.always_show_battery = tuple_int(tuple) == 1;
-    changed = true;
-  }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_HOUR_NUMBERS))) {
     s_settings.hour_numbers = tuple_int(tuple) != 0;
     changed = true;
@@ -1227,6 +1315,7 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
     s_screen = 0;
     persist_write_data(PERSIST_KEY_SETTINGS, &s_settings, sizeof(s_settings));
     apply_palette();
+    load_numerals();
     window_set_background_color(s_window, s_palette.background);
   }
   layer_mark_dirty(s_canvas);
@@ -1277,9 +1366,9 @@ static void load_saved_state(void) {
 
 static void init(void) {
   s_text_font = fonts_get_system_font(TEXT_FONT);
-  s_numeral_font = fonts_get_system_font(NUMERAL_FONT);
   s_day_font = fonts_get_system_font(DAY_FONT);
   load_saved_state();
+  load_numerals();
   s_battery = battery_state_service_peek();
   s_bluetooth_connected = connection_service_peek_pebble_app_connection();
 
@@ -1319,6 +1408,7 @@ static void deinit(void) {
   health_service_events_unsubscribe();
 #endif
   window_destroy(s_window);
+  unload_numerals();
 }
 
 int main(void) {

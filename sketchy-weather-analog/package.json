@@ -35,7 +35,6 @@
       "REQUEST_WEATHER",
       "THEME",
       "TEMPERATURE_UNIT",
-      "BATTERY",
       "HOUR_NUMBERS",
       "SCREEN_1_MAIN",
       "SCREEN_1_SECOND",
@@ -55,6 +54,678 @@
           "name": "IMAGE_MENU_ICON",
           "file": "images/menu_icon.png",
           "menuIcon": true
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_1",
+          "file": "images/numerals/numeral_large_black_1.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_1",
+          "file": "images/numerals/numeral_large_white_1.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_1",
+          "file": "images/numerals/numeral_small_black_1.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_1",
+          "file": "images/numerals/numeral_small_white_1.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_BLACK_1",
+          "file": "images/numerals/numeral_bw_black_1.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_WHITE_1",
+          "file": "images/numerals/numeral_bw_white_1.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_2",
+          "file": "images/numerals/numeral_large_black_2.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_2",
+          "file": "images/numerals/numeral_large_white_2.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_2",
+          "file": "images/numerals/numeral_small_black_2.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_2",
+          "file": "images/numerals/numeral_small_white_2.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_BLACK_2",
+          "file": "images/numerals/numeral_bw_black_2.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_WHITE_2",
+          "file": "images/numerals/numeral_bw_white_2.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_3",
+          "file": "images/numerals/numeral_large_black_3.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_3",
+          "file": "images/numerals/numeral_large_white_3.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_3",
+          "file": "images/numerals/numeral_small_black_3.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_3",
+          "file": "images/numerals/numeral_small_white_3.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_BLACK_3",
+          "file": "images/numerals/numeral_bw_black_3.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_WHITE_3",
+          "file": "images/numerals/numeral_bw_white_3.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_4",
+          "file": "images/numerals/numeral_large_black_4.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_4",
+          "file": "images/numerals/numeral_large_white_4.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_4",
+          "file": "images/numerals/numeral_small_black_4.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_4",
+          "file": "images/numerals/numeral_small_white_4.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_BLACK_4",
+          "file": "images/numerals/numeral_bw_black_4.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_WHITE_4",
+          "file": "images/numerals/numeral_bw_white_4.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_5",
+          "file": "images/numerals/numeral_large_black_5.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_5",
+          "file": "images/numerals/numeral_large_white_5.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_5",
+          "file": "images/numerals/numeral_small_black_5.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_5",
+          "file": "images/numerals/numeral_small_white_5.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_BLACK_5",
+          "file": "images/numerals/numeral_bw_black_5.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_WHITE_5",
+          "file": "images/numerals/numeral_bw_white_5.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_6",
+          "file": "images/numerals/numeral_large_black_6.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_6",
+          "file": "images/numerals/numeral_large_white_6.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_6",
+          "file": "images/numerals/numeral_small_black_6.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_6",
+          "file": "images/numerals/numeral_small_white_6.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_BLACK_6",
+          "file": "images/numerals/numeral_bw_black_6.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_WHITE_6",
+          "file": "images/numerals/numeral_bw_white_6.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_7",
+          "file": "images/numerals/numeral_large_black_7.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_7",
+          "file": "images/numerals/numeral_large_white_7.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_7",
+          "file": "images/numerals/numeral_small_black_7.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_7",
+          "file": "images/numerals/numeral_small_white_7.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_BLACK_7",
+          "file": "images/numerals/numeral_bw_black_7.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_WHITE_7",
+          "file": "images/numerals/numeral_bw_white_7.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_8",
+          "file": "images/numerals/numeral_large_black_8.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_8",
+          "file": "images/numerals/numeral_large_white_8.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_8",
+          "file": "images/numerals/numeral_small_black_8.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_8",
+          "file": "images/numerals/numeral_small_white_8.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_BLACK_8",
+          "file": "images/numerals/numeral_bw_black_8.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_WHITE_8",
+          "file": "images/numerals/numeral_bw_white_8.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_9",
+          "file": "images/numerals/numeral_large_black_9.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_9",
+          "file": "images/numerals/numeral_large_white_9.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_9",
+          "file": "images/numerals/numeral_small_black_9.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_9",
+          "file": "images/numerals/numeral_small_white_9.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_BLACK_9",
+          "file": "images/numerals/numeral_bw_black_9.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_WHITE_9",
+          "file": "images/numerals/numeral_bw_white_9.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_10",
+          "file": "images/numerals/numeral_large_black_10.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_10",
+          "file": "images/numerals/numeral_large_white_10.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_10",
+          "file": "images/numerals/numeral_small_black_10.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_10",
+          "file": "images/numerals/numeral_small_white_10.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_BLACK_10",
+          "file": "images/numerals/numeral_bw_black_10.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_WHITE_10",
+          "file": "images/numerals/numeral_bw_white_10.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_11",
+          "file": "images/numerals/numeral_large_black_11.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_11",
+          "file": "images/numerals/numeral_large_white_11.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_11",
+          "file": "images/numerals/numeral_small_black_11.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_11",
+          "file": "images/numerals/numeral_small_white_11.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_BLACK_11",
+          "file": "images/numerals/numeral_bw_black_11.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_WHITE_11",
+          "file": "images/numerals/numeral_bw_white_11.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_12",
+          "file": "images/numerals/numeral_large_black_12.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_12",
+          "file": "images/numerals/numeral_large_white_12.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_12",
+          "file": "images/numerals/numeral_small_black_12.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_12",
+          "file": "images/numerals/numeral_small_white_12.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_BLACK_12",
+          "file": "images/numerals/numeral_bw_black_12.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_BW_WHITE_12",
+          "file": "images/numerals/numeral_bw_white_12.png",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
         }
       ]
     }

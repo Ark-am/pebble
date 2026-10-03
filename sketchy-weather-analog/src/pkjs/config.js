@@ -61,16 +61,6 @@ module.exports = [
         messageKey: 'HOUR_NUMBERS',
         label: 'Show hour numbers',
         defaultValue: false
-      },
-      {
-        type: 'select',
-        messageKey: 'BATTERY',
-        label: 'Battery',
-        defaultValue: '0',
-        options: [
-          { label: 'Show when low or charging', value: '0' },
-          { label: 'Always show', value: '1' }
-        ]
       }
     ]
   },

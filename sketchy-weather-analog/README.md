@@ -5,6 +5,14 @@ in the centre of the dial: a picture with one or two values underneath, such
 as the weather icon above the temperature and date. The hour and minute hands
 start just outside a sketched ring around the widget, so they never cover it.
 
+On rectangular watches the screen has heavily rounded corners, and the ticks
+and hour numbers follow the rounded edge. Round watches use the full circle.
+
+The hands are slim dauphine hands and the hour markers small matching
+wedges, each with one solid and one shaded side; 12 o'clock has a pair. The
+optional hour numbers are set in Noto Serif Display, a fine high-contrast
+serif.
+
 ## Centre screens
 
 The widget has up to four screens. Each screen has a main item, which sets
@@ -47,17 +55,15 @@ amber, the moon pale yellow, and clouds and rain blue. On black-and-white
 watches the shapes are outlined and the hatching gives them their tone.
 
 At 10:30 a struck-through Bluetooth mark shows while the phone is
-disconnected, and a crescent shows during Quiet Time. A battery gauge at
-1:30 appears when the battery is low (20% or less) or charging, or all the
-time if you choose. The watch vibrates twice when the phone disconnects,
-except during Quiet Time.
+disconnected, and a crescent shows during Quiet Time. The watch vibrates
+twice when the phone disconnects, except during Quiet Time. To see the
+battery, choose it as one of the centre screen items.
 
 ## Settings
 
 - **Background:** Paper (light) or Chalkboard (dark)
 - **Centre circle:** the four screens and whether they change every minute (see above)
 - **Show hour numbers:** off by default; when on, 1 to 12 sit just inside the hour ticks
-- **Battery:** shown when low or charging, or always
 - **Temperature:** Celsius or Fahrenheit
 - **Vibrate when the phone disconnects**
 
@@ -69,6 +75,18 @@ its location and fetches the current weather from
 watch requests an update every 30 minutes and keeps the last reading if the
 phone is unavailable. Until the first reading arrives, the widget shows an
 empty cloud and `--°`.
+
+## Hour number images
+
+Pebble's fonts are drawn without smoothing, so the hour numbers are images
+made by `tools/make_numerals.py` (it needs Python with Pillow and the Noto
+Serif Display font). After changing the font or sizes, run it from this
+directory; it rewrites `resources/images/numerals/` and the matching entries
+in `package.json`:
+
+```sh
+python3 tools/make_numerals.py
+```
 
 ## Build
 
