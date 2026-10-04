@@ -310,6 +310,164 @@ static int32_t dial_angle(int32_t angle) {
 }
 
 // ---------------------------------------------------------------------------
+// Turned text
+//
+// Pebble cannot draw text at an angle. On round watches, when the dial is
+// turned, each piece of text (an hour number, or a slot's information with
+// its icons) is drawn upright in the middle of the screen, copied into a
+// small image and cleared. Once the ticks are drawn, the images are drawn
+// back turned at their places, blending neighbouring pixels so the edges
+// stay smooth. Everything else is drawn turned directly.
+//
+// Code that draws a piece calls piece_begin() for where to draw it, draws it
+// there, then calls piece_end(). Without a turn they do nothing.
+
+#if defined(PBL_ROUND)
+#define MAX_PIECES 16
+
+typedef struct {
+  GBitmap *image;
+  GPoint at;
+} Piece;
+
+static Piece s_pieces[MAX_PIECES];
+static int s_piece_count;
+static bool s_collecting;
+static GPoint s_scratch;
+static GSize s_piece_size;
+static GBitmap *s_piece_image;
+
+// Where to draw a piece of the given size that belongs at a point.
+static GPoint piece_begin(GPoint at, GSize size) {
+  s_piece_image = NULL;
+  if (!s_collecting || s_piece_count == MAX_PIECES) {
+    return at;
+  }
+  // Without memory for the copy, the piece is drawn upright where it goes.
+  s_piece_image = gbitmap_create_blank(size, GBitmapFormat8Bit);
+  if (!s_piece_image) {
+    return at;
+  }
+  s_piece_size = size;
+  s_pieces[s_piece_count].at = at;
+  return s_scratch;
+}
+
+// Copies the piece just drawn and clears it from the screen.
+static void piece_end(GContext *ctx) {
+  if (!s_piece_image) {
+    return;
+  }
+  const GSize size = s_piece_size;
+  const GPoint origin = GPoint(s_scratch.x - size.w / 2, s_scratch.y - size.h / 2);
+  uint8_t *copy = gbitmap_get_data(s_piece_image);
+  const uint16_t stride = gbitmap_get_bytes_per_row(s_piece_image);
+  const uint8_t background = s_palette.background.argb;
+  GBitmap *screen = graphics_capture_frame_buffer(ctx);
+  for (int16_t y = 0; y < size.h; y++) {
+    uint8_t *out = copy + y * stride;
+    const GBitmapDataRowInfo row = gbitmap_get_data_row_info(screen, origin.y + y);
+    for (int16_t x = 0; x < size.w; x++) {
+      const int16_t sx = origin.x + x;
+      out[x] = sx >= row.min_x && sx <= row.max_x ? row.data[sx] : background;
+    }
+  }
+  graphics_release_frame_buffer(ctx, screen);
+
+  // Text can run past the piece's box, so clear a margin around it too.
+  graphics_context_set_fill_color(ctx, s_palette.background);
+  graphics_fill_rect(ctx, GRect(origin.x - 24, origin.y - 12, size.w + 48, size.h + 24),
+                     0, GCornerNone);
+  s_pieces[s_piece_count++].image = s_piece_image;
+  s_piece_image = NULL;
+}
+
+// Colour channels run from 0 to 3, two bits each in a GColor.
+#define CHANNEL(argb, shift) (((argb) >> (shift)) & 3)
+
+// Draws a piece turned about its centre, which lands on a point. Each screen
+// pixel takes a blend of the four nearest pixels of the piece, weighted by
+// how close they are; where the piece is only background, what is already on
+// the screen shows through, so the piece sits cleanly over the ticks.
+static void blend_piece(GBitmap *screen, const Piece *piece, int32_t angle, uint8_t background) {
+  const GSize size = gbitmap_get_bounds(piece->image).size;
+  const uint8_t *data = gbitmap_get_data(piece->image);
+  const uint16_t stride = gbitmap_get_bytes_per_row(piece->image);
+  const int32_t sin = sin_lookup(angle);
+  const int32_t cos = cos_lookup(angle);
+  // Far enough from the centre to cover the turned piece.
+  const int16_t reach = (size.w + size.h) / 2 + 1;
+  for (int16_t dy = -reach; dy <= reach; dy++) {
+    const GBitmapDataRowInfo row = gbitmap_get_data_row_info(screen, piece->at.y + dy);
+    for (int16_t dx = -reach; dx <= reach; dx++) {
+      const int16_t x = piece->at.x + dx;
+      if (x < row.min_x || x > row.max_x) {
+        continue;
+      }
+      // The point in the piece, in 256ths of a pixel, found by turning back.
+      const int32_t px = ((dx * cos + dy * sin) >> 8) + (size.w / 2) * 256;
+      const int32_t py = ((dy * cos - dx * sin) >> 8) + (size.h / 2) * 256;
+      const int32_t x0 = px >> 8;
+      const int32_t y0 = py >> 8;
+      if (x0 < -1 || y0 < -1 || x0 >= size.w || y0 >= size.h) {
+        continue;
+      }
+      const int32_t fx = px & 255;
+      const int32_t fy = py & 255;
+      const int32_t weights[4] = {
+        (256 - fx) * (256 - fy), fx * (256 - fy), (256 - fx) * fy, fx * fy,
+      };
+      const uint8_t under = row.data[x];
+      int32_t r = 0, g = 0, b = 0;
+      bool any = false;
+      for (int i = 0; i < 4; i++) {
+        const int32_t sx = x0 + (i & 1);
+        const int32_t sy = y0 + (i >> 1);
+        uint8_t colour = background;
+        if (sx >= 0 && sy >= 0 && sx < size.w && sy < size.h) {
+          colour = data[sy * stride + sx];
+        }
+        if (colour == background) {
+          colour = under;
+        } else if (weights[i]) {
+          any = true;
+        }
+        r += CHANNEL(colour, 4) * weights[i];
+        g += CHANNEL(colour, 2) * weights[i];
+        b += CHANNEL(colour, 0) * weights[i];
+      }
+      if (any) {
+        row.data[x] = 0xC0 | ((r + 32768) >> 16) << 4 | ((g + 32768) >> 16) << 2
+          | ((b + 32768) >> 16);
+      }
+    }
+  }
+}
+
+static void draw_pieces(GContext *ctx) {
+  GBitmap *screen = graphics_capture_frame_buffer(ctx);
+  const int32_t angle = TRIG_MAX_ANGLE * s_settings.rotation / 360;
+  for (int i = 0; i < s_piece_count; i++) {
+    if (screen) {
+      blend_piece(screen, &s_pieces[i], angle, s_palette.background.argb);
+    }
+    gbitmap_destroy(s_pieces[i].image);
+  }
+  if (screen) {
+    graphics_release_frame_buffer(ctx, screen);
+  }
+  s_piece_count = 0;
+}
+#else
+static GPoint piece_begin(GPoint at, GSize size) {
+  return at;
+}
+
+static void piece_end(GContext *ctx) {
+}
+#endif
+
+// ---------------------------------------------------------------------------
 // Drawing
 
 static void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
@@ -462,13 +620,15 @@ static void draw_hour_numbers(GContext *ctx, GRect bounds, GPoint centre) {
     const int32_t angle = dial_angle(TRIG_MAX_ANGLE * hour / 12);
     const int32_t distance = edge_distance(bounds, angle)
       - HOUR_TICK_LENGTH - 3 - NUMERAL_RADIUS;
-    const GPoint at = ray_point(centre, angle, distance);
+    const GPoint at = piece_begin(ray_point(centre, angle, distance),
+                                  GSize(NUMERAL_RADIUS * 3, VALUE_HEIGHT + 8));
     char text[3];
     snprintf(text, sizeof(text), "%d", hour == 0 ? 12 : hour);
     draw_text_line(ctx, text, s_numeral_font.font,
                    hour == 0 ? s_palette.accent : s_palette.foreground,
                    at, at.y - VALUE_HEIGHT / 2, s_numeral_font.pad, VALUE_HEIGHT,
                    NUMERAL_RADIUS * 4);
+    piece_end(ctx);
   }
 }
 
@@ -543,7 +703,17 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   graphics_context_set_fill_color(ctx, s_palette.background);
   graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
 
+#if defined(PBL_ROUND)
+  // With the dial turned, the text is collected first (see "Turned text").
+  s_collecting = s_settings.rotation != 0;
+  const GRect screen = layer_get_bounds(layer);
+  s_scratch = grect_center_point(&screen);
+  if (!s_collecting) {
+    draw_ticks(ctx, bounds, centre);
+  }
+#else
   draw_ticks(ctx, bounds, centre);
+#endif
   if (s_settings.hour_numbers) {
     draw_hour_numbers(ctx, bounds, centre);
   }
@@ -552,14 +722,30 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   const int32_t reach_y = edge_distance(bounds, 0);
 
   // Each slot sits part of the way out towards the edge along its turned
-  // direction; its text stays upright.
+  // direction. Its text is turned with it on round watches, and stays upright
+  // on rectangular ones.
   for (int position = 0; position < POSITION_COUNT; position++) {
+    if (s_settings.slots[position] == SLOT_NONE) {
+      continue;
+    }
     const int32_t angle = dial_angle(TRIG_MAX_ANGLE * position / POSITION_COUNT);
     const int32_t percent = position % 2 ? 52 : 50;
-    draw_slot(ctx, s_settings.slots[position],
-              ray_point(centre, angle, edge_distance(bounds, angle) * percent / 100),
-              position % 2 ? SLOT_SIDE_WIDTH : SLOT_WIDE_WIDTH, t);
+    const int16_t width = position % 2 ? SLOT_SIDE_WIDTH : SLOT_WIDE_WIDTH;
+    // Tall enough for the battery's icons above and gauge below its value.
+    const GPoint at = piece_begin(
+      ray_point(centre, angle, edge_distance(bounds, angle) * percent / 100),
+      GSize(width + 4, VALUE_HEIGHT * 2 + 28));
+    draw_slot(ctx, s_settings.slots[position], at, width, t);
+    piece_end(ctx);
   }
+
+#if defined(PBL_ROUND)
+  if (s_collecting) {
+    s_collecting = false;
+    draw_ticks(ctx, bounds, centre);
+    draw_pieces(ctx);
+  }
+#endif
 
   // Hands on top of everything.
   const int16_t minute_length = (reach_x < reach_y ? reach_x : reach_y) - HOUR_TICK_LENGTH - 4;
@@ -582,6 +768,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   graphics_context_set_fill_color(ctx, s_palette.background);
   graphics_fill_circle(ctx, centre, 2);
 }
+
 
 // ---------------------------------------------------------------------------
 // Events

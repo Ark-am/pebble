@@ -93,7 +93,9 @@ module.exports = [
         messageKey: 'ROTATION',
         label: 'Rotate the dial',
         description: 'Turns the whole face clockwise by this many degrees, for wearing ' +
-          'the watch at an angle. Negative values turn it anticlockwise.',
+          'the watch at an angle. Negative values turn it anticlockwise. On round ' +
+          'watches everything turns, the numbers and information included; on ' +
+          'rectangular watches the text stays upright.',
         defaultValue: 0,
         min: -180,
         max: 180,

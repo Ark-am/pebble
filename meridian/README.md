@@ -20,8 +20,16 @@ the screen, the dial shrinks to fit the remaining area.
 
 The whole face can be turned to suit how the watch is worn: set **Rotate the
 dial** in the settings, from -180 to 180 degrees in steps of 5 (positive is
-clockwise). The ticks, 12 o'clock marker, hour numbers, information and hands
-all turn together; the text stays upright.
+clockwise). On round watches (Chalk and Gabbro, the Pebble Round 2) the face
+turns as one piece: the ticks, 12 o'clock marker, hour numbers, information,
+icons and hands, with the text turned too. The ticks, marker and hands are
+drawn at the angle directly, so they stay smooth. Pebble cannot draw turned
+text, so each hour number and each piece of information (with its icons) is
+drawn upright, copied into a small image, and drawn back turned in its place,
+each pixel blending its nearest neighbours so the edges stay soft. With the
+watch's 64 colours the text is still a little less crisp than upright text.
+On rectangular watches the ticks, numbers, information and hands move around
+the dial and the text stays upright.
 
 ## Weather
 
