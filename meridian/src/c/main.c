@@ -592,17 +592,35 @@ static void draw_status_icons(GContext *ctx, GPoint centre) {
   }
 }
 
+// A hand that is widest at the centre and tapers to a point at its tip, so it
+// covers little of the information it passes over. A short tail balances it
+// on the other side of the centre.
 static void draw_hand(GContext *ctx, GPoint centre, int32_t angle,
                       int16_t length, int16_t width, int16_t tail) {
-  const GPoint tip = ray_point(centre, angle, length);
+  const int32_t side = angle + TRIG_MAX_ANGLE / 4;
   const GPoint back = ray_point(centre, angle + TRIG_MAX_ANGLE / 2, tail);
-  // A dark border keeps the hands legible where they cross text.
+  const int16_t half = width / 2;
+  GPoint points[] = {
+    ray_point(back, side, half / 2),
+    ray_point(centre, side, half),
+    ray_point(centre, angle, length),
+    ray_point(centre, side + TRIG_MAX_ANGLE / 2, half),
+    ray_point(back, side + TRIG_MAX_ANGLE / 2, half / 2),
+  };
+  GPathInfo info = { .num_points = ARRAY_LENGTH(points), .points = points };
+  GPath *hand = gpath_create(&info);
+  // A thin dark border keeps the hands legible where they cross text. The
+  // outline in the hand's colour fills the narrow tip, which a fill alone
+  // leaves gaps in.
   graphics_context_set_stroke_color(ctx, s_palette.background);
-  graphics_context_set_stroke_width(ctx, width + 2);
-  graphics_draw_line(ctx, back, tip);
+  graphics_context_set_stroke_width(ctx, 4);
+  gpath_draw_outline(ctx, hand);
+  graphics_context_set_fill_color(ctx, s_palette.foreground);
+  gpath_draw_filled(ctx, hand);
   graphics_context_set_stroke_color(ctx, s_palette.foreground);
-  graphics_context_set_stroke_width(ctx, width);
-  graphics_draw_line(ctx, back, tip);
+  graphics_context_set_stroke_width(ctx, 2);
+  gpath_draw_outline(ctx, hand);
+  gpath_destroy(hand);
 }
 
 // Hour numbers sit just inside the ticks. A number is left out where a
