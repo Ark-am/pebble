@@ -1,5 +1,7 @@
 #include <pebble.h>
 
+#include "font_styles.h"
+
 // An analog watchface with four complication slots around the dial, at 12, 3,
 // 6 and 9 o'clock. Each slot can show the weather, the date, the battery (with
 // Bluetooth and Quiet Time alerts) or health data; tap the watch to cycle the
@@ -17,7 +19,8 @@
 #if PBL_DISPLAY_WIDTH >= 200
   #define VALUE_FONT FONT_KEY_GOTHIC_24_BOLD
   #define LABEL_FONT FONT_KEY_GOTHIC_18
-  // Visible glyph heights and the blank space fonts leave above them.
+  // Visible glyph heights and the blank space Pebble's fonts leave above them
+  // (the bundled font styles have their own, in font_styles.h).
   #define VALUE_HEIGHT 17
   #define VALUE_PAD 7
   #define LABEL_HEIGHT 13
@@ -60,7 +63,7 @@ typedef enum {
 enum { POSITION_TOP, POSITION_RIGHT, POSITION_BOTTOM, POSITION_LEFT, POSITION_COUNT };
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 2
+#define SETTINGS_VERSION 3
 typedef struct {
   uint8_t version;
   bool light_theme;
@@ -71,6 +74,10 @@ typedef struct {
   uint8_t slots[POSITION_COUNT];
   // Added in version 2: degrees the whole dial is turned, clockwise.
   int16_t rotation;
+  // Added in version 3: font styles for the hour numbers and for the
+  // information (see font_styles.h).
+  uint8_t number_font;
+  uint8_t info_font;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -78,6 +85,7 @@ typedef struct {
 static int settings_size(uint8_t version) {
   switch (version) {
     case 1: return offsetof(Settings, rotation);
+    case 2: return offsetof(Settings, number_font);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -110,8 +118,9 @@ static Palette s_palette;
 
 static Window *s_window;
 static Layer *s_canvas;
-static GFont s_value_font;
-static GFont s_label_font;
+static StyledFont s_numeral_font;
+static StyledFont s_value_font;
+static StyledFont s_label_font;
 
 static BatteryChargeState s_battery;
 static bool s_bluetooth_connected;
@@ -353,11 +362,11 @@ static void draw_complication(GContext *ctx, GPoint centre, int16_t width,
                               const char *value, GColor value_color,
                               const char *label) {
   const int16_t top = centre.y - (VALUE_HEIGHT + LINE_GAP + LABEL_HEIGHT) / 2;
-  draw_text_line(ctx, value, s_value_font, value_color, centre,
-                 top, VALUE_PAD, VALUE_HEIGHT, width);
+  draw_text_line(ctx, value, s_value_font.font, value_color, centre,
+                 top, s_value_font.pad, VALUE_HEIGHT, width);
   if (label) {
-    draw_text_line(ctx, label, s_label_font, s_palette.label, centre,
-                   top + VALUE_HEIGHT + LINE_GAP, LABEL_PAD, LABEL_HEIGHT, width);
+    draw_text_line(ctx, label, s_label_font.font, s_palette.label, centre,
+                   top + VALUE_HEIGHT + LINE_GAP, s_label_font.pad, LABEL_HEIGHT, width);
   }
 }
 
@@ -456,8 +465,10 @@ static void draw_hour_numbers(GContext *ctx, GRect bounds, GPoint centre) {
     const GPoint at = ray_point(centre, angle, distance);
     char text[3];
     snprintf(text, sizeof(text), "%d", hour == 0 ? 12 : hour);
-    draw_text_line(ctx, text, s_value_font, hour == 0 ? s_palette.accent : s_palette.foreground,
-                   at, at.y - VALUE_HEIGHT / 2, VALUE_PAD, VALUE_HEIGHT, NUMERAL_RADIUS * 4);
+    draw_text_line(ctx, text, s_numeral_font.font,
+                   hour == 0 ? s_palette.accent : s_palette.foreground,
+                   at, at.y - VALUE_HEIGHT / 2, s_numeral_font.pad, VALUE_HEIGHT,
+                   NUMERAL_RADIUS * 4);
   }
 }
 
@@ -617,6 +628,22 @@ static int32_t tuple_int(const Tuple *tuple) {
   return tuple->type == TUPLE_CSTRING ? atoi(tuple->value->cstring) : tuple->value->int32;
 }
 
+static void unload_fonts(void) {
+  styled_font_unload(&s_numeral_font);
+  styled_font_unload(&s_value_font);
+  styled_font_unload(&s_label_font);
+}
+
+// Loads the chosen font styles: one for the hour numbers, one for the
+// information.
+static void load_fonts(void) {
+  unload_fonts();
+  styled_font_load(&s_numeral_font, s_settings.number_font, VALUE_FONT, VALUE_PAD,
+                   FONTS_NUMERAL);
+  styled_font_load(&s_value_font, s_settings.info_font, VALUE_FONT, VALUE_PAD, FONTS_VALUE);
+  styled_font_load(&s_label_font, s_settings.info_font, LABEL_FONT, LABEL_PAD, FONTS_LABEL);
+}
+
 static bool read_settings(DictionaryIterator *iterator) {
   static const uint32_t *slot_keys[POSITION_COUNT] = {
     &MESSAGE_KEY_SLOT_TOP, &MESSAGE_KEY_SLOT_RIGHT, &MESSAGE_KEY_SLOT_BOTTOM, &MESSAGE_KEY_SLOT_LEFT,
@@ -642,6 +669,14 @@ static bool read_settings(DictionaryIterator *iterator) {
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_DISCONNECT_VIBE))) {
     s_settings.disconnect_vibe = tuple_int(tuple) != 0;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_NUMBER_FONT))) {
+    s_settings.number_font = tuple_int(tuple) % FONT_STYLE_COUNT;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_INFO_FONT))) {
+    s_settings.info_font = tuple_int(tuple) % FONT_STYLE_COUNT;
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_ROTATION))) {
@@ -675,6 +710,7 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
   if (read_settings(iterator)) {
     persist_write_data(PERSIST_KEY_SETTINGS, &s_settings, sizeof(s_settings));
     apply_palette();
+    load_fonts();
     window_set_background_color(s_window, s_palette.background);
     subscribe_ticks();
   }
@@ -730,9 +766,8 @@ static void load_saved_state(void) {
 }
 
 static void init(void) {
-  s_value_font = fonts_get_system_font(VALUE_FONT);
-  s_label_font = fonts_get_system_font(LABEL_FONT);
   load_saved_state();
+  load_fonts();
   s_battery = battery_state_service_peek();
   s_bluetooth_connected = connection_service_peek_pebble_app_connection();
 
@@ -773,6 +808,7 @@ static void deinit(void) {
   accel_tap_service_unsubscribe();
 #endif
   window_destroy(s_window);
+  unload_fonts();
 }
 
 int main(void) {

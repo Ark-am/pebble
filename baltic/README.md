@@ -43,6 +43,38 @@ Breguet numerals of the original. The font is in `resources/fonts/` under the
 SIL Open Font License (see `resources/fonts/OFL.txt`). Only the digits are
 included in the watchface.
 
+## Font styles
+
+Two settings choose the fonts: **Number font** (the hour numbers) and
+**Information font** (the name on the dial and the small dial at half past four). Each offers:
+
+| Style | Font |
+| --- | --- |
+| Default | Baltic's Breguet-style numbers and the watch's own Gothic |
+| Serif | IBM Plex Serif |
+| Rounded | Varela Round |
+| Mono | DM Mono |
+
+The minute scale always uses the watch's own small font, which stays
+legible at that size.
+
+The bundled fonts are in `resources/fonts`, under the SIL Open Font License
+(the `OFL-*.txt` files there). Pebble's own fonts are very narrow, so the
+others are sized by `tools/make_fonts.py` to match their capital height
+without running much wider, and the layout still fits; where space is tight
+they come out a little smaller. Each piece of text and the font it normally
+uses are listed in `tools/fonts.json`. After changing either, regenerate the
+font resources (it needs Python with Pillow):
+
+```sh
+python3 tools/make_fonts.py
+```
+
+It rewrites the font entries in `package.json` and `src/c/font_styles.h`.
+Drawing text in a bundled font needs more of the watch's small app stack
+than Pebble's own fonts, so keep large local variables out of the drawing
+code's path to the text.
+
 ## Build
 
 From this directory:

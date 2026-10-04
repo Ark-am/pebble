@@ -10,6 +10,14 @@ var SLOT_OPTIONS = [
   { label: 'Nothing', value: '0' }
 ];
 
+// Font styles; values match the styles in src/c/font_styles.h.
+var FONT_OPTIONS = [
+  { label: 'Default (the face\'s own fonts)', value: '0' },
+  { label: 'Serif (IBM Plex Serif)', value: '1' },
+  { label: 'Rounded (Varela Round)', value: '2' },
+  { label: 'Mono (DM Mono)', value: '3' }
+];
+
 module.exports = [
   {
     type: 'heading',
@@ -49,6 +57,22 @@ module.exports = [
           { label: 'Teal', value: '43690' },
           { label: 'Green', value: '43520' }
         ]
+      },
+      {
+        type: 'select',
+        messageKey: 'NUMBER_FONT',
+        label: 'Number font',
+        description: 'For the hour numbers.',
+        defaultValue: '0',
+        options: FONT_OPTIONS
+      },
+      {
+        type: 'select',
+        messageKey: 'INFO_FONT',
+        label: 'Information font',
+        description: 'For the weather, date, battery and health information.',
+        defaultValue: '0',
+        options: FONT_OPTIONS
       },
       {
         type: 'toggle',

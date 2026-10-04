@@ -9,6 +9,14 @@ var ZONE_OPTIONS = ZONES.map(function (entry) {
   return { label: entry.city + ' (' + entry.zone + ')', value: entry.zone };
 });
 
+// Font styles; values match the styles in src/c/font_styles.h.
+var FONT_OPTIONS = [
+  { label: 'Default (the face\'s own fonts)', value: '0' },
+  { label: 'Serif (IBM Plex Serif)', value: '1' },
+  { label: 'Rounded (Varela Round)', value: '2' },
+  { label: 'Mono (DM Mono)', value: '3' }
+];
+
 // Colors for text, as decimal RGB values the watch rounds to its palette.
 var TEXT_COLORS = [
   { label: 'Teal', value: '43690' },
@@ -78,6 +86,22 @@ module.exports = [
           { label: '12-hour', value: '1' },
           { label: '24-hour', value: '2' }
         ]
+      },
+      {
+        type: 'select',
+        messageKey: 'NUMBER_FONT',
+        label: 'Time font',
+        description: 'For your time and the cities\' times.',
+        defaultValue: '0',
+        options: FONT_OPTIONS
+      },
+      {
+        type: 'select',
+        messageKey: 'INFO_FONT',
+        label: 'Text font',
+        description: 'For the date, the city names and the details.',
+        defaultValue: '0',
+        options: FONT_OPTIONS
       },
       {
         type: 'select',

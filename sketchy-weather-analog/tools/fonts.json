@@ -1,0 +1,19 @@
+{
+  "roles": {
+    "NUMERAL": {
+      "kind": "numbers", "characters": "[0-9]",
+      "large": { "height": 17, "like": "GOTHIC_24" },
+      "small": { "height": 13, "like": "GOTHIC_18" }
+    },
+    "TEXT": {
+      "kind": "info", "characters": "[ -~°]",
+      "large": { "height": 13, "like": "GOTHIC_18" },
+      "small": { "height": 10, "like": "GOTHIC_14" }
+    },
+    "DAY": {
+      "kind": "info", "bold": true, "characters": "[A-Z]",
+      "large": { "height": 13, "like": "GOTHIC_18_BOLD" },
+      "small": { "height": 10, "like": "GOTHIC_14_BOLD" }
+    }
+  }
+}

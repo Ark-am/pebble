@@ -1,5 +1,12 @@
 #include <pebble.h>
 
+#include "font_styles.h"
+
+// Drawing text in a bundled font needs more stack than the app has to spare
+// if every helper is folded into the drawing function, so the larger helpers
+// are kept separate; each one's stack is then only in use while it runs.
+#define NOINLINE __attribute__((noinline))
+
 // A classic analog watchface: a minute track that follows the edge of the
 // screen, hour numbers and indices, and tapered hands. The weather (with an
 // icon for the conditions) and health data sit above the centre, the date and
@@ -28,6 +35,7 @@
   #define LABEL_HEIGHT 13
   #define LABEL_PAD 5
   #define TEXT_BOX_WIDTH 80
+  #define NAME_BOX_WIDTH 120
   #define CLASSIC_HEIGHT 20
   #define CLASSIC_STROKE 3
   #define MINUTE_TICK_LENGTH 6
@@ -53,6 +61,7 @@
   #define LABEL_HEIGHT 10
   #define LABEL_PAD 4
   #define TEXT_BOX_WIDTH 56
+  #define NAME_BOX_WIDTH 90
   #define CLASSIC_HEIGHT 15
   #define CLASSIC_STROKE 2
   #define MINUTE_TICK_LENGTH 4
@@ -87,7 +96,7 @@
 #define AVOID_GAP 2
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 7
+#define SETTINGS_VERSION 8
 typedef struct {
   uint8_t version;
   bool dark;
@@ -106,6 +115,10 @@ typedef struct {
   bool avoid_hands;
   // Added in version 7. 0 (clear) means the same colour as the text.
   uint8_t second_hand_argb;
+  // Added in version 8: font styles for the modern hour numbers and for the
+  // information (see font_styles.h).
+  uint8_t number_font;
+  uint8_t info_font;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -117,6 +130,7 @@ static int settings_size(uint8_t version) {
     case 4: return offsetof(Settings, show_weather);
     case 5: return offsetof(Settings, avoid_hands);
     case 6: return offsetof(Settings, second_hand_argb);
+    case 7: return offsetof(Settings, number_font);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -140,9 +154,9 @@ static Palette s_palette;
 
 static Window *s_window;
 static Layer *s_canvas;
-static GFont s_modern_font;
-static GFont s_date_font;
-static GFont s_label_font;
+static StyledFont s_modern_font;
+static StyledFont s_date_font;
+static StyledFont s_label_font;
 
 #if defined(PBL_COLOR)
 // Smooth images of the classic numbers, already turned to follow the dial and
@@ -419,7 +433,7 @@ static int32_t edge_distance(GRect bounds, int32_t angle) {
 
 // The dial: the whole screen on round watches, a rectangle with rounded, black
 // corners on the others.
-static void fill_dial(GContext *ctx, GRect screen, GRect bounds) {
+static NOINLINE void fill_dial(GContext *ctx, GRect screen, GRect bounds) {
 #if defined(PBL_ROUND)
   graphics_context_set_fill_color(ctx, s_palette.background);
   graphics_fill_rect(ctx, screen, 0, GCornerNone);
@@ -582,13 +596,17 @@ static void draw_classic_numeral(GContext *ctx, const char *text, GPoint at, int
 // ---------------------------------------------------------------------------
 // Drawing
 
-static int16_t text_width(const char *text, GFont font) {
+static int16_t text_width_in(const char *text, GFont font, int16_t box_width) {
   return graphics_text_layout_get_content_size(
-    text, font, GRect(0, 0, TEXT_BOX_WIDTH, 40),
+    text, font, GRect(0, 0, box_width, 40),
     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter).w;
 }
 
-static void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
+static int16_t text_width(const char *text, GFont font) {
+  return text_width_in(text, font, TEXT_BOX_WIDTH);
+}
+
+static NOINLINE void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
   for (int i = 0; i < 60; i++) {
     const bool hour = i % 5 == 0;
     const int32_t angle = TRIG_MAX_ANGLE * i / 60;
@@ -607,9 +625,9 @@ static bool hour_has_numeral(int hour) {
 
 static void draw_modern_numeral(GContext *ctx, const char *text, GPoint at) {
   graphics_context_set_text_color(ctx, s_palette.foreground);
-  graphics_draw_text(ctx, text, s_modern_font,
-                     GRect(at.x - 30, at.y - MODERN_HEIGHT / 2 - MODERN_PAD, 60,
-                           MODERN_HEIGHT + MODERN_PAD * 2),
+  graphics_draw_text(ctx, text, s_modern_font.font,
+                     GRect(at.x - 30, at.y - MODERN_HEIGHT / 2 - s_modern_font.pad, 60,
+                           MODERN_HEIGHT + s_modern_font.pad * 2),
                      GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 }
 
@@ -625,7 +643,7 @@ static GRect numeral_rect(GRect bounds, GPoint centre, int hour) {
   int16_t height;
   int32_t reach;
   if (s_settings.modern_numerals) {
-    width = text_width(text, s_modern_font);
+    width = text_width(text, s_modern_font.font);
     height = MODERN_HEIGHT;
     // Numbers at 3 and 9 reach the ticks with their width, not their height.
     reach = hour % 6 == 0 ? MODERN_HEIGHT / 2 : width / 2;
@@ -670,7 +688,7 @@ static bool line_covered(GPoint a, GPoint b, const GRect *covers, int count) {
 
 // Hour numbers and the index lines between them. Any that would run into the
 // information on the dial are left out.
-static void draw_hours(GContext *ctx, GRect bounds, GPoint centre, const GRect *covers,
+static NOINLINE void draw_hours(GContext *ctx, GRect bounds, GPoint centre, const GRect *covers,
                        int cover_count) {
   for (int hour = 0; hour < 12; hour++) {
     const int32_t angle = TRIG_MAX_ANGLE * hour / 12;
@@ -711,21 +729,26 @@ static void draw_hours(GContext *ctx, GRect bounds, GPoint centre, const GRect *
   }
 }
 
-static void draw_text_line(GContext *ctx, const char *text, GFont font, GPoint centre,
-                           int16_t visible_top, int16_t pad, int16_t height) {
+static void draw_text_box(GContext *ctx, const char *text, GFont font, GPoint centre,
+                          int16_t visible_top, int16_t pad, int16_t height, int16_t width) {
   graphics_context_set_text_color(ctx, s_palette.foreground);
   graphics_draw_text(ctx, text, font,
-                     GRect(centre.x - TEXT_BOX_WIDTH / 2, visible_top - pad, TEXT_BOX_WIDTH,
+                     GRect(centre.x - width / 2, visible_top - pad, width,
                            height + pad * 2),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+}
+
+static void draw_text_line(GContext *ctx, const char *text, GFont font, GPoint centre,
+                           int16_t visible_top, int16_t pad, int16_t height) {
+  draw_text_box(ctx, text, font, centre, visible_top, pad, height, TEXT_BOX_WIDTH);
 }
 
 // A bold value above a small label, centred on a point.
 static void draw_complication(GContext *ctx, GPoint at, const char *value, const char *label) {
   const int16_t top = at.y - (DATE_HEIGHT + LINE_GAP + LABEL_HEIGHT) / 2;
-  draw_text_line(ctx, value, s_date_font, at, top, DATE_PAD, DATE_HEIGHT);
-  draw_text_line(ctx, label, s_label_font, at, top + DATE_HEIGHT + LINE_GAP,
-                 LABEL_PAD, LABEL_HEIGHT);
+  draw_text_line(ctx, value, s_date_font.font, at, top, s_date_font.pad, DATE_HEIGHT);
+  draw_text_line(ctx, label, s_label_font.font, at, top + DATE_HEIGHT + LINE_GAP,
+                 s_label_font.pad, LABEL_HEIGHT);
 }
 
 // ---------------------------------------------------------------------------
@@ -854,7 +877,7 @@ static void draw_lightning(GContext *ctx, GPoint origin) {
 }
 
 // Draws the icon for a condition in a 24 x 16 unit box centred on a point.
-static void draw_weather_icon(GContext *ctx, GPoint centre, Weather weather) {
+static NOINLINE void draw_weather_icon(GContext *ctx, GPoint centre, Weather weather) {
   const GPoint origin = GPoint(centre.x - icon_size(24) / 2, centre.y - icon_size(16) / 2);
   switch (weather) {
     case WEATHER_CLEAR:
@@ -914,7 +937,7 @@ static const char *weather_label(void) {
 
 // The temperature above an icon for the conditions. Conditions without an
 // icon, and the time before the first reading, are written out instead.
-static void draw_weather(GContext *ctx, GPoint at) {
+static NOINLINE void draw_weather(GContext *ctx, GPoint at) {
   char temperature[16];
   format_temperature(temperature, sizeof(temperature));
   const Weather weather = weather_from_condition(s_condition);
@@ -923,13 +946,13 @@ static void draw_weather(GContext *ctx, GPoint at) {
     return;
   }
   const int16_t top = at.y - (DATE_HEIGHT + LINE_GAP + LABEL_HEIGHT) / 2;
-  draw_text_line(ctx, temperature, s_date_font, at, top, DATE_PAD, DATE_HEIGHT);
+  draw_text_line(ctx, temperature, s_date_font.font, at, top, s_date_font.pad, DATE_HEIGHT);
   draw_weather_icon(ctx, GPoint(at.x, top + DATE_HEIGHT + LINE_GAP + 1 + icon_size(16) / 2),
                     weather);
 }
 
 #if defined(PBL_HEALTH)
-static void draw_health(GContext *ctx, GPoint at) {
+static NOINLINE void draw_health(GContext *ctx, GPoint at) {
   char value[16];
   const char *label;
   format_metric(s_metric, value, sizeof(value), &label);
@@ -950,20 +973,20 @@ static void format_date(const struct tm *t, char *day, char *date) {
 }
 
 // The day of the week above the day of the month.
-static void draw_date(GContext *ctx, GPoint at, const struct tm *t) {
+static NOINLINE void draw_date(GContext *ctx, GPoint at, const struct tm *t) {
   char day[4];
   char date[4];
   format_date(t, day, date);
 
   const int16_t top = at.y - (DATE_HEIGHT * 2 + LINE_GAP) / 2;
-  draw_text_line(ctx, day, s_date_font, at, top, DATE_PAD, DATE_HEIGHT);
-  draw_text_line(ctx, date, s_date_font, at, top + DATE_HEIGHT + LINE_GAP, DATE_PAD, DATE_HEIGHT);
+  draw_text_line(ctx, day, s_date_font.font, at, top, s_date_font.pad, DATE_HEIGHT);
+  draw_text_line(ctx, date, s_date_font.font, at, top + DATE_HEIGHT + LINE_GAP, s_date_font.pad, DATE_HEIGHT);
 }
 
 // A ring of ten segments shows the battery level. The dot inside it is blue
 // while the phone is connected and red when it is not (filled and empty on
 // black-and-white watches), and shows a crescent moon during Quiet Time.
-static void draw_battery_ring(GContext *ctx, GPoint at) {
+static NOINLINE void draw_battery_ring(GContext *ctx, GPoint at) {
   const int16_t inner = RING_RADIUS * 65 / 100;
   const int filled = (s_battery.charge_percent + 5) / 10;
 
@@ -1012,7 +1035,7 @@ static void draw_battery_ring(GContext *ctx, GPoint at) {
 // A thin line out to the tip, from a leaf-shaped base around the centre. A
 // hand drawn over another gets a narrow border in the dial colour, so the two
 // read as separate pieces where they cross.
-static void draw_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t length,
+static NOINLINE void draw_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t length,
                       int16_t width, bool separated) {
   const int16_t leaf = length * LEAF_PERCENT / 100;
   const GPoint line_start = ray_point(centre, angle, leaf - 2);
@@ -1057,7 +1080,7 @@ static void draw_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t lengt
 }
 
 // A round cap over the centre, where the hands meet.
-static void draw_hub(GContext *ctx, GPoint centre) {
+static NOINLINE void draw_hub(GContext *ctx, GPoint centre) {
   graphics_context_set_fill_color(ctx, s_palette.leaf);
   graphics_fill_circle(ctx, centre, LEAF_RADIUS + 1);
   graphics_context_set_stroke_color(ctx, s_palette.foreground);
@@ -1108,7 +1131,7 @@ static bool item_shown(Item item) {
 }
 
 // The area an item covers, relative to the point it is drawn at.
-static GRect item_extent(Item item, const struct tm *t) {
+static NOINLINE GRect item_extent(Item item, const struct tm *t) {
   const int16_t complication_top = -(DATE_HEIGHT + LINE_GAP + LABEL_HEIGHT) / 2;
   int16_t width = 0;
   int16_t top = complication_top;
@@ -1117,8 +1140,8 @@ static GRect item_extent(Item item, const struct tm *t) {
     case ITEM_WEATHER: {
       char temperature[16];
       format_temperature(temperature, sizeof(temperature));
-      width = text_width(temperature, s_date_font);
-      int16_t below = text_width(weather_label(), s_label_font);
+      width = text_width(temperature, s_date_font.font);
+      int16_t below = text_width(weather_label(), s_label_font.font);
       if (weather_from_condition(s_condition) != WEATHER_UNKNOWN) {
         below = icon_size(24);
         bottom = top + DATE_HEIGHT + LINE_GAP + 1 + icon_size(16);
@@ -1131,8 +1154,8 @@ static GRect item_extent(Item item, const struct tm *t) {
       char value[16];
       const char *label;
       format_metric(s_metric, value, sizeof(value), &label);
-      const int16_t value_width = text_width(value, s_date_font);
-      const int16_t label_width = text_width(label, s_label_font);
+      const int16_t value_width = text_width(value, s_date_font.font);
+      const int16_t label_width = text_width(label, s_label_font.font);
       width = value_width > label_width ? value_width : label_width;
       break;
     }
@@ -1141,8 +1164,8 @@ static GRect item_extent(Item item, const struct tm *t) {
       char day[4];
       char date[4];
       format_date(t, day, date);
-      const int16_t day_width = text_width(day, s_date_font);
-      const int16_t date_width = text_width(date, s_date_font);
+      const int16_t day_width = text_width(day, s_date_font.font);
+      const int16_t date_width = text_width(date, s_date_font.font);
       width = day_width > date_width ? day_width : date_width;
       top = -(DATE_HEIGHT * 2 + LINE_GAP) / 2;
       bottom = top + DATE_HEIGHT * 2 + LINE_GAP;
@@ -1170,6 +1193,11 @@ static bool rect_in_dial(GRect rect, GRect bounds, GPoint centre) {
   for (size_t i = 0; i < ARRAY_LENGTH(corners); i++) {
     const int32_t dx = corners[i].x - centre.x;
     const int32_t dy = corners[i].y - centre.y;
+    if (dx == 0 && dy == 0) {
+      // The centre itself is inside the dial; the watch cannot take the
+      // angle of a zero-length line.
+      continue;
+    }
     const int32_t angle = atan2_lookup(dx, -dy);
     const int32_t limit = edge_distance(bounds, angle) - HOUR_TICK_LENGTH - AVOID_GAP;
     if (dx * dx + dy * dy > limit * limit) {
@@ -1228,7 +1256,7 @@ static bool item_is_clear(Item item, GRect rect, const GRect *rects, const Obsta
 // Moves each item around the centre and outward, by as little as possible, to
 // where neither hand crosses it. An item with nowhere clear to go stays where
 // it was, partly covered.
-static void avoid_hands(GPoint *points, GRect *rects, const GRect *extents,
+static NOINLINE void avoid_hands(GPoint *points, GRect *rects, const GRect *extents,
                         const Obstacles *o) {
   const GPoint centre = o->centre;
   for (int item = 0; item < ITEM_COUNT; item++) {
@@ -1293,9 +1321,9 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   const int16_t name_y = centre.y - (below_numeral + above_row) / 2;
   GRect name = GRectZero;
   if (s_settings.dial_name[0]) {
-    draw_text_line(ctx, s_settings.dial_name, s_date_font, GPoint(centre.x, name_y),
-                   name_y - DATE_HEIGHT / 2, DATE_PAD, DATE_HEIGHT);
-    const int16_t width = text_width(s_settings.dial_name, s_date_font);
+    draw_text_box(ctx, s_settings.dial_name, s_date_font.font, GPoint(centre.x, name_y),
+                  name_y - DATE_HEIGHT / 2, s_date_font.pad, DATE_HEIGHT, NAME_BOX_WIDTH);
+    const int16_t width = text_width_in(s_settings.dial_name, s_date_font.font, NAME_BOX_WIDTH);
     name = GRect(centre.x - width / 2, name_y - DATE_HEIGHT / 2, width, DATE_HEIGHT);
   }
 
@@ -1305,15 +1333,15 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   const int32_t hour_angle = TRIG_MAX_ANGLE * ((t->tm_hour % 12) * 60 + t->tm_min) / 720;
 
   const int16_t side = reach_x * 32 / 100;
-  GPoint points[ITEM_COUNT] = {
-    [ITEM_WEATHER] = GPoint(centre.x - side, centre.y - row),
-    [ITEM_HEALTH] = GPoint(centre.x + side, centre.y - row),
-    [ITEM_DATE] = GPoint(centre.x - reach_x * 30 / 100, centre.y + row),
-    [ITEM_BATTERY] = GPoint(centre.x + reach_x * 25 / 100, centre.y + row),
-  };
+  // Kept off the stack, which drawing text in a bundled font needs.
+  static GPoint points[ITEM_COUNT];
+  points[ITEM_WEATHER] = GPoint(centre.x - side, centre.y - row);
+  points[ITEM_HEALTH] = GPoint(centre.x + side, centre.y - row);
+  points[ITEM_DATE] = GPoint(centre.x - reach_x * 30 / 100, centre.y + row);
+  points[ITEM_BATTERY] = GPoint(centre.x + reach_x * 25 / 100, centre.y + row);
   // Where each item sits; the name comes last, for the hour numbers to avoid.
-  GRect extents[ITEM_COUNT];
-  GRect covers[ITEM_COUNT + 1];
+  static GRect extents[ITEM_COUNT];
+  static GRect covers[ITEM_COUNT + 1];
   for (int i = 0; i < ITEM_COUNT; i++) {
     extents[i] = item_shown(i) ? item_extent(i, t) : GRectZero;
     covers[i] = GRect(points[i].x + extents[i].origin.x, points[i].y + extents[i].origin.y,
@@ -1416,11 +1444,35 @@ static int32_t tuple_int(const Tuple *tuple) {
   return tuple->type == TUPLE_CSTRING ? atoi(tuple->value->cstring) : tuple->value->int32;
 }
 
+static void unload_fonts(void) {
+  styled_font_unload(&s_modern_font);
+  styled_font_unload(&s_date_font);
+  styled_font_unload(&s_label_font);
+}
+
+// Loads the chosen font styles: one for the modern hour numbers, one for the
+// information.
+static void load_fonts(void) {
+  unload_fonts();
+  styled_font_load(&s_modern_font, s_settings.number_font, MODERN_FONT, MODERN_PAD,
+                   FONTS_MODERN);
+  styled_font_load(&s_date_font, s_settings.info_font, DATE_FONT, DATE_PAD, FONTS_DATE);
+  styled_font_load(&s_label_font, s_settings.info_font, LABEL_FONT, LABEL_PAD, FONTS_LABEL);
+}
+
 static bool read_settings(DictionaryIterator *iterator) {
   bool changed = false;
   const Tuple *tuple;
   if ((tuple = dict_find(iterator, MESSAGE_KEY_THEME))) {
     s_settings.dark = tuple_int(tuple) == 1;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_NUMBER_FONT))) {
+    s_settings.number_font = tuple_int(tuple) % FONT_STYLE_COUNT;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_INFO_FONT))) {
+    s_settings.info_font = tuple_int(tuple) % FONT_STYLE_COUNT;
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_NUMERALS))) {
@@ -1490,6 +1542,7 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
   if (read_settings(iterator)) {
     persist_write_data(PERSIST_KEY_SETTINGS, &s_settings, sizeof(s_settings));
     apply_palette();
+    load_fonts();
     window_set_background_color(s_window, s_palette.background);
     subscribe_ticks();
   }
@@ -1548,10 +1601,8 @@ static void load_saved_state(void) {
 }
 
 static void init(void) {
-  s_modern_font = fonts_get_system_font(MODERN_FONT);
-  s_date_font = fonts_get_system_font(DATE_FONT);
-  s_label_font = fonts_get_system_font(LABEL_FONT);
   load_saved_state();
+  load_fonts();
   s_battery = battery_state_service_peek();
   s_bluetooth_connected = connection_service_peek_pebble_app_connection();
 
@@ -1595,6 +1646,7 @@ static void deinit(void) {
 #if defined(PBL_COLOR)
   unload_numerals();
 #endif
+  unload_fonts();
 }
 
 int main(void) {

@@ -51,6 +51,35 @@ which needs no account or API key. The watch requests an update every 30
 minutes and keeps the last reading if the phone is unavailable. Until the first
 reading arrives, the temperature shows `--°`.
 
+## Font styles
+
+Two settings choose the fonts: **Number font** (the modern hour numbers; the classic ones keep their own drawn style) and
+**Information font** (the date, weather, health information and the name on the dial). Each offers:
+
+| Style | Font |
+| --- | --- |
+| Default | the watch's own Gothic |
+| Serif | IBM Plex Serif |
+| Rounded | Varela Round |
+| Mono | DM Mono |
+
+The bundled fonts are in `resources/fonts`, under the SIL Open Font License
+(the `OFL-*.txt` files there). Pebble's own fonts are very narrow, so the
+others are sized by `tools/make_fonts.py` to match their capital height
+without running much wider, and the layout still fits; where space is tight
+they come out a little smaller. Each piece of text and the font it normally
+uses are listed in `tools/fonts.json`. After changing either, regenerate the
+font resources (it needs Python with Pillow):
+
+```sh
+python3 tools/make_fonts.py
+```
+
+It rewrites the font entries in `package.json` and `src/c/font_styles.h`.
+Drawing text in a bundled font needs more of the watch's small app stack
+than Pebble's own fonts, so keep large local variables out of the drawing
+code's path to the text.
+
 ## Build
 
 From this directory:

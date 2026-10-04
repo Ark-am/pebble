@@ -51,8 +51,10 @@ Screenshot framing and asset collections follow the
 [Pebble submission guide](https://developer.rebble.io/guides/appstore-publishing/preparing-a-submission/)
 and [asset guide](https://developer.rebble.io/guides/appstore-publishing/appstore-assets/).
 
-The bundled numeral font is distributed under the SIL Open Font License;
-its license is preserved in `resources/fonts/OFL.txt`.
+The bundled fonts are distributed under the SIL Open Font License: the
+numeral font's license is preserved in `resources/fonts/OFL.txt`, and those
+of the optional font styles (IBM Plex Serif, Varela Round, DM Mono) in
+`resources/fonts/OFL-*.txt`.
 
 ## Icon provenance
 

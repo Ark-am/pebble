@@ -1,0 +1,19 @@
+{
+  "roles": {
+    "MODERN": {
+      "kind": "numbers", "bold": true, "characters": "[0-9]",
+      "large": { "height": 20, "like": "GOTHIC_28_BOLD" },
+      "small": { "height": 17, "like": "GOTHIC_24_BOLD" }
+    },
+    "DATE": {
+      "kind": "info", "bold": true, "characters": "[ -~°]",
+      "large": { "height": 17, "like": "GOTHIC_24_BOLD" },
+      "small": { "height": 13, "like": "GOTHIC_18_BOLD" }
+    },
+    "LABEL": {
+      "kind": "info", "characters": "[ -~]",
+      "large": { "height": 13, "like": "GOTHIC_18" },
+      "small": { "height": 10, "like": "GOTHIC_14" }
+    }
+  }
+}

@@ -11,6 +11,7 @@ In 12-hour mode, AM or PM appears under the date and under each city's time.
 
 ## Settings
 
+- **Time font** and **Text font:** see Font styles below
 - **Time format:** the same as the watch (the default), 12-hour or 24-hour
 - **Background colour:** white, cream, light or dark grey, black, navy, dark
   green, burgundy or purple. The date, details and dividers turn black or
@@ -41,6 +42,35 @@ time zone database every 15 minutes from 2025 to 2028.
 
 To offer another city, add it to `src/pkjs/zones.js` with its standard
 offset and, if it observes daylight saving, its rule.
+
+## Font styles
+
+Two settings choose the fonts: **Time font** (your time and the cities' times) and
+**Text font** (the date, the city names and the details). Each offers:
+
+| Style | Font |
+| --- | --- |
+| Default | the watch's own digital Leco and Gothic |
+| Serif | IBM Plex Serif |
+| Rounded | Varela Round |
+| Mono | DM Mono |
+
+The bundled fonts are in `resources/fonts`, under the SIL Open Font License
+(the `OFL-*.txt` files there). Pebble's own fonts are very narrow, so the
+others are sized by `tools/make_fonts.py` to match their capital height
+without running much wider, and the layout still fits; where space is tight
+they come out a little smaller. Each piece of text and the font it normally
+uses are listed in `tools/fonts.json`. After changing either, regenerate the
+font resources (it needs Python with Pillow):
+
+```sh
+python3 tools/make_fonts.py
+```
+
+It rewrites the font entries in `package.json` and `src/c/font_styles.h`.
+Drawing text in a bundled font needs more of the watch's small app stack
+than Pebble's own fonts, so keep large local variables out of the drawing
+code's path to the text.
 
 ## Build
 

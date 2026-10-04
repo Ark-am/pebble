@@ -1,0 +1,29 @@
+{
+  "roles": {
+    "TIME": {
+      "kind": "numbers", "bold": true, "characters": "[0-9:]",
+      "large": { "height": 31, "like": "LECO_42_NUMBERS" },
+      "small": { "height": 27, "like": "LECO_32_BOLD_NUMBERS" }
+    },
+    "CITY_TIME": {
+      "kind": "numbers", "bold": true, "characters": "[0-9:]",
+      "large": { "height": 19, "like": "LECO_26_BOLD_NUMBERS_AM_PM" },
+      "small": { "height": 14, "like": "LECO_20_BOLD_NUMBERS" }
+    },
+    "DATE": {
+      "kind": "info", "bold": true, "characters": "[ -~]",
+      "large": { "height": 13, "like": "GOTHIC_18_BOLD" },
+      "small": { "height": 10, "like": "GOTHIC_14_BOLD" }
+    },
+    "CITY": {
+      "kind": "info", "bold": true, "characters": "[ -~]",
+      "large": { "height": 17, "like": "GOTHIC_24_BOLD" },
+      "small": { "height": 13, "like": "GOTHIC_18_BOLD" }
+    },
+    "DETAIL": {
+      "kind": "info", "characters": "[ -~]",
+      "large": { "height": 13, "like": "GOTHIC_18" },
+      "small": { "height": 10, "like": "GOTHIC_14" }
+    }
+  }
+}

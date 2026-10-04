@@ -1,6 +1,14 @@
 // Settings page, rendered on the phone by Clay. Each messageKey matches one in
 // package.json; the watch reads them in read_settings() in src/c/main.c.
 
+// Font styles; values match the styles in src/c/font_styles.h.
+var FONT_OPTIONS = [
+  { label: 'Default (the face\'s own fonts)', value: '0' },
+  { label: 'Serif (IBM Plex Serif)', value: '1' },
+  { label: 'Rounded (Varela Round)', value: '2' },
+  { label: 'Mono (DM Mono)', value: '3' }
+];
+
 module.exports = [
   {
     type: 'heading',
@@ -32,6 +40,22 @@ module.exports = [
           { label: 'Classic: 12, 2, 4, 6, 8, 10, turned to follow the dial', value: '0' },
           { label: 'Modern: 12, 3, 6, 9, upright', value: '1' }
         ]
+      },
+      {
+        type: 'select',
+        messageKey: 'NUMBER_FONT',
+        label: 'Number font',
+        description: 'For the modern hour numbers; the classic ones keep their own style.',
+        defaultValue: '0',
+        options: FONT_OPTIONS
+      },
+      {
+        type: 'select',
+        messageKey: 'INFO_FONT',
+        label: 'Information font',
+        description: 'For the date, weather, health information and the name on the dial.',
+        defaultValue: '0',
+        options: FONT_OPTIONS
       },
       {
         type: 'toggle',

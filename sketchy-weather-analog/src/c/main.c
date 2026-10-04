@@ -1,5 +1,12 @@
 #include <pebble.h>
 
+#include "font_styles.h"
+
+// Drawing text in a bundled font needs more stack than the app has to spare
+// if every helper is folded into the drawing function, so the larger helpers
+// are kept separate; each one's stack is then only in use while it runs.
+#define NOINLINE __attribute__((noinline))
+
 // An analog watchface drawn in a hand-sketched style. A pencil-drawn widget
 // sits in the centre: a picture above one or two values, such as the weather
 // icon above the date and temperature. The widget has up to four screens,
@@ -21,8 +28,10 @@
   #define TEXT_FONT FONT_KEY_GOTHIC_18
   // Height of the hour number images (see tools/make_numerals.py).
   #define NUMERAL_HEIGHT 16
-  // The sketched style's hour numbers: font, visible height and the blank
-  // space the font leaves above it.
+  // Hour numbers drawn as text (the sketched style's, or in a chosen font):
+  // Pebble's font, visible height and the blank space that font leaves
+  // above it. The bundled font styles have their own, in font_styles.h, as
+  // do the text and day fonts below.
   #define SKETCH_NUMERAL_FONT FONT_KEY_GOTHIC_24
   #define SKETCH_NUMERAL_HEIGHT 17
   #define SKETCH_NUMERAL_PAD 7
@@ -91,7 +100,7 @@ typedef enum {
 } Item;
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 4
+#define SETTINGS_VERSION 5
 typedef struct {
   uint8_t version;
   bool dark_theme;
@@ -108,6 +117,10 @@ typedef struct {
   // Added in version 4: pencil-sketched hands, markers and ring instead of
   // the elegant ones.
   bool sketchy_dial;
+  // Added in version 5: font styles for the hour numbers and for the
+  // widget's text (see font_styles.h).
+  uint8_t number_font;
+  uint8_t info_font;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -117,6 +130,7 @@ static int settings_size(uint8_t version) {
     case 1: return offsetof(Settings, hour_numbers);
     case 2: return offsetof(Settings, screens);
     case 3: return offsetof(Settings, sketchy_dial);
+    case 4: return offsetof(Settings, number_font);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -160,11 +174,11 @@ typedef enum {
 
 static Window *s_window;
 static Layer *s_canvas;
-static GFont s_text_font;
+static StyledFont s_text_font;
 // Hour number images, for 1 to 12, matching the background.
 static GBitmap *s_numerals[12];
-static GFont s_sketch_numeral_font;
-static GFont s_day_font;
+static StyledFont s_numeral_font;
+static StyledFont s_day_font;
 
 static BatteryChargeState s_battery;
 static bool s_bluetooth_connected;
@@ -202,17 +216,42 @@ static void unload_numerals(void) {
   }
 }
 
-// Loads the numbers only while the elegant ones are shown, in the
-// background's colour.
+// Whether the hour numbers are drawn as text: in the sketched style, or when
+// a font has been chosen for them. Otherwise they are the elegant images.
+static bool text_numerals(void) {
+  return s_settings.sketchy_dial || s_settings.number_font != FONT_STYLE_PEBBLE;
+}
+
+// Loads the number images only while they are shown, in the background's
+// colour.
 static void load_numerals(void) {
   unload_numerals();
-  if (!s_settings.hour_numbers || s_settings.sketchy_dial) {
+  if (!s_settings.hour_numbers || text_numerals()) {
     return;
   }
   const uint32_t *ids = s_settings.dark_theme ? NUMERAL_WHITE : NUMERAL_BLACK;
   for (int i = 0; i < 12; i++) {
     s_numerals[i] = gbitmap_create_with_resource(ids[i]);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Fonts
+
+static void unload_fonts(void) {
+  styled_font_unload(&s_numeral_font);
+  styled_font_unload(&s_text_font);
+  styled_font_unload(&s_day_font);
+}
+
+// Loads the chosen font styles: one for the hour numbers, one for the
+// widget's text.
+static void load_fonts(void) {
+  unload_fonts();
+  styled_font_load(&s_numeral_font, s_settings.number_font, SKETCH_NUMERAL_FONT,
+                   SKETCH_NUMERAL_PAD, FONTS_NUMERAL);
+  styled_font_load(&s_text_font, s_settings.info_font, TEXT_FONT, TEXT_PAD, FONTS_TEXT);
+  styled_font_load(&s_day_font, s_settings.info_font, DAY_FONT, DAY_PAD, FONTS_DAY);
 }
 
 // ---------------------------------------------------------------------------
@@ -334,7 +373,7 @@ static int32_t edge_distance(GRect bounds, int32_t angle) {
 }
 
 // Rounds off the screen's corners by filling outside a rounded rectangle.
-static void draw_corners(GContext *ctx, GRect screen) {
+static NOINLINE void draw_corners(GContext *ctx, GRect screen) {
 #if defined(PBL_ROUND)
   (void)ctx;
   (void)screen;
@@ -723,7 +762,7 @@ static void draw_hour_marker(GContext *ctx, GPoint centre, int32_t angle, int32_
   fill_and_outline(ctx, lit, ARRAY_LENGTH(lit), s_palette.ink);
 }
 
-static void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
+static NOINLINE void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
   for (int i = 0; i < 60; i++) {
     const bool hour = i % 5 == 0;
     const int32_t angle = TRIG_MAX_ANGLE * i / 60;
@@ -758,28 +797,28 @@ static GPoint numeral_centre(GRect bounds, GPoint centre, int32_t angle, GSize s
   return ray_point(centre, angle, edge_distance(bounds, angle) - HOUR_TICK_LENGTH - 3 - reach);
 }
 
-// The sketched style's numbers, in the system font.
-static void draw_sketch_hour_numbers(GContext *ctx, GRect bounds, GPoint centre) {
+// The hour numbers as text, in the sketched style's font or the chosen one.
+static void draw_text_hour_numbers(GContext *ctx, GRect bounds, GPoint centre) {
   graphics_context_set_text_color(ctx, s_palette.ink);
   for (int hour = 1; hour <= 12; hour++) {
     char text[3];
     snprintf(text, sizeof(text), "%d", hour);
     const int16_t width = graphics_text_layout_get_content_size(
-      text, s_sketch_numeral_font, GRect(0, 0, 60, 40), GTextOverflowModeFill,
+      text, s_numeral_font.font, GRect(0, 0, 60, 40), GTextOverflowModeFill,
       GTextAlignmentLeft).w;
     const GPoint at = numeral_centre(bounds, centre, TRIG_MAX_ANGLE * hour / 12,
                                      GSize(width, SKETCH_NUMERAL_HEIGHT));
-    graphics_draw_text(ctx, text, s_sketch_numeral_font,
-                       GRect(at.x - width, at.y - SKETCH_NUMERAL_HEIGHT / 2 - SKETCH_NUMERAL_PAD,
-                             width * 2, SKETCH_NUMERAL_HEIGHT + SKETCH_NUMERAL_PAD * 2),
+    graphics_draw_text(ctx, text, s_numeral_font.font,
+                       GRect(at.x - width, at.y - SKETCH_NUMERAL_HEIGHT / 2 - s_numeral_font.pad,
+                             width * 2, SKETCH_NUMERAL_HEIGHT + s_numeral_font.pad * 2),
                        GTextOverflowModeFill, GTextAlignmentCenter, NULL);
   }
 }
 
 // Hour numbers sit just inside the hour markers.
-static void draw_hour_numbers(GContext *ctx, GRect bounds, GPoint centre) {
-  if (s_settings.sketchy_dial) {
-    draw_sketch_hour_numbers(ctx, bounds, centre);
+static NOINLINE void draw_hour_numbers(GContext *ctx, GRect bounds, GPoint centre) {
+  if (text_numerals()) {
+    draw_text_hour_numbers(ctx, bounds, centre);
     return;
   }
   graphics_context_set_compositing_mode(ctx, GCompOpSet);
@@ -798,7 +837,7 @@ static void draw_hour_numbers(GContext *ctx, GRect bounds, GPoint centre) {
 }
 
 // The sketched style's hand: a heavy pencil stroke with a lighter one beside it.
-static void draw_sketch_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t from,
+static NOINLINE void draw_sketch_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t from,
                              int16_t to, int16_t width) {
   graphics_context_set_stroke_color(ctx, s_palette.ink);
   graphics_context_set_stroke_width(ctx, width);
@@ -814,7 +853,7 @@ static void draw_sketch_hand(GContext *ctx, GPoint centre, int32_t angle, int16_
 // A slender dauphine hand: it widens briefly from just outside the ring, then
 // tapers in a long straight line to a fine point. One facet is solid and the
 // other shaded, as if lit from one side.
-static void draw_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t from,
+static NOINLINE void draw_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t from,
                       int16_t to, int16_t half_width) {
   const int32_t side = angle + TRIG_MAX_ANGLE / 4;
   const int16_t shoulder_at = from + (to - from) * 18 / 100;
@@ -879,8 +918,8 @@ static void draw_calendar(GContext *ctx, const struct tm *t) {
     }
   }
   graphics_context_set_text_color(ctx, s_palette.ink);
-  draw_text_centred(ctx, day, s_day_font, icon_point(50, 60), bottom_right.x - top_left.x,
-                    DAY_HEIGHT, DAY_PAD);
+  draw_text_centred(ctx, day, s_day_font.font, icon_point(50, 60),
+                    bottom_right.x - top_left.x, DAY_HEIGHT, s_day_font.pad);
 }
 
 // A large battery, filled to the charge level.
@@ -963,7 +1002,7 @@ static void draw_heart(GContext *ctx) {
   sketch_line(ctx, sides[1], sides[2], s_palette.ink);
 }
 
-static void draw_item_picture(GContext *ctx, Item item, GPoint centre, const struct tm *t) {
+static NOINLINE void draw_item_picture(GContext *ctx, Item item, GPoint centre, const struct tm *t) {
   s_icon_centre = centre;
   switch (item) {
     case ITEM_WEATHER: draw_weather_icon(ctx, weather_from_condition(s_condition)); break;
@@ -1054,7 +1093,7 @@ static void format_item(Item item, bool brief, const struct tm *t, char *text, s
 }
 
 static int16_t text_width(const char *text) {
-  return graphics_text_layout_get_content_size(text, s_text_font, GRect(0, 0, 200, 40),
+  return graphics_text_layout_get_content_size(text, s_text_font.font, GRect(0, 0, 200, 40),
                                                GTextOverflowModeFill, GTextAlignmentLeft).w;
 }
 
@@ -1065,7 +1104,7 @@ static int16_t ring_half_width(int16_t below) {
 
 // One or two values under a pencil rule, split by a short upright stroke.
 // Values switch to their short forms if they would not fit inside the ring.
-static void draw_values(GContext *ctx, GPoint centre, Item main, Item second,
+static NOINLINE void draw_values(GContext *ctx, GPoint centre, Item main, Item second,
                         const struct tm *t) {
   const int16_t rule_y = centre.y + RULE_DROP;
   const int16_t text_top = rule_y + 3;
@@ -1095,8 +1134,9 @@ static void draw_values(GContext *ctx, GPoint centre, Item main, Item second,
               s_palette.ink);
 
   graphics_context_set_text_color(ctx, s_palette.ink);
-  graphics_draw_text(ctx, first, s_text_font,
-                     GRect(left, text_top - TEXT_PAD, first_w + 2, TEXT_HEIGHT + TEXT_PAD * 2),
+  graphics_draw_text(ctx, first, s_text_font.font,
+                     GRect(left, text_top - s_text_font.pad, first_w + 2,
+                           TEXT_HEIGHT + s_text_font.pad * 2),
                      GTextOverflowModeFill, GTextAlignmentLeft, NULL);
   if (second == ITEM_NONE) {
     return;
@@ -1104,9 +1144,9 @@ static void draw_values(GContext *ctx, GPoint centre, Item main, Item second,
   const int16_t divider = left + first_w + TEXT_GAP;
   sketch_line(ctx, GPoint(divider, rule_y + 1), GPoint(divider, text_top + TEXT_HEIGHT + 1),
               s_palette.ink);
-  graphics_draw_text(ctx, other, s_text_font,
-                     GRect(divider + TEXT_GAP, text_top - TEXT_PAD, other_w + 2,
-                           TEXT_HEIGHT + TEXT_PAD * 2),
+  graphics_draw_text(ctx, other, s_text_font.font,
+                     GRect(divider + TEXT_GAP, text_top - s_text_font.pad, other_w + 2,
+                           TEXT_HEIGHT + s_text_font.pad * 2),
                      GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 }
 
@@ -1156,7 +1196,7 @@ static bool item_shown(Item item) {
 }
 #endif
 
-static void draw_widget(GContext *ctx, GPoint centre, const struct tm *t) {
+static NOINLINE void draw_widget(GContext *ctx, GPoint centre, const struct tm *t) {
   Item main;
   Item second;
   screen_items(&main, &second);
@@ -1189,7 +1229,7 @@ static void draw_quiet_time(GContext *ctx, GPoint origin) {
   graphics_fill_circle(ctx, GPoint(centre.x + 3, centre.y - 2), 5);
 }
 
-static void draw_alerts(GContext *ctx, GPoint centre) {
+static NOINLINE void draw_alerts(GContext *ctx, GPoint centre) {
   const bool quiet = quiet_time_is_active();
   const bool disconnected = !s_bluetooth_connected;
   const int count = (quiet ? 1 : 0) + (disconnected ? 1 : 0);
@@ -1340,6 +1380,14 @@ static bool read_settings(DictionaryIterator *iterator) {
       }
     }
   }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_NUMBER_FONT))) {
+    s_settings.number_font = tuple_int(tuple) % FONT_STYLE_COUNT;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_INFO_FONT))) {
+    s_settings.info_font = tuple_int(tuple) % FONT_STYLE_COUNT;
+    changed = true;
+  }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_DIAL_STYLE))) {
     s_settings.sketchy_dial = tuple_int(tuple) == 1;
     changed = true;
@@ -1393,6 +1441,7 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
     persist_write_data(PERSIST_KEY_SETTINGS, &s_settings, sizeof(s_settings));
     apply_palette();
     load_numerals();
+    load_fonts();
     window_set_background_color(s_window, s_palette.background);
   }
   layer_mark_dirty(s_canvas);
@@ -1442,11 +1491,9 @@ static void load_saved_state(void) {
 }
 
 static void init(void) {
-  s_text_font = fonts_get_system_font(TEXT_FONT);
-  s_day_font = fonts_get_system_font(DAY_FONT);
-  s_sketch_numeral_font = fonts_get_system_font(SKETCH_NUMERAL_FONT);
   load_saved_state();
   load_numerals();
+  load_fonts();
   s_battery = battery_state_service_peek();
   s_bluetooth_connected = connection_service_peek_pebble_app_connection();
 
@@ -1487,6 +1534,7 @@ static void deinit(void) {
 #endif
   window_destroy(s_window);
   unload_numerals();
+  unload_fonts();
 }
 
 int main(void) {

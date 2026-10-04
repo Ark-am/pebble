@@ -1,5 +1,7 @@
 #include <pebble.h>
 
+#include "font_styles.h"
+
 // A classic dress-watch face: a round dial with a minute scale and railroad
 // track around the edge, Breguet-style hour numbers, slim leaf hands, a small
 // seconds dial at half past seven and, if chosen, a matching small dial at half
@@ -58,7 +60,7 @@
 #define NUMERAL_GAP 3
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 2
+#define SETTINGS_VERSION 3
 typedef struct {
   uint8_t version;
   uint8_t dial;
@@ -66,6 +68,10 @@ typedef struct {
   char dial_name[16];
   // Added in version 2.
   uint8_t info;
+  // Added in version 3: font styles for the hour numbers and for the name
+  // and information (see font_styles.h).
+  uint8_t number_font;
+  uint8_t info_font;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -73,6 +79,7 @@ typedef struct {
 static int settings_size(uint8_t version) {
   switch (version) {
     case 1: return offsetof(Settings, info);
+    case 2: return offsetof(Settings, number_font);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -112,11 +119,11 @@ static Palette s_palette;
 
 static Window *s_window;
 static Layer *s_canvas;
-static GFont s_numeral_font;
-static GFont s_name_font;
+static StyledFont s_numeral_font;
+static StyledFont s_name_font;
 static GFont s_scale_font;
-static GFont s_value_font;
-static GFont s_label_font;
+static StyledFont s_value_font;
+static StyledFont s_label_font;
 
 static BatteryChargeState s_battery;
 static int32_t s_temperature = NO_TEMPERATURE;
@@ -332,7 +339,7 @@ static void draw_scale(GContext *ctx, GPoint centre, int16_t radius) {
 // when one is shown.
 static void draw_numerals(GContext *ctx, GPoint centre, int16_t distance) {
   const GSize size = graphics_text_layout_get_content_size(
-    "12", s_numeral_font, GRect(0, 0, 80, 60), GTextOverflowModeFill, GTextAlignmentCenter);
+    "12", s_numeral_font.font, GRect(0, 0, 80, 60), GTextOverflowModeFill, GTextAlignmentCenter);
   for (int hour = 1; hour <= 12; hour++) {
     if (hour == 7 || hour == 8 || (s_settings.info != INFO_NONE && (hour == 4 || hour == 5))) {
       continue;
@@ -344,11 +351,11 @@ static void draw_numerals(GContext *ctx, GPoint centre, int16_t distance) {
     // box is lifted by a quarter of its height to centre the digits.
     const GRect box = GRect(at.x - 30, at.y - size.h / 2 - size.h / 4, 60, size.h + 4);
     graphics_context_set_text_color(ctx, s_palette.edge);
-    graphics_draw_text(ctx, text, s_numeral_font, GRect(box.origin.x + 1, box.origin.y + 1,
-                                                        box.size.w, box.size.h),
+    graphics_draw_text(ctx, text, s_numeral_font.font,
+                       GRect(box.origin.x + 1, box.origin.y + 1, box.size.w, box.size.h),
                        GTextOverflowModeFill, GTextAlignmentCenter, NULL);
     graphics_context_set_text_color(ctx, s_palette.metal);
-    graphics_draw_text(ctx, text, s_numeral_font, box, GTextOverflowModeFill,
+    graphics_draw_text(ctx, text, s_numeral_font.font, box, GTextOverflowModeFill,
                        GTextAlignmentCenter, NULL);
   }
 }
@@ -365,7 +372,7 @@ static void draw_name(GContext *ctx, GPoint at) {
   for (int i = 0; i < length; i++) {
     const char letter[2] = { name[i], '\0' };
     widths[i] = graphics_text_layout_get_content_size(
-      letter, s_name_font, GRect(0, 0, 40, 30), GTextOverflowModeFill,
+      letter, s_name_font.font, GRect(0, 0, 40, 30), GTextOverflowModeFill,
       GTextAlignmentLeft).w;
     total += widths[i] + (i ? NAME_SPACING : 0);
   }
@@ -373,9 +380,9 @@ static void draw_name(GContext *ctx, GPoint at) {
   graphics_context_set_text_color(ctx, s_palette.print);
   for (int i = 0; i < length; i++) {
     const char letter[2] = { name[i], '\0' };
-    graphics_draw_text(ctx, letter, s_name_font,
-                       GRect(x - 2, at.y - NAME_HEIGHT / 2 - NAME_PAD, widths[i] + 4,
-                             NAME_HEIGHT + NAME_PAD * 2),
+    graphics_draw_text(ctx, letter, s_name_font.font,
+                       GRect(x - 2, at.y - NAME_HEIGHT / 2 - s_name_font.pad, widths[i] + 4,
+                             NAME_HEIGHT + s_name_font.pad * 2),
                        GTextOverflowModeFill, GTextAlignmentCenter, NULL);
     x += widths[i] + NAME_SPACING;
   }
@@ -453,13 +460,14 @@ static void draw_info_dial(GContext *ctx, GPoint at, int16_t radius, const struc
   const int16_t top = at.y - (VALUE_HEIGHT + 2 + LABEL_HEIGHT) / 2;
   const int16_t width = radius * 2 - 4;
   graphics_context_set_text_color(ctx, value_color);
-  graphics_draw_text(ctx, value, s_value_font,
-                     GRect(at.x - width / 2, top - VALUE_PAD, width, VALUE_HEIGHT + VALUE_PAD * 2),
+  graphics_draw_text(ctx, value, s_value_font.font,
+                     GRect(at.x - width / 2, top - s_value_font.pad, width,
+                           VALUE_HEIGHT + s_value_font.pad * 2),
                      GTextOverflowModeFill, GTextAlignmentCenter, NULL);
   graphics_context_set_text_color(ctx, s_palette.print);
-  graphics_draw_text(ctx, label, s_label_font,
-                     GRect(at.x - width / 2, top + VALUE_HEIGHT + 2 - LABEL_PAD, width,
-                           LABEL_HEIGHT + LABEL_PAD * 2),
+  graphics_draw_text(ctx, label, s_label_font.font,
+                     GRect(at.x - width / 2, top + VALUE_HEIGHT + 2 - s_label_font.pad, width,
+                           LABEL_HEIGHT + s_label_font.pad * 2),
                      GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 }
 
@@ -563,6 +571,29 @@ static int32_t tuple_int(const Tuple *tuple) {
   return tuple->type == TUPLE_CSTRING ? atoi(tuple->value->cstring) : tuple->value->int32;
 }
 
+static void unload_fonts(void) {
+  styled_font_unload(&s_numeral_font);
+  styled_font_unload(&s_name_font);
+  styled_font_unload(&s_value_font);
+  styled_font_unload(&s_label_font);
+}
+
+// Loads the chosen font styles: one for the hour numbers, one for the name
+// and information. The face's usual numbers are its own Breguet-style font.
+static void load_fonts(void) {
+  unload_fonts();
+  if (s_settings.number_font == FONT_STYLE_PEBBLE) {
+    s_numeral_font = (StyledFont) {
+      fonts_load_custom_font(resource_get_handle(NUMERAL_FONT)), 0, true,
+    };
+  } else {
+    styled_font_load(&s_numeral_font, s_settings.number_font, NULL, 0, FONTS_NUMERAL);
+  }
+  styled_font_load(&s_name_font, s_settings.info_font, NAME_FONT, NAME_PAD, FONTS_NAME);
+  styled_font_load(&s_value_font, s_settings.info_font, VALUE_FONT, VALUE_PAD, FONTS_VALUE);
+  styled_font_load(&s_label_font, s_settings.info_font, LABEL_FONT, LABEL_PAD, FONTS_LABEL);
+}
+
 static bool read_settings(DictionaryIterator *iterator) {
   bool changed = false;
   const Tuple *tuple;
@@ -573,6 +604,14 @@ static bool read_settings(DictionaryIterator *iterator) {
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_SECONDS))) {
     s_settings.seconds = tuple_int(tuple) != 0;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_NUMBER_FONT))) {
+    s_settings.number_font = tuple_int(tuple) % FONT_STYLE_COUNT;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_INFO_FONT))) {
+    s_settings.info_font = tuple_int(tuple) % FONT_STYLE_COUNT;
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_INFO))) {
@@ -604,6 +643,7 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
   if (read_settings(iterator)) {
     persist_write_data(PERSIST_KEY_SETTINGS, &s_settings, sizeof(s_settings));
     apply_palette();
+    load_fonts();
     window_set_background_color(s_window, GColorBlack);
     subscribe_ticks();
   }
@@ -662,12 +702,9 @@ static void load_settings(void) {
 }
 
 static void init(void) {
-  s_numeral_font = fonts_load_custom_font(resource_get_handle(NUMERAL_FONT));
-  s_name_font = fonts_get_system_font(NAME_FONT);
   s_scale_font = fonts_get_system_font(SCALE_FONT);
-  s_value_font = fonts_get_system_font(VALUE_FONT);
-  s_label_font = fonts_get_system_font(LABEL_FONT);
   load_settings();
+  load_fonts();
   s_battery = battery_state_service_peek();
 
   s_window = window_create();
@@ -702,7 +739,7 @@ static void deinit(void) {
   accel_tap_service_unsubscribe();
 #endif
   window_destroy(s_window);
-  fonts_unload_custom_font(s_numeral_font);
+  unload_fonts();
 }
 
 int main(void) {

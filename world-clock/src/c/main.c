@@ -1,5 +1,12 @@
 #include <pebble.h>
 
+#include "font_styles.h"
+
+// Drawing text in a bundled font needs more stack than the app has to spare
+// if every helper is folded into the drawing function, so the larger helpers
+// are kept separate; each one's stack is then only in use while it runs.
+#define NOINLINE __attribute__((noinline))
+
 // A digital world clock. The watch's own time is shown large at the top, with
 // the date beside it, and the times in two other cities are listed below.
 // The phone works out each city's offset from UTC (see src/pkjs) and the watch
@@ -12,12 +19,14 @@
 #define LABEL_LENGTH 16
 
 #if PBL_DISPLAY_WIDTH >= 200
+  #define TIME_FONT FONT_KEY_LECO_42_NUMBERS
   #define DATE_FONT FONT_KEY_GOTHIC_18_BOLD
   #define CITY_FONT FONT_KEY_GOTHIC_24_BOLD
   #define CITY_TIME_FONT FONT_KEY_LECO_26_BOLD_NUMBERS_AM_PM
   #define DETAIL_FONT FONT_KEY_GOTHIC_18
-  // Visible heights of each font's text and the blank space the font leaves
-  // above it.
+  // Visible heights of each font's text and the blank space Pebble's own font
+  // leaves above it (the bundled font styles have their own, in
+  // font_styles.h).
   #define DATE_HEIGHT 13
   #define DATE_PAD 5
   #define CITY_HEIGHT 17
@@ -30,6 +39,7 @@
   #define TIME_PAD 10
   #define GAP 10
 #else
+  #define TIME_FONT FONT_KEY_LECO_32_BOLD_NUMBERS
   #define DATE_FONT FONT_KEY_GOTHIC_14_BOLD
   #define CITY_FONT FONT_KEY_GOTHIC_18_BOLD
   #define CITY_TIME_FONT FONT_KEY_LECO_20_BOLD_NUMBERS
@@ -53,7 +63,7 @@
 #define LINE_GAP 3
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 2
+#define SETTINGS_VERSION 3
 
 // Values match the TIME_FORMAT options in src/pkjs/config.js.
 typedef enum {
@@ -77,6 +87,10 @@ typedef struct {
   // background) unless one is chosen.
   bool time_color_auto;
   uint8_t time_argb;
+  // Added in version 3: font styles for the times and for the other text
+  // (see font_styles.h).
+  uint8_t number_font;
+  uint8_t info_font;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -84,6 +98,7 @@ typedef struct {
 static int settings_size(uint8_t version) {
   switch (version) {
     case 1: return offsetof(Settings, time_format);
+    case 2: return offsetof(Settings, number_font);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -103,11 +118,11 @@ static Palette s_palette;
 
 static Window *s_window;
 static Layer *s_canvas;
-static GFont s_time_font;
-static GFont s_date_font;
-static GFont s_city_font;
-static GFont s_city_time_font;
-static GFont s_detail_font;
+static StyledFont s_time_font;
+static StyledFont s_city_time_font;
+static StyledFont s_date_font;
+static StyledFont s_city_font;
+static StyledFont s_detail_font;
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -123,6 +138,8 @@ static void settings_set_defaults(Settings *settings) {
     .background_argb = GColorWhiteARGB8,
     .time_color_auto = true,
     .time_argb = GColorBlackARGB8,
+    .number_font = FONT_STYLE_PEBBLE,
+    .info_font = FONT_STYLE_PEBBLE,
   };
 }
 
@@ -235,7 +252,7 @@ static void draw_text(GContext *ctx, const char *text, GFont font, GColor color,
 }
 
 // The watch's own time, large, with the day and date in a column beside it.
-static void draw_local_time(GContext *ctx, GRect area, int16_t top, const struct tm *t) {
+static NOINLINE void draw_local_time(GContext *ctx, GRect area, int16_t top, const struct tm *t) {
   char time_text[8];
   format_time(t, time_text, sizeof(time_text));
   char day[8];
@@ -248,36 +265,36 @@ static void draw_local_time(GContext *ctx, GRect area, int16_t top, const struct
   snprintf(date, sizeof(date), "%s %d", month, t->tm_mday);
   const char *meridiem = use_24h() ? NULL : t->tm_hour < 12 ? "AM" : "PM";
 
-  const int16_t time_w = text_width(time_text, s_time_font);
-  int16_t column_w = text_width(day, s_date_font);
-  const int16_t date_w = text_width(date, s_date_font);
+  const int16_t time_w = text_width(time_text, s_time_font.font);
+  int16_t column_w = text_width(day, s_date_font.font);
+  const int16_t date_w = text_width(date, s_date_font.font);
   column_w = date_w > column_w ? date_w : column_w;
   const int16_t gap = GAP;
   const int16_t left = area.origin.x + (area.size.w - time_w - gap - column_w) / 2;
 
-  draw_text(ctx, time_text, s_time_font, s_palette.time,
-            GRect(left, top, time_w + 2, TIME_HEIGHT), TIME_PAD, GTextAlignmentLeft);
+  draw_text(ctx, time_text, s_time_font.font, s_palette.time,
+            GRect(left, top, time_w + 2, TIME_HEIGHT), s_time_font.pad, GTextAlignmentLeft);
 
   // The column's lines are centred on the time.
   const int lines = meridiem ? 3 : 2;
   const int16_t column_h = lines * DATE_HEIGHT + (lines - 1) * LINE_GAP;
   int16_t y = top + (TIME_HEIGHT - column_h) / 2;
   const int16_t x = left + time_w + gap;
-  draw_text(ctx, day, s_date_font, s_palette.accent,
-            GRect(x, y, column_w + 2, DATE_HEIGHT), DATE_PAD, GTextAlignmentLeft);
+  draw_text(ctx, day, s_date_font.font, s_palette.accent,
+            GRect(x, y, column_w + 2, DATE_HEIGHT), s_date_font.pad, GTextAlignmentLeft);
   y += DATE_HEIGHT + LINE_GAP;
-  draw_text(ctx, date, s_date_font, s_palette.foreground,
-            GRect(x, y, column_w + 2, DATE_HEIGHT), DATE_PAD, GTextAlignmentLeft);
+  draw_text(ctx, date, s_date_font.font, s_palette.foreground,
+            GRect(x, y, column_w + 2, DATE_HEIGHT), s_date_font.pad, GTextAlignmentLeft);
   if (meridiem) {
     y += DATE_HEIGHT + LINE_GAP;
-    draw_text(ctx, meridiem, s_date_font, s_palette.detail,
-              GRect(x, y, column_w + 2, DATE_HEIGHT), DATE_PAD, GTextAlignmentLeft);
+    draw_text(ctx, meridiem, s_date_font.font, s_palette.detail,
+              GRect(x, y, column_w + 2, DATE_HEIGHT), s_date_font.pad, GTextAlignmentLeft);
   }
 }
 
 // One city: its name with the day and difference below, and its time on the
 // right.
-static void draw_city(GContext *ctx, GRect area, int16_t top, int city, time_t now,
+static NOINLINE void draw_city(GContext *ctx, GRect area, int16_t top, int city, time_t now,
                       const struct tm *here, int32_t here_offset) {
   const int32_t offset = s_settings.offsets[city];
   const time_t shifted = now + offset * 60;
@@ -289,26 +306,27 @@ static void draw_city(GContext *ctx, GRect area, int16_t top, int city, time_t n
   format_detail(here, &there, offset - here_offset, detail, sizeof(detail));
 
   const int16_t row_h = CITY_HEIGHT + LINE_GAP + DETAIL_HEIGHT;
-  const int16_t time_w = text_width(time_text, s_city_time_font);
+  const int16_t time_w = text_width(time_text, s_city_time_font.font);
   const int16_t time_x = area.origin.x + area.size.w - time_w;
   const int16_t time_top = use_24h()
     ? top + (row_h - CITY_TIME_HEIGHT) / 2
     : top;
-  draw_text(ctx, time_text, s_city_time_font, s_palette.time,
-            GRect(time_x - 2, time_top, time_w + 4, CITY_TIME_HEIGHT), CITY_TIME_PAD,
+  draw_text(ctx, time_text, s_city_time_font.font, s_palette.time,
+            GRect(time_x - 2, time_top, time_w + 4, CITY_TIME_HEIGHT), s_city_time_font.pad,
             GTextAlignmentRight);
   if (!use_24h()) {
-    draw_text(ctx, there.tm_hour < 12 ? "AM" : "PM", s_detail_font, s_palette.detail,
+    draw_text(ctx, there.tm_hour < 12 ? "AM" : "PM", s_detail_font.font, s_palette.detail,
               GRect(time_x - 10, top + row_h - DETAIL_HEIGHT, time_w + 10, DETAIL_HEIGHT),
-              DETAIL_PAD, GTextAlignmentRight);
+              s_detail_font.pad, GTextAlignmentRight);
   }
 
   const int16_t name_w = time_x - area.origin.x - GAP / 2;
-  draw_text(ctx, s_settings.labels[city], s_city_font, s_palette.accent,
-            GRect(area.origin.x, top, name_w, CITY_HEIGHT), CITY_PAD, GTextAlignmentLeft);
-  draw_text(ctx, detail, s_detail_font, s_palette.detail,
+  draw_text(ctx, s_settings.labels[city], s_city_font.font, s_palette.accent,
+            GRect(area.origin.x, top, name_w, CITY_HEIGHT), s_city_font.pad,
+            GTextAlignmentLeft);
+  draw_text(ctx, detail, s_detail_font.font, s_palette.detail,
             GRect(area.origin.x, top + CITY_HEIGHT + LINE_GAP, name_w, DETAIL_HEIGHT),
-            DETAIL_PAD, GTextAlignmentLeft);
+            s_detail_font.pad, GTextAlignmentLeft);
 }
 
 static void draw_divider(GContext *ctx, GRect area, int16_t y, GColor color) {
@@ -350,6 +368,29 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
 }
 
 // ---------------------------------------------------------------------------
+// Fonts
+
+static void unload_fonts(void) {
+  styled_font_unload(&s_time_font);
+  styled_font_unload(&s_city_time_font);
+  styled_font_unload(&s_date_font);
+  styled_font_unload(&s_city_font);
+  styled_font_unload(&s_detail_font);
+}
+
+// Loads the chosen font styles: one for the times, one for the other text.
+static void load_fonts(void) {
+  unload_fonts();
+  const uint8_t numbers = s_settings.number_font;
+  const uint8_t info = s_settings.info_font;
+  styled_font_load(&s_time_font, numbers, TIME_FONT, TIME_PAD, FONTS_TIME);
+  styled_font_load(&s_city_time_font, numbers, CITY_TIME_FONT, CITY_TIME_PAD, FONTS_CITY_TIME);
+  styled_font_load(&s_date_font, info, DATE_FONT, DATE_PAD, FONTS_DATE);
+  styled_font_load(&s_city_font, info, CITY_FONT, CITY_PAD, FONTS_CITY);
+  styled_font_load(&s_detail_font, info, DETAIL_FONT, DETAIL_PAD, FONTS_DETAIL);
+}
+
+// ---------------------------------------------------------------------------
 // Events
 
 static void request_offsets(void) {
@@ -386,6 +427,14 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
 
   if ((tuple = dict_find(iterator, MESSAGE_KEY_THEME))) {
     s_settings.dark_theme = tuple_int(tuple) == 1;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_NUMBER_FONT))) {
+    s_settings.number_font = tuple_int(tuple) % FONT_STYLE_COUNT;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_INFO_FONT))) {
+    s_settings.info_font = tuple_int(tuple) % FONT_STYLE_COUNT;
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_TIME_FORMAT))) {
@@ -426,6 +475,7 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
   if (changed) {
     persist_write_data(PERSIST_KEY_SETTINGS, &s_settings, sizeof(s_settings));
     apply_palette();
+    load_fonts();
     window_set_background_color(s_window, s_palette.background);
     layer_mark_dirty(s_canvas);
   }
@@ -471,16 +521,8 @@ static void load_settings(void) {
 }
 
 static void init(void) {
-#if PBL_DISPLAY_WIDTH >= 200
-  s_time_font = fonts_get_system_font(FONT_KEY_LECO_42_NUMBERS);
-#else
-  s_time_font = fonts_get_system_font(FONT_KEY_LECO_32_BOLD_NUMBERS);
-#endif
-  s_date_font = fonts_get_system_font(DATE_FONT);
-  s_city_font = fonts_get_system_font(CITY_FONT);
-  s_city_time_font = fonts_get_system_font(CITY_TIME_FONT);
-  s_detail_font = fonts_get_system_font(DETAIL_FONT);
   load_settings();
+  load_fonts();
 
   s_window = window_create();
   window_set_background_color(s_window, s_palette.background);
@@ -504,6 +546,7 @@ static void init(void) {
 static void deinit(void) {
   tick_timer_service_unsubscribe();
   window_destroy(s_window);
+  unload_fonts();
 }
 
 int main(void) {

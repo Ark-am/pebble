@@ -1,6 +1,14 @@
 // Settings page, rendered on the phone by Clay. Each messageKey matches one in
 // package.json; the watch reads them in read_settings() in src/c/main.c.
 
+// Font styles; values match the styles in src/c/font_styles.h.
+var FONT_OPTIONS = [
+  { label: 'Default (the face\'s own fonts)', value: '0' },
+  { label: 'Serif (IBM Plex Serif)', value: '1' },
+  { label: 'Rounded (Varela Round)', value: '2' },
+  { label: 'Mono (DM Mono)', value: '3' }
+];
+
 // Values match the Item enum on the watch.
 var ITEM_OPTIONS = [
   { label: 'Weather', value: '1' },
@@ -72,6 +80,22 @@ module.exports = [
         messageKey: 'HOUR_NUMBERS',
         label: 'Show hour numbers',
         defaultValue: false
+      },
+      {
+        type: 'select',
+        messageKey: 'NUMBER_FONT',
+        label: 'Number font',
+        description: 'For the hour numbers. Pebble uses each dial style\'s own numbers.',
+        defaultValue: '0',
+        options: FONT_OPTIONS
+      },
+      {
+        type: 'select',
+        messageKey: 'INFO_FONT',
+        label: 'Information font',
+        description: 'For the date, weather, battery and health values in the centre.',
+        defaultValue: '0',
+        options: FONT_OPTIONS
       }
     ]
   },

@@ -70,6 +70,7 @@ battery, choose it as one of the centre screen items.
 - **Background:** Paper (light) or Chalkboard (dark)
 - **Centre circle:** the four screens and whether they change every minute (see above)
 - **Dial style:** Elegant or Sketchy
+- **Number font** and **Information font:** see Font styles below
 - **Show hour numbers:** off by default; when on, 1 to 12 sit just inside the hour ticks
 - **Temperature:** Celsius or Fahrenheit
 - **Vibrate when the phone disconnects**
@@ -94,6 +95,39 @@ in `package.json`:
 ```sh
 python3 tools/make_numerals.py
 ```
+
+## Font styles
+
+Two settings choose the fonts: **Number font** (the hour numbers) and
+**Information font** (the values and the calendar day in the centre circle). Each offers:
+
+| Style | Font |
+| --- | --- |
+| Default | each dial style's own numbers and the watch's own Gothic |
+| Serif | IBM Plex Serif |
+| Rounded | Varela Round |
+| Mono | DM Mono |
+
+Choosing a number font draws the hour numbers in it in both dial styles;
+Default keeps the Elegant style's serif images and the Sketchy style's
+Gothic.
+
+The bundled fonts are in `resources/fonts`, under the SIL Open Font License
+(the `OFL-*.txt` files there). Pebble's own fonts are very narrow, so the
+others are sized by `tools/make_fonts.py` to match their capital height
+without running much wider, and the layout still fits; where space is tight
+they come out a little smaller. Each piece of text and the font it normally
+uses are listed in `tools/fonts.json`. After changing either, regenerate the
+font resources (it needs Python with Pillow):
+
+```sh
+python3 tools/make_fonts.py
+```
+
+It rewrites the font entries in `package.json` and `src/c/font_styles.h`.
+Drawing text in a bundled font needs more of the watch's small app stack
+than Pebble's own fonts, so keep large local variables out of the drawing
+code's path to the text.
 
 ## Build
 
