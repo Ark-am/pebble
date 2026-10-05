@@ -48,11 +48,17 @@ See [Android's permission documentation](https://developer.android.com/reference
 
 ## Watch controls
 
-- **Main menu order**: open **Phone Dialer** on the phone and use the arrows
-  under **Main menu order**. The change appears straight away if the watch app
-  is open, otherwise the next time it opens. The watch keeps the order, so the
-  menu stays the same while the phone is away. It cannot be changed on the
-  watch, so it is never rearranged by accident.
+- **Main menu order**: change it on the phone or on the watch.
+  1. On the phone (recommended): open **Phone Dialer** and use the arrows under
+     **Main menu order**. The change appears straight away if the watch app is
+     open, otherwise the next time it opens.
+  2. On the watch: hold Select on a main-menu row to pick it up (the watch
+     vibrates and the row shows up/down arrows), move it with Up/Down, and
+     press Select to put it down. Leaving the app while moving a row keeps the
+     new position. A hint appears at launch until this has been used once.
+
+  The watch and phone keep whichever change is newer, and the watch keeps the
+  order so the menu stays the same while the phone is away.
 - **Dialer**: a phone keypad with Delete (backspace icon), `+` and a green
   Call key along the bottom. On touch watches (Pebble Time 2 and Pebble Round 2),
   tap a key to press it. With the buttons, Up/Down move the highlight and

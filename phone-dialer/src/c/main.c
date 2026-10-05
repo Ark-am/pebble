@@ -44,7 +44,8 @@ enum {
 #define NUMBER_SIZE 32
 #define TOKEN_STORAGE_KEY 1
 #define MENU_ORDER_STORAGE_KEY 2
-// Key 3 held the old on-watch reorder hint flag; keep it unused.
+#define REORDER_HINT_STORAGE_KEY 3
+#define REORDER_HINT_MS 3500
 #define MENU_STAMP_STORAGE_KEY 4
 // The phone's companion may still be starting when the watch app opens.
 #define MENU_SYNC_DELAY_MS 1000
@@ -117,8 +118,9 @@ typedef enum {
 
 static Window *s_main_window;
 static MenuLayer *s_main_menu_layer;
-// Main menu order, chosen in the phone app's settings and kept on the watch
-// so the menu is right even when the phone is away.
+// Main menu order, chosen in the phone app's settings or on the watch (hold
+// Select on a row, move it with Up/Down, Select to put it down). Kept on the
+// watch so the menu is right even when the phone is away.
 static uint8_t s_main_order[MAIN_ROW_COUNT] = {
   MAIN_ROW_DIALER, MAIN_ROW_RECENTS, MAIN_ROW_FAVORITES, MAIN_ROW_CONTACTS,
 };
@@ -127,6 +129,9 @@ static int32_t s_main_order_stamp;
 static bool s_menu_sync_in_flight;
 static int s_menu_sync_attempts;
 static AppTimer *s_menu_sync_timer;
+static bool s_main_moving;
+static TextLayer *s_hint_layer;
+static AppTimer *s_hint_timer;
 static GPath *s_star_path;
 
 static Window *s_call_window;
@@ -441,6 +446,114 @@ static void list_handle_reply(ListView *view, DictionaryIterator *iterator, int3
   list_finish_page(view);
 }
 
+// List rows: the name large and bold, then a dimmer second line whose call
+// type or number label gets a touch of colour, and a thin divider between rows.
+#define LIST_SECONDARY PBL_IF_COLOR_ELSE(GColorLightGray, GColorBlack)
+#define LIST_GOOD PBL_IF_COLOR_ELSE(GColorMediumAquamarine, GColorBlack)
+#define LIST_BAD PBL_IF_COLOR_ELSE(GColorSunsetOrange, GColorBlack)
+#define LIST_DIVIDER PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack)
+#define LIST_MARGIN 6
+// The separator recent calls put between the call type and the time.
+#define RECENT_SEPARATOR " \xc2\xb7 "
+
+// How much of a second line is the coloured part: the call type of a recent
+// call ("Missed"), or the label of a number ("Mobile").
+static size_t subtitle_lead_length(const ListView *view, const char *subtitle) {
+  if (view->list == LIST_RECENTS) {
+    const char *separator = strstr(subtitle, RECENT_SEPARATOR);
+    return separator ? (size_t)(separator - subtitle) : 0;
+  }
+  if (view->list == LIST_FAVORITES || view->list == LIST_CONTACTS) {
+    for (const char *c = subtitle; *c; c++) {
+      if (c > subtitle && c[-1] == ' ' && (*c == '+' || *c == '(' || (*c >= '0' && *c <= '9'))) {
+        return c - subtitle - 1;
+      }
+    }
+  }
+  return 0;
+}
+
+static GColor subtitle_lead_color(const ListView *view, const char *subtitle) {
+  if (view->list == LIST_RECENTS &&
+      (strncmp(subtitle, "Missed", 6) == 0 || strncmp(subtitle, "Declined", 8) == 0 ||
+       strncmp(subtitle, "Blocked", 7) == 0)) {
+    return LIST_BAD;
+  }
+  return LIST_GOOD;
+}
+
+static void draw_list_cell(GContext *ctx, const Layer *cell_layer, const char *title,
+                           GColor title_color, const char *subtitle, size_t lead_length,
+                           GColor lead_color) {
+  const GRect bounds = layer_get_bounds(cell_layer);
+  const bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
+  if (highlighted) {
+    // Keep the colours readable on the highlight; black-and-white goes all white.
+    title_color = THEME_HIGHLIGHT_TEXT;
+    lead_color = PBL_IF_COLOR_ELSE(lead_color, THEME_HIGHLIGHT_TEXT);
+  }
+  const GColor secondary = highlighted ? THEME_HIGHLIGHT_TEXT : LIST_SECONDARY;
+  const GFont title_font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
+  const GFont subtitle_font = fonts_get_system_font(FONT_KEY_GOTHIC_18);
+  const GTextAlignment alignment = PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft);
+
+#if defined(PBL_ROUND)
+  // Rows away from the centre are short and show only the name.
+  const bool compact = !highlighted;
+  const int16_t margin = 12;
+#else
+  const bool compact = false;
+  const int16_t margin = LIST_MARGIN;
+#endif
+  const int16_t width = bounds.size.w - 2 * margin;
+  const bool two_lines = subtitle && subtitle[0] && !compact;
+
+  // Gothic glyphs sit low in their line box, so lift each line a little.
+  const int16_t title_top = two_lines ? bounds.size.h / 2 - 27 : bounds.size.h / 2 - 17;
+  graphics_context_set_text_color(ctx, title_color);
+  graphics_draw_text(ctx, title, compact ? fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD) : title_font,
+                     GRect(margin, compact ? bounds.size.h / 2 - 13 : title_top, width, 30),
+                     GTextOverflowModeTrailingEllipsis, alignment, NULL);
+
+  if (two_lines) {
+    const int16_t top = bounds.size.h / 2 - 2;
+    static char lead[SUBTITLE_SIZE];
+    lead_length = MIN(lead_length, sizeof(lead) - 1);
+    memcpy(lead, subtitle, lead_length);
+    lead[lead_length] = '\0';
+    const char *rest = subtitle + lead_length;
+
+    const GRect line = GRect(margin, top, width, 22);
+    const int16_t lead_w = lead_length ? graphics_text_layout_get_content_size(
+      lead, subtitle_font, line, GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft).w : 0;
+    int16_t x = margin;
+#if defined(PBL_ROUND)
+    const int16_t rest_w = graphics_text_layout_get_content_size(
+      rest, subtitle_font, line, GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft).w;
+    x = MAX(margin, (bounds.size.w - lead_w - rest_w) / 2);
+#endif
+    if (lead_length) {
+      graphics_context_set_text_color(ctx, lead_color);
+      graphics_draw_text(ctx, lead, subtitle_font, GRect(x, top, lead_w + 2, 22),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    }
+    graphics_context_set_text_color(ctx, secondary);
+    graphics_draw_text(ctx, rest, subtitle_font,
+                       GRect(x + lead_w, top, bounds.size.w - margin - x - lead_w, 22),
+                       GTextOverflowModeTrailingEllipsis,
+                       lead_length ? GTextAlignmentLeft : alignment, NULL);
+  }
+
+#if !defined(PBL_ROUND)
+  if (!highlighted) {
+    graphics_context_set_stroke_color(ctx, LIST_DIVIDER);
+    graphics_context_set_stroke_width(ctx, 1);
+    graphics_draw_line(ctx, GPoint(margin, bounds.size.h - 1),
+                       GPoint(bounds.size.w - margin - 1, bounds.size.h - 1));
+  }
+#endif
+}
+
 static uint16_t list_get_num_rows(MenuLayer *menu_layer, uint16_t section_index, void *context) {
   const ListView *view = context;
   if (list_shows_message(view)) {
@@ -451,11 +564,10 @@ static uint16_t list_get_num_rows(MenuLayer *menu_layer, uint16_t section_index,
 
 static int16_t list_get_cell_height(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
 #if defined(PBL_ROUND)
-  return menu_layer_is_index_selected(menu_layer, cell_index)
-    ? MENU_CELL_ROUND_FOCUSED_TALL_CELL_HEIGHT
-    : MENU_CELL_ROUND_UNFOCUSED_SHORT_CELL_HEIGHT;
+  return menu_layer_is_index_selected(menu_layer, cell_index) ? 60 : 36;
 #else
-  return 44;
+  // Larger screens get a little more air between rows.
+  return layer_get_bounds(menu_layer_get_layer(menu_layer)).size.h >= 200 ? 56 : 50;
 #endif
 }
 
@@ -472,8 +584,9 @@ static void list_draw_header(GContext *ctx, const Layer *cell_layer, uint16_t se
 static void list_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
   const ListView *view = context;
   if (list_shows_message(view)) {
-    const char *subtitle = view->state == LIST_STATE_ERROR ? "Select to retry" : NULL;
-    menu_cell_basic_draw(ctx, cell_layer, view->message, subtitle, NULL);
+    const bool error = view->state == LIST_STATE_ERROR;
+    draw_list_cell(ctx, cell_layer, view->message, error ? LIST_BAD : THEME_TEXT,
+                   error ? "Select to retry" : NULL, 0, LIST_GOOD);
     return;
   }
 
@@ -483,7 +596,7 @@ static void list_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cel
       static char range[24];
       snprintf(range, sizeof(range), "%d-%d",
                (int)(MAX(view->offset - PAGE_SIZE, 0) + 1), (int)view->offset);
-      menu_cell_basic_draw(ctx, cell_layer, "Previous", range, NULL);
+      draw_list_cell(ctx, cell_layer, "Previous", LIST_GOOD, range, 0, LIST_GOOD);
       return;
     }
     row--;
@@ -494,12 +607,14 @@ static void list_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cel
     const int32_t first = view->offset + view->received + 1;
     const int32_t last = MIN(view->offset + view->received + PAGE_SIZE, view->total);
     snprintf(range, sizeof(range), "%d-%d of %d", (int)first, (int)last, (int)view->total);
-    menu_cell_basic_draw(ctx, cell_layer, "More", range, NULL);
+    draw_list_cell(ctx, cell_layer, "More", LIST_GOOD, range, 0, LIST_GOOD);
     return;
   }
 
   const Entry *entry = &view->entries[row];
-  menu_cell_basic_draw(ctx, cell_layer, entry->title, entry->subtitle, NULL);
+  draw_list_cell(ctx, cell_layer, entry->title, THEME_TEXT, entry->subtitle,
+                 subtitle_lead_length(view, entry->subtitle),
+                 subtitle_lead_color(view, entry->subtitle));
 }
 
 static void call_window_push(const Entry *entry, int32_t source);
@@ -1277,7 +1392,7 @@ static void sync_main_order(void) {
 // An order from the phone, chosen in the companion app's settings.
 static void apply_phone_main_order(const char *text, int32_t stamp) {
   uint8_t order[MAIN_ROW_COUNT];
-  if (stamp <= s_main_order_stamp || !parse_main_order(text, order)) {
+  if (stamp <= s_main_order_stamp || s_main_moving || !parse_main_order(text, order)) {
     return;
   }
   memcpy(s_main_order, order, sizeof(s_main_order));
@@ -1288,10 +1403,28 @@ static void apply_phone_main_order(const char *text, int32_t stamp) {
   }
 }
 
+// Small up and down arrows show which row is being moved.
+static void draw_move_arrows(GContext *ctx, GRect bounds, GColor color) {
+  const int16_t x = bounds.size.w - PBL_IF_ROUND_ELSE(30, 14);
+  const int16_t middle = bounds.size.h / 2;
+  graphics_context_set_fill_color(ctx, color);
+  for (int i = 0; i < 6; i++) {
+    graphics_fill_rect(ctx, GRect(x - i, middle - 9 + i, 2 * i + 1, 1), 0, GCornerNone);
+    graphics_fill_rect(ctx, GRect(x - i, middle + 9 - i, 2 * i + 1, 1), 0, GCornerNone);
+  }
+}
+
 static void main_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
   const MainRow row = s_main_order[cell_index->row];
   const char *title = main_row_title(row);
   const GRect bounds = layer_get_bounds(cell_layer);
+  const bool moving = s_main_moving && menu_cell_layer_is_highlighted(cell_layer);
+  if (moving) {
+    // The row being moved stands out in the call colour on colour watches.
+    graphics_context_set_fill_color(ctx, PBL_IF_COLOR_ELSE(THEME_CALL, THEME_HIGHLIGHT));
+    graphics_fill_rect(ctx, bounds, 0, GCornerNone);
+    draw_move_arrows(ctx, bounds, THEME_HIGHLIGHT_TEXT);
+  }
   GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
 
 #if defined(PBL_ROUND)
@@ -1310,7 +1443,8 @@ static void main_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cel
     ? THEME_HIGHLIGHT_TEXT
     : THEME_TEXT;
   const GColor icon_color = PBL_IF_COLOR_ELSE(
-    row == MAIN_ROW_DIALER ? THEME_CALL : row == MAIN_ROW_FAVORITES ? THEME_WARNING : foreground,
+    moving ? foreground
+      : row == MAIN_ROW_DIALER ? THEME_CALL : row == MAIN_ROW_FAVORITES ? THEME_WARNING : foreground,
     foreground);
   graphics_context_set_fill_color(ctx, icon_color);
   const GPoint icon_origin = GPoint(left, middle - ICON_SIZE / 2);
@@ -1339,13 +1473,59 @@ static void main_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cel
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 }
 
+static void hide_reorder_hint(void *context) {
+  s_hint_timer = NULL;
+  if (s_hint_layer) {
+    layer_set_hidden(text_layer_get_layer(s_hint_layer), true);
+  }
+}
+
+static void main_drop(void) {
+  s_main_moving = false;
+  s_main_order_stamp = time(NULL);
+  save_main_order();
+  s_menu_sync_attempts = 0;
+  sync_main_order();
+  layer_mark_dirty(menu_layer_get_layer(s_main_menu_layer));
+}
+
 static void main_select(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
+  if (s_main_moving) {
+    main_drop();
+    return;
+  }
   switch (s_main_order[cell_index->row]) {
     case MAIN_ROW_DIALER: dial_window_push(); break;
     case MAIN_ROW_RECENTS: list_window_push(LIST_RECENTS, NULL); break;
     case MAIN_ROW_FAVORITES: list_window_push(LIST_FAVORITES, NULL); break;
     default: list_window_push(LIST_LETTERS, NULL); break;
   }
+}
+
+static void main_pick_up(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
+  if (s_main_moving) {
+    main_drop();
+    return;
+  }
+  s_main_moving = true;
+  vibes_short_pulse();
+  hide_reorder_hint(NULL);
+  // Once someone has found the gesture, the hint is no longer needed.
+  persist_write_bool(REORDER_HINT_STORAGE_KEY, true);
+  layer_mark_dirty(menu_layer_get_layer(menu_layer));
+}
+
+// While a row is picked up, Up/Down carry it along instead of just moving the
+// highlight: swap it with its neighbour and let the highlight follow.
+static void main_selection_will_change(MenuLayer *menu_layer, MenuIndex *new_index,
+                                       MenuIndex old_index, void *context) {
+  if (!s_main_moving || new_index->row == old_index.row) {
+    return;
+  }
+  const uint8_t moved = s_main_order[old_index.row];
+  s_main_order[old_index.row] = s_main_order[new_index->row];
+  s_main_order[new_index->row] = moved;
+  layer_mark_dirty(menu_layer_get_layer(menu_layer));
 }
 
 static void main_window_load(Window *window) {
@@ -1357,15 +1537,48 @@ static void main_window_load(Window *window) {
     .get_num_rows = main_get_num_rows,
     .draw_row = main_draw_row,
     .select_click = main_select,
+    .select_long_click = main_pick_up,
+    .selection_will_change = main_selection_will_change,
   });
   menu_layer_set_normal_colors(s_main_menu_layer, THEME_BACKGROUND, THEME_TEXT);
   menu_layer_set_highlight_colors(s_main_menu_layer, THEME_HIGHLIGHT, THEME_HIGHLIGHT_TEXT);
   menu_layer_set_click_config_onto_window(s_main_menu_layer, window);
   layer_add_child(root, menu_layer_get_layer(s_main_menu_layer));
   s_star_path = gpath_create(&STAR_PATH_INFO);
+
+  if (!persist_exists(REORDER_HINT_STORAGE_KEY)) {
+    // Shown on launch until the user has reordered once on the watch.
+    const int16_t height = PBL_IF_ROUND_ELSE(44, 24);
+    s_hint_layer = text_layer_create(GRect(0, bounds.size.h - height, bounds.size.w, height));
+    text_layer_set_background_color(s_hint_layer, THEME_HIGHLIGHT);
+    text_layer_set_text_color(s_hint_layer, THEME_HIGHLIGHT_TEXT);
+    text_layer_set_font(s_hint_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+    text_layer_set_text_alignment(s_hint_layer, GTextAlignmentCenter);
+    text_layer_set_text(s_hint_layer, "Hold Select to reorder");
+    layer_add_child(root, text_layer_get_layer(s_hint_layer));
+#if defined(PBL_ROUND)
+    text_layer_enable_screen_text_flow_and_paging(s_hint_layer, 4);
+#endif
+    s_hint_timer = app_timer_register(REORDER_HINT_MS, hide_reorder_hint, NULL);
+  }
 }
 
 static void main_window_unload(Window *window) {
+  if (s_main_moving) {
+    s_main_moving = false;
+    s_main_order_stamp = time(NULL);
+    save_main_order();
+    s_menu_sync_attempts = 0;
+    sync_main_order();
+  }
+  if (s_hint_timer) {
+    app_timer_cancel(s_hint_timer);
+    s_hint_timer = NULL;
+  }
+  if (s_hint_layer) {
+    text_layer_destroy(s_hint_layer);
+    s_hint_layer = NULL;
+  }
   menu_layer_destroy(s_main_menu_layer);
   gpath_destroy(s_star_path);
 }
