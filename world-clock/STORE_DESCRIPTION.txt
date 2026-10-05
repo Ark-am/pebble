@@ -1,0 +1,9 @@
+Keep your world in view with World Clock, a clear digital watchface for life across time zones. Your local time takes centre stage beside the day and date, with the time in two other cities just below.
+
+Choose from 49 cities around the world and give each one your own label, whether it is home, family, or your team's office. Each city shows its time difference from yours and the day when it differs, making it easier to plan a call or follow a loved one's day. Half-hour and 45-minute time zones are supported too.
+
+Use 12-hour or 24-hour time, or follow your watch's setting. Personalize the time and text fonts, choose background, time, and accent colours on colour watches, or use a light or dark background on black-and-white models.
+
+Set everything up through the Pebble phone app. The paired phone refreshes time-zone offsets hourly, including daylight-saving adjustments for supported cities. When your phone is away, the watch continues using the last received offsets; reconnect to pick up any changes.
+
+Created by Ark-am. Discover our work and custom software development services at https://ark-am.com/

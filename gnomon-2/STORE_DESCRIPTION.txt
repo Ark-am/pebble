@@ -1,0 +1,9 @@
+Gnomon 2 pairs a classic analog dial with the everyday details you want at a glance. Tapered leaf hands and a minute track that follows the screen frame your choice of turned classic or upright modern hour numbers.
+
+Four information areas show local weather, health data, the day and date, and a battery ring with phone connection and Quiet Time status. Tap the watch to cycle through steps, distance, active calories, active minutes, sleep, and heart rate where supported. Hide individual information areas for a simpler dial, or enable the option that moves them away from the hands when space allows.
+
+Make it yours with a light or dark background, a custom dial name, font choices for modern numbers and information, and an optional second hand with colour choices on colour watches. Optional phone disconnect vibrations respect Quiet Time.
+
+Settings are available in the Pebble phone app. Weather supports Celsius and Fahrenheit and needs your paired phone's location and internet access, with no weather account or API key required. Health data is unavailable on the original Pebble, and heart rate requires a supported sensor.
+
+Created by Ark-am. Discover our work and custom software development services at https://ark-am.com/

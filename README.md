@@ -20,6 +20,26 @@ build output, and documentation.
 Follow a project's link for its requirements, build instructions, testing
 steps, and platform-specific notes.
 
+## Pebble store descriptions
+
+Copy the entire contents of the relevant plain-text file into the watchface's
+Pebble store description:
+
+- [Baltic](./baltic/STORE_DESCRIPTION.txt)
+- [Gnomon 2](./gnomon-2/STORE_DESCRIPTION.txt)
+- [Meridian](./meridian/STORE_DESCRIPTION.txt)
+- [Sketchy Weather Analog](./sketchy-weather-analog/STORE_DESCRIPTION.txt)
+- [World Clock](./world-clock/STORE_DESCRIPTION.txt)
+
+Keep these descriptions in sync with watchface features. Every watchface
+description must include the shared creator credit and website promotion:
+
+> Created by Ark-am. Discover our work and custom software development services at https://ark-am.com/
+
+For future watchfaces, add a `STORE_DESCRIPTION.txt` with this credit and link
+it here. Phone Sound Mode, Phone Dialer, and compass apps are excluded from
+this description collection.
+
 ## Repository layout
 
 ```text

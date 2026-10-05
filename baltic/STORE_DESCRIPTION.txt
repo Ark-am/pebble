@@ -1,0 +1,9 @@
+Baltic brings the character of a classic dress watch to your Pebble, with elegant Breguet-style hour numbers, slim leaf hands, a railroad minute track, and a small seconds dial.
+
+Choose from five dial colours: Salmon, Navy blue, Silver, Black and gold, or Azure blue. Add your own name to the dial, choose your number and information fonts, and switch running seconds on or off to suit your preference and battery use.
+
+An optional second small dial puts the date, weather, battery level, or health data on your wrist. In Health mode, tap the watch to cycle through steps, distance, active calories, active minutes, sleep, and heart rate where supported.
+
+Designed for round and rectangular Pebble screens, with light or dark alternatives on black-and-white watches. Customize it through the Pebble phone app. Weather supports Celsius and Fahrenheit and needs your paired phone's location and internet access, with no weather account or API key required. Health data depends on your watch; the original Pebble shows the date instead.
+
+Created by Ark-am. Discover our work and custom software development services at https://ark-am.com/
