@@ -1,14 +1,14 @@
 {
   "name": "epoch",
   "author": "ark-am",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "keywords": [
     "pebble-app"
   ],
   "private": true,
   "pebble": {
     "displayName": "Gnomon 2",
-    "uuid": "363239a9-545d-431d-8d1d-3c8104189ff0",
+    "uuid": "c48a1c35-5c23-4575-9873-06e3b1032345",
     "sdkVersion": "3",
     "enableMultiJS": true,
     "targetPlatforms": [
