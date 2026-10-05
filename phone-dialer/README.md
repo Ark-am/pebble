@@ -48,11 +48,14 @@ See [Android's permission documentation](https://developer.android.com/reference
 
 ## Watch controls
 
-- **Dialer**: Up/Down move across the keypad; Select enters the highlighted
-  character. Hold Up/Down to move faster. `Del` removes the last character;
-  `+` is available at the beginning. Select **Call**, review the number, and
-  press Select again to place the call. Back cancels. Up from the first key
-  wraps directly to Call. Numbers can contain up to 31 characters.
+- **Dialer**: a phone keypad with Delete (backspace icon), `+` and a green
+  Call key along the bottom. On touch watches (Pebble Time 2 and Pebble Round 2),
+  tap a key to press it. With the buttons, Up/Down move the highlight and
+  Select presses the highlighted key; hold Up/Down to move faster. After using
+  touch, the first button press only brings the highlight back. `+` is
+  available at the beginning only. Press **Call**, review the number, and
+  confirm with Select. Back cancels. Up from the first key wraps directly to
+  Call. Numbers can contain up to 31 characters.
 - **Recent calls**: the latest 100 system call-log entries, newest first, with
   incoming/outgoing/missed/declined/blocked type and date/time. Select an entry,
   then Select again to call back. Private and unknown numbers are displayed

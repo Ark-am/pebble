@@ -53,6 +53,18 @@ enum {
 // Long enough to read the confirmation before returning to the watchface.
 #define EXIT_DELAY_MS 1500
 
+// App theme. Colour watches: white on black with dark gray highlights, a
+// red-orange for problems and a blue-green for calling, like the keypad.
+// Black-and-white watches: black on white with inverted highlights.
+#define THEME_BACKGROUND PBL_IF_COLOR_ELSE(GColorBlack, GColorWhite)
+#define THEME_TEXT PBL_IF_COLOR_ELSE(GColorWhite, GColorBlack)
+#define THEME_HINT PBL_IF_COLOR_ELSE(GColorLightGray, GColorBlack)
+#define THEME_DIVIDER PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack)
+#define THEME_HIGHLIGHT PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack)
+#define THEME_HIGHLIGHT_TEXT GColorWhite
+#define THEME_CALL PBL_IF_COLOR_ELSE(GColorJaegerGreen, GColorBlack)
+#define THEME_WARNING PBL_IF_COLOR_ELSE(GColorOrange, GColorBlack)
+
 // Icons are drawn as vector shapes in a square box so they work on every
 // platform, including black-and-white ones, and follow the row's highlight.
 #define ICON_SIZE 24
@@ -109,8 +121,31 @@ static Window *s_dial_window;
 static Layer *s_dial_layer;
 static char s_number[NUMBER_SIZE];
 static uint8_t s_key;
+
+// Phone keypad order, then a bottom row of Delete, "+" and Call.
+enum {
+  KEY_DELETE = 12,
+  KEY_PLUS = 13,
+  KEY_CALL = 14,
+  KEY_COUNT = 15,
+};
 static const char *s_keys[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9",
-                               "*", "0", "#", "+", "Del", "Call" };
+                               "*", "0", "#", NULL, "+", NULL };
+
+// Layout is worked out once per window so drawing and touch agree on it.
+static GRect s_key_rects[KEY_COUNT];
+static GRect s_display_rect;
+static GFont s_key_font;
+static GFont s_number_font;
+static GFont s_number_small_font;
+static GPath *s_handset_path;
+static GPathInfo s_handset_info;
+static GPoint s_handset_points[24];
+static int16_t s_icon_size;
+// Hidden while the keypad is driven by touch; the buttons bring it back.
+static bool s_show_focus;
+static int s_pressed_key = -1;
+static AppTimer *s_press_timer;
 
 // Only one request is in flight at a time. Replies carry the request's token,
 // so anything left over from an abandoned request is ignored.
@@ -164,7 +199,7 @@ static void cancel_exit_timer(void) {
 }
 
 static void list_show_error(ListView *view, const char *message);
-static void call_show_status(const char *status);
+static void call_show_error(const char *status);
 
 static void fail_request(const char *message) {
   cancel_response_timer();
@@ -179,7 +214,7 @@ static void fail_request(const char *message) {
   if (view) {
     list_show_error(view, message);
   } else if (waiting_call) {
-    call_show_status(message);
+    call_show_error(message);
   }
 }
 
@@ -494,8 +529,8 @@ static void list_window_load(Window *window) {
     .draw_row = list_draw_row,
     .select_click = list_select,
   });
-  menu_layer_set_normal_colors(view->menu_layer, GColorWhite, GColorBlack);
-  menu_layer_set_highlight_colors(view->menu_layer, GColorBlack, GColorWhite);
+  menu_layer_set_normal_colors(view->menu_layer, THEME_BACKGROUND, THEME_TEXT);
+  menu_layer_set_highlight_colors(view->menu_layer, THEME_HIGHLIGHT, THEME_HIGHLIGHT_TEXT);
   menu_layer_set_click_config_onto_window(view->menu_layer, window);
   layer_add_child(root, menu_layer_get_layer(view->menu_layer));
 
@@ -559,10 +594,19 @@ static void exit_to_watchface(void *context) {
   window_stack_pop_all(true);
 }
 
-static void call_show_status(const char *status) {
+static void call_set_status(const char *status, GColor color) {
   if (s_call_status_layer) {
+    text_layer_set_text_color(s_call_status_layer, color);
     text_layer_set_text(s_call_status_layer, status);
   }
+}
+
+static void call_show_status(const char *status) {
+  call_set_status(status, THEME_HINT);
+}
+
+static void call_show_error(const char *status) {
+  call_set_status(status, THEME_WARNING);
 }
 
 static void call_handle_reply(int32_t result) {
@@ -573,7 +617,7 @@ static void call_handle_reply(int32_t result) {
 
   cancel_response_timer();
   s_waiting_call = false;
-  call_show_status("Sent to phone");
+  call_set_status("Sent to phone", THEME_CALL);
   vibes_short_pulse();
 
   // Hand over to the phone's call screen once the call is placed.
@@ -584,7 +628,7 @@ static void call_handle_reply(int32_t result) {
 static void call_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   const GRect bounds = layer_get_bounds(root);
-  window_set_background_color(window, GColorWhite);
+  window_set_background_color(window, THEME_BACKGROUND);
 
   const int16_t inset = PBL_IF_ROUND_ELSE(18, 6);
   const int16_t middle = bounds.size.h / 2;
@@ -593,7 +637,7 @@ static void call_window_load(Window *window) {
   text_layer_set_font(s_call_status_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
   text_layer_set_text_alignment(s_call_status_layer, GTextAlignmentCenter);
   text_layer_set_background_color(s_call_status_layer, GColorClear);
-  text_layer_set_text_color(s_call_status_layer, GColorBlack);
+  text_layer_set_text_color(s_call_status_layer, THEME_HINT);
   layer_add_child(root, text_layer_get_layer(s_call_status_layer));
 
   s_call_name_layer = text_layer_create(GRect(inset, middle - 4, bounds.size.w - 2 * inset, 72));
@@ -602,7 +646,7 @@ static void call_window_load(Window *window) {
   text_layer_set_text_alignment(s_call_name_layer, GTextAlignmentCenter);
   text_layer_set_overflow_mode(s_call_name_layer, GTextOverflowModeTrailingEllipsis);
   text_layer_set_background_color(s_call_name_layer, GColorClear);
-  text_layer_set_text_color(s_call_name_layer, GColorBlack);
+  text_layer_set_text_color(s_call_name_layer, THEME_TEXT);
   text_layer_set_text(s_call_name_layer, s_call_name);
   layer_add_child(root, text_layer_get_layer(s_call_name_layer));
 }
@@ -630,7 +674,7 @@ static void call_submit(ClickRecognizerRef recognizer, void *context) {
   const char *error = NULL;
   DictionaryIterator *iterator = begin_request(s_call_source == -1 ? REQUEST_DIAL : REQUEST_CALL, &error);
   if (!iterator) {
-    call_show_status(error);
+    call_show_error(error);
     return;
   }
   if (s_call_source == -1) {
@@ -640,7 +684,7 @@ static void call_submit(ClickRecognizerRef recognizer, void *context) {
     dict_write_int32(iterator, MESSAGE_KEY_LIST, s_call_source);
   }
   if (!send_request(&error)) {
-    call_show_status(error);
+    call_show_error(error);
     return;
   }
   // Never automatically retry a call after a lost reply: it may already be dialing.
@@ -669,56 +713,257 @@ static void call_window_push(const Entry *entry, int32_t source) {
   window_stack_push(s_call_window, true);
   if (source != -1 && (!entry->id[0] || strcmp(entry->id, "0") == 0)) {
     s_call_submitted = true;
-    call_show_status("Number unavailable");
+    call_show_error("Number unavailable");
   } else {
     call_show_status("Select to call");
   }
 }
 
 // ---------------------------------------------------------------------------
-// Number keypad: Up/Down move, Select enters, Del removes, Call confirms.
+// Number keypad. Up/Down move the highlight, Select presses the highlighted
+// key, and on touch watches every key can also be tapped directly.
 
-static void dial_draw(Layer *layer, GContext *ctx) {
-  GRect bounds = layer_get_bounds(layer);
-  graphics_context_set_text_color(ctx, GColorBlack);
-  graphics_draw_text(ctx, "Dialer", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-      GRect(12, 3, bounds.size.w - 24, 24), GTextOverflowModeTrailingEllipsis,
-      GTextAlignmentCenter, NULL);
-  graphics_draw_text(ctx, s_number[0] ? s_number : "Enter number",
-      fonts_get_system_font(FONT_KEY_GOTHIC_18),
-      GRect(20, 26, bounds.size.w - 40, 42), GTextOverflowModeTrailingEllipsis,
-      GTextAlignmentCenter, NULL);
-  int width = PBL_IF_ROUND_ELSE(108, 120);
-  int left = (bounds.size.w - width) / 2;
-  int top = bounds.size.h / 2 - 18;
-  int height = (bounds.size.h - top - 12) / 5;
-  for (int i = 0; i < 15; i++) {
-    GRect cell = GRect(left + (i % 3) * (width / 3), top + (i / 3) * height,
-                      width / 3 - 2, height - 1);
-    graphics_context_set_fill_color(ctx, i == s_key ? GColorBlack : GColorWhite);
-    graphics_fill_rect(ctx, cell, 3, GCornersAll);
-    graphics_context_set_text_color(ctx, i == s_key ? GColorWhite : GColorBlack);
-    cell.origin.y -= 3;
-    graphics_draw_text(ctx, s_keys[i], fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-        cell, GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+#if defined(_PBL_API_EXISTS_tap_recognizer_create)
+#define DIAL_TOUCH 1
+#endif
+
+// Colour watches: gray keys on black, like a calculator, with a red-orange
+// Delete key, a blue-green Call key and a white ring for the highlight.
+// Black-and-white watches: outlined keys that invert when highlighted or
+// pressed, and a solid Call key.
+#define DIAL_BACKGROUND THEME_BACKGROUND
+#define DIAL_TEXT THEME_TEXT
+#define DIAL_HINT THEME_HINT
+#define DIAL_DIVIDER THEME_DIVIDER
+
+#define PRESS_FLASH_MS 150
+
+// Phone handset centred on (0, 0) and 180 units across; scaled to fit a key.
+static const GPoint HANDSET_POINTS[] = {
+  {-54, -12}, {-38, 13}, {-14, 38}, {12, 54}, {34, 32}, {44, 29}, {62, 34}, {80, 35},
+  {90, 45}, {90, 80}, {80, 90}, {47, 87}, {15, 77}, {-14, 61}, {-40, 40}, {-61, 14},
+  {-77, -15}, {-87, -47}, {-90, -80}, {-80, -90}, {-45, -90}, {-35, -80}, {-29, -44},
+  {-32, -34},
+};
+
+#if defined(PBL_ROUND)
+static int16_t isqrt(int32_t value) {
+  int32_t root = 0;
+  while ((root + 1) * (root + 1) <= value) {
+    root++;
+  }
+  return root;
+}
+#endif
+
+static void dial_layout(GRect bounds) {
+  const int16_t w = bounds.size.w;
+  const int16_t h = bounds.size.h;
+#if defined(PBL_ROUND)
+  // Each row is as wide as the circle allows at its outer edge, so the
+  // middle rows get the widest keys and nothing is clipped.
+  const int16_t gap = 3;
+  const int16_t radius = w / 2;
+  const int16_t grid_top = h * 27 / 100;
+  const int16_t grid_bottom = h * 90 / 100;
+  const int16_t key_h = (grid_bottom - grid_top - 4 * gap) / 5;
+  for (int row = 0; row < 5; row++) {
+    const int16_t top = grid_top + row * (key_h + gap);
+    const int16_t far = MAX(h / 2 - top, top + key_h - h / 2);
+    const int16_t row_w = MIN(2 * (isqrt(radius * radius - far * far) - gap), w * 78 / 100);
+    const int16_t key_w = (row_w - 2 * gap) / 3;
+    const int16_t left = (w - (3 * key_w + 2 * gap)) / 2;
+    for (int col = 0; col < 3; col++) {
+      s_key_rects[row * 3 + col] = GRect(left + col * (key_w + gap), top, key_w, key_h);
+    }
+  }
+  const int16_t display_w = w * 64 / 100;
+  s_display_rect = GRect((w - display_w) / 2, h * 9 / 100, display_w,
+                         grid_top - h * 9 / 100 - gap);
+#else
+  const int16_t gap = w >= 180 ? 4 : 3;
+  const int16_t grid_w = w - 2 * gap;
+  const int16_t grid_top = h * 20 / 100;
+  const int16_t key_w = (grid_w - 2 * gap) / 3;
+  const int16_t key_h = (h - gap - grid_top - 4 * gap) / 5;
+  for (int i = 0; i < KEY_COUNT; i++) {
+    s_key_rects[i] = GRect(gap + (i % 3) * (key_w + gap),
+                           grid_top + (i / 3) * (key_h + gap), key_w, key_h);
+  }
+  s_display_rect = GRect(gap, 0, grid_w, grid_top - gap);
+#endif
+
+  s_key_font = fonts_get_system_font(key_h >= 30 ? FONT_KEY_GOTHIC_28_BOLD
+                                     : key_h >= 24 ? FONT_KEY_GOTHIC_24_BOLD
+                                     : FONT_KEY_GOTHIC_18_BOLD);
+  s_number_font = fonts_get_system_font(s_display_rect.size.h >= 36 ? FONT_KEY_GOTHIC_28_BOLD
+                                        : FONT_KEY_GOTHIC_24_BOLD);
+  s_number_small_font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
+  s_icon_size = key_h * 7 / 10;
+}
+
+static void dial_create_handset(void) {
+  for (size_t i = 0; i < ARRAY_LENGTH(HANDSET_POINTS); i++) {
+    s_handset_points[i] = GPoint(HANDSET_POINTS[i].x * s_icon_size / 180,
+                                 HANDSET_POINTS[i].y * s_icon_size / 180);
+  }
+  s_handset_info = (GPathInfo) {
+    .num_points = ARRAY_LENGTH(HANDSET_POINTS),
+    .points = s_handset_points,
+  };
+  s_handset_path = gpath_create(&s_handset_info);
+}
+
+static GPoint rect_center(GRect rect) {
+  return GPoint(rect.origin.x + rect.size.w / 2, rect.origin.y + rect.size.h / 2);
+}
+
+// Backspace: a tag pointing left with a cross in it.
+static void draw_delete_icon(GContext *ctx, GPoint center, int16_t size) {
+  const int16_t half_w = size * 6 / 10;
+  const int16_t half_h = size * 4 / 10;
+  const int16_t notch = half_h;
+  const GPoint left = GPoint(center.x - half_w, center.y);
+  const GPoint top_left = GPoint(center.x - half_w + notch, center.y - half_h);
+  const GPoint top_right = GPoint(center.x + half_w, center.y - half_h);
+  const GPoint bottom_right = GPoint(center.x + half_w, center.y + half_h);
+  const GPoint bottom_left = GPoint(center.x - half_w + notch, center.y + half_h);
+  graphics_draw_line(ctx, left, top_left);
+  graphics_draw_line(ctx, top_left, top_right);
+  graphics_draw_line(ctx, top_right, bottom_right);
+  graphics_draw_line(ctx, bottom_right, bottom_left);
+  graphics_draw_line(ctx, bottom_left, left);
+
+  const int16_t cross = half_h / 2;
+  const int16_t cross_x = center.x + notch / 2;
+  graphics_draw_line(ctx, GPoint(cross_x - cross, center.y - cross),
+                     GPoint(cross_x + cross, center.y + cross));
+  graphics_draw_line(ctx, GPoint(cross_x + cross, center.y - cross),
+                     GPoint(cross_x - cross, center.y + cross));
+}
+
+static void draw_key(GContext *ctx, int key) {
+  const GRect rect = s_key_rects[key];
+  const bool pressed = key == s_pressed_key;
+  const bool focused = s_show_focus && key == s_key;
+  const uint16_t radius = rect.size.h / 4;
+
+#if defined(PBL_COLOR)
+  GColor fill;
+  GColor ink = GColorWhite;
+  if (key == KEY_CALL) {
+    fill = pressed ? GColorMalachite : GColorJaegerGreen;
+  } else if (key == KEY_DELETE) {
+    fill = pressed ? GColorSunsetOrange : GColorOrange;
+  } else {
+    fill = pressed ? GColorLightGray : GColorDarkGray;
+    ink = pressed ? GColorBlack : GColorWhite;
+  }
+
+  graphics_context_set_fill_color(ctx, fill);
+  graphics_fill_rect(ctx, rect, radius, GCornersAll);
+  if (focused) {
+    graphics_context_set_stroke_color(ctx, GColorWhite);
+    graphics_context_set_stroke_width(ctx, 3);
+    graphics_draw_round_rect(ctx, grect_inset(rect, GEdgeInsets(1)), radius);
+  }
+#else
+  // The Call key is solid and inverts to an outline; the others do the opposite.
+  const bool inverted = (focused || pressed) != (key == KEY_CALL);
+  const GColor fill = inverted ? GColorBlack : GColorWhite;
+  const GColor ink = inverted ? GColorWhite : GColorBlack;
+
+  graphics_context_set_fill_color(ctx, fill);
+  graphics_fill_rect(ctx, rect, radius, GCornersAll);
+  graphics_context_set_stroke_color(ctx, GColorBlack);
+  // A heavier outline keeps the highlight visible on the Call key as well.
+  graphics_context_set_stroke_width(ctx, focused ? 3 : 1);
+  graphics_draw_round_rect(ctx, focused ? grect_inset(rect, GEdgeInsets(1)) : rect, radius);
+#endif
+
+  const GPoint center = rect_center(rect);
+  if (key == KEY_CALL) {
+    graphics_context_set_fill_color(ctx, ink);
+    gpath_move_to(s_handset_path, center);
+    gpath_draw_filled(ctx, s_handset_path);
+  } else if (key == KEY_DELETE) {
+    graphics_context_set_stroke_color(ctx, ink);
+    graphics_context_set_stroke_width(ctx, 2);
+    draw_delete_icon(ctx, center, s_icon_size);
+  } else {
+    // Gothic glyphs sit low in their line box, so lift the text to centre it.
+    const GSize text = graphics_text_layout_get_content_size(
+      s_keys[key], s_key_font, rect, GTextOverflowModeFill, GTextAlignmentCenter);
+    const int16_t lift = text.h / 4;
+    graphics_context_set_text_color(ctx, ink);
+    graphics_draw_text(ctx, s_keys[key], s_key_font,
+                       GRect(rect.origin.x, center.y - text.h / 2 - lift, rect.size.w, text.h + lift),
+                       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
   }
 }
 
-static void dial_up(ClickRecognizerRef recognizer, void *context) {
-  s_key = (s_key + 14) % 15;
-  layer_mark_dirty(s_dial_layer);
+static void draw_number(GContext *ctx) {
+  const GRect area = s_display_rect;
+  if (!s_number[0]) {
+    graphics_context_set_text_color(ctx, DIAL_HINT);
+    const GSize text = graphics_text_layout_get_content_size(
+      "Enter number", s_number_small_font, area, GTextOverflowModeFill, GTextAlignmentCenter);
+    graphics_draw_text(ctx, "Enter number", s_number_small_font,
+                       GRect(area.origin.x, area.origin.y + (area.size.h - text.h) / 2 - 3,
+                             area.size.w, text.h + 4),
+                       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+    return;
+  }
+
+  // Use the large font while the number fits; then the small one; then show
+  // the end of the number, which is the part being typed.
+  GFont font = s_number_font;
+  const char *text = s_number;
+  static char tail[NUMBER_SIZE + 4];
+  const GRect wide = GRect(0, 0, 1000, area.size.h);
+  if (graphics_text_layout_get_content_size(text, font, wide, GTextOverflowModeFill,
+                                            GTextAlignmentLeft).w > area.size.w) {
+    font = s_number_small_font;
+    for (size_t start = 0; s_number[start]; start++) {
+      snprintf(tail, sizeof(tail), start ? "...%s" : "%s", s_number + start);
+      if (graphics_text_layout_get_content_size(tail, font, wide, GTextOverflowModeFill,
+                                                GTextAlignmentLeft).w <= area.size.w) {
+        break;
+      }
+    }
+    text = tail;
+  }
+
+  const GSize size = graphics_text_layout_get_content_size(
+    text, font, area, GTextOverflowModeFill, GTextAlignmentCenter);
+  graphics_context_set_text_color(ctx, DIAL_TEXT);
+  graphics_draw_text(ctx, text, font,
+                     GRect(area.origin.x, area.origin.y + (area.size.h - size.h) / 2 - size.h / 5,
+                           area.size.w, size.h + size.h / 5),
+                     GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 }
 
-static void dial_down(ClickRecognizerRef recognizer, void *context) {
-  s_key = (s_key + 1) % 15;
-  layer_mark_dirty(s_dial_layer);
+static void dial_draw(Layer *layer, GContext *ctx) {
+  graphics_context_set_fill_color(ctx, DIAL_BACKGROUND);
+  graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
+
+  draw_number(ctx);
+  graphics_context_set_stroke_color(ctx, DIAL_DIVIDER);
+  graphics_context_set_stroke_width(ctx, 1);
+  const int16_t divider_y = s_display_rect.origin.y + s_display_rect.size.h;
+  graphics_draw_line(ctx, GPoint(s_display_rect.origin.x + 8, divider_y),
+                     GPoint(s_display_rect.origin.x + s_display_rect.size.w - 9, divider_y));
+
+  for (int i = 0; i < KEY_COUNT; i++) {
+    draw_key(ctx, i);
+  }
 }
 
-static void dial_select(ClickRecognizerRef recognizer, void *context) {
+static void dial_press(int key) {
   size_t length = strlen(s_number);
-  if (s_key == 13) {
+  if (key == KEY_DELETE) {
     if (length) s_number[length - 1] = '\0';
-  } else if (s_key == 14) {
+  } else if (key == KEY_CALL) {
     bool has_digit = false;
     for (size_t i = 0; i < length; i++) {
       if (s_number[i] >= '0' && s_number[i] <= '9') has_digit = true;
@@ -730,13 +975,39 @@ static void dial_select(ClickRecognizerRef recognizer, void *context) {
     } else {
       vibes_short_pulse();
     }
-  } else if (length < NUMBER_SIZE - 1 && (s_key != 12 || length == 0)) {
-    s_number[length] = s_keys[s_key][0];
+  } else if (length < NUMBER_SIZE - 1 && (key != KEY_PLUS || length == 0)) {
+    s_number[length] = s_keys[key][0];
     s_number[length + 1] = '\0';
   } else {
     vibes_short_pulse();
   }
   layer_mark_dirty(s_dial_layer);
+}
+
+static void dial_up(ClickRecognizerRef recognizer, void *context) {
+  if (s_show_focus) {
+    s_key = (s_key + KEY_COUNT - 1) % KEY_COUNT;
+  }
+  s_show_focus = true;
+  layer_mark_dirty(s_dial_layer);
+}
+
+static void dial_down(ClickRecognizerRef recognizer, void *context) {
+  if (s_show_focus) {
+    s_key = (s_key + 1) % KEY_COUNT;
+  }
+  s_show_focus = true;
+  layer_mark_dirty(s_dial_layer);
+}
+
+static void dial_select(ClickRecognizerRef recognizer, void *context) {
+  if (!s_show_focus) {
+    // After using touch, the first press only shows where the highlight is.
+    s_show_focus = true;
+    layer_mark_dirty(s_dial_layer);
+    return;
+  }
+  dial_press(s_key);
 }
 
 static void dial_click_config(void *context) {
@@ -745,17 +1016,79 @@ static void dial_click_config(void *context) {
   window_single_click_subscribe(BUTTON_ID_SELECT, dial_select);
 }
 
+#if defined(DIAL_TOUCH)
+static void dial_clear_press(void *context) {
+  s_press_timer = NULL;
+  s_pressed_key = -1;
+  if (s_dial_layer) {
+    layer_mark_dirty(s_dial_layer);
+  }
+}
+
+// The key under a point, counting the gaps between keys so there are no dead spots.
+static int dial_key_at(GPoint point) {
+  for (int i = 0; i < KEY_COUNT; i++) {
+    const GRect target = grect_inset(s_key_rects[i], GEdgeInsets(-2));
+    if (grect_contains_point(&target, &point)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+static void dial_tap(const Recognizer *recognizer, RecognizerEvent event) {
+  if (event != RecognizerEvent_Completed) {
+    return;
+  }
+  const int key = dial_key_at(tap_recognizer_get_tap_point(recognizer));
+  if (key < 0) {
+    return;
+  }
+
+  s_key = key;
+  s_show_focus = false;
+  s_pressed_key = key;
+  if (s_press_timer) {
+    app_timer_cancel(s_press_timer);
+  }
+  s_press_timer = app_timer_register(PRESS_FLASH_MS, dial_clear_press, NULL);
+  dial_press(key);
+}
+#endif
+
 static void dial_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
-  window_set_background_color(window, GColorWhite);
-  s_dial_layer = layer_create(layer_get_bounds(root));
+  const GRect bounds = layer_get_bounds(root);
+  window_set_background_color(window, DIAL_BACKGROUND);
+  dial_layout(bounds);
+  dial_create_handset();
+
+  s_dial_layer = layer_create(bounds);
   layer_set_update_proc(s_dial_layer, dial_draw);
   layer_add_child(root, s_dial_layer);
+
+  s_show_focus = true;
+#if defined(DIAL_TOUCH)
+  if (touch_service_is_enabled()) {
+    // Taps go to the keys instead of being turned into button presses, and
+    // the button highlight stays hidden until a button is used.
+    s_show_focus = false;
+    window_set_touch_bridge_disabled(window, true);
+    window_attach_recognizer(window, tap_recognizer_create(dial_tap, NULL));
+  }
+#endif
 }
 
 static void dial_window_unload(Window *window) {
+  if (s_press_timer) {
+    app_timer_cancel(s_press_timer);
+    s_press_timer = NULL;
+  }
+  s_pressed_key = -1;
   layer_destroy(s_dial_layer);
   s_dial_layer = NULL;
+  gpath_destroy(s_handset_path);
+  s_handset_path = NULL;
   window_destroy(window);
   s_dial_window = NULL;
 }
@@ -845,12 +1178,16 @@ static void main_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cel
   const int16_t middle = bounds.size.h / 2;
 
   // Match the colours set in main_window_load so icons invert with the text.
+  // On colour watches the Dialer and Favorites icons keep the keypad's accents.
   const GColor foreground = menu_cell_layer_is_highlighted(cell_layer)
-    ? GColorWhite
-    : GColorBlack;
-  graphics_context_set_fill_color(ctx, foreground);
+    ? THEME_HIGHLIGHT_TEXT
+    : THEME_TEXT;
+  const GColor icon_color = PBL_IF_COLOR_ELSE(
+    row == MAIN_ROW_DIALER ? THEME_CALL : row == MAIN_ROW_FAVORITES ? THEME_WARNING : foreground,
+    foreground);
+  graphics_context_set_fill_color(ctx, icon_color);
   const GPoint icon_origin = GPoint(left, middle - ICON_SIZE / 2);
-  graphics_context_set_stroke_color(ctx, foreground);
+  graphics_context_set_stroke_color(ctx, icon_color);
   if (row == MAIN_ROW_DIALER) {
     for (int i = 0; i < 9; i++) {
       graphics_fill_circle(ctx, GPoint(icon_origin.x + 5 + (i % 3) * 7,
@@ -893,8 +1230,8 @@ static void main_window_load(Window *window) {
     .draw_row = main_draw_row,
     .select_click = main_select,
   });
-  menu_layer_set_normal_colors(s_main_menu_layer, GColorWhite, GColorBlack);
-  menu_layer_set_highlight_colors(s_main_menu_layer, GColorBlack, GColorWhite);
+  menu_layer_set_normal_colors(s_main_menu_layer, THEME_BACKGROUND, THEME_TEXT);
+  menu_layer_set_highlight_colors(s_main_menu_layer, THEME_HIGHLIGHT, THEME_HIGHLIGHT_TEXT);
   menu_layer_set_click_config_onto_window(s_main_menu_layer, window);
   layer_add_child(root, menu_layer_get_layer(s_main_menu_layer));
   s_star_path = gpath_create(&STAR_PATH_INFO);
