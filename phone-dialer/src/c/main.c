@@ -7,12 +7,14 @@
 enum {
   REQUEST_LIST = 1,
   REQUEST_CALL = 2,
+  REQUEST_DIAL = 3,
 };
 
 enum {
   LIST_FAVORITES = 0,
   LIST_LETTERS = 1,
   LIST_CONTACTS = 2,
+  LIST_RECENTS = 3,
 };
 
 enum {
@@ -20,6 +22,8 @@ enum {
   RESULT_FAILED = 1,
   RESULT_PERMISSION_REQUIRED = 2,
   RESULT_NOT_FOUND = 3,
+  RESULT_CALL_LOG_PERMISSION = 4,
+  RESULT_INVALID_NUMBER = 5,
 };
 
 // Separators the companion uses inside the ITEMS string.
@@ -34,7 +38,9 @@ enum {
 #define MAX_INBOX_SIZE 2048
 // Room for the dictionary header and the non-ITEMS tuples in each reply.
 #define INBOX_OVERHEAD 80
-#define OUTBOX_SIZE 96
+#define OUTBOX_SIZE 128
+#define NUMBER_SIZE 32
+#define TOKEN_STORAGE_KEY 1
 
 #ifndef MIN
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -54,7 +60,7 @@ enum {
 #define ROW_MARGIN 8
 
 typedef struct {
-  int32_t id;
+  char id[21];
   char title[TITLE_SIZE];
   char subtitle[SUBTITLE_SIZE];
 } Entry;
@@ -81,6 +87,8 @@ typedef struct {
 } ListView;
 
 typedef enum {
+  MAIN_ROW_DIALER,
+  MAIN_ROW_RECENTS,
   MAIN_ROW_FAVORITES,
   MAIN_ROW_CONTACTS,
   MAIN_ROW_COUNT,
@@ -94,6 +102,15 @@ static Window *s_call_window;
 static TextLayer *s_call_status_layer;
 static TextLayer *s_call_name_layer;
 static char s_call_name[TITLE_SIZE];
+static Entry s_call_entry;
+static int32_t s_call_source;
+static bool s_call_submitted;
+static Window *s_dial_window;
+static Layer *s_dial_layer;
+static char s_number[NUMBER_SIZE];
+static uint8_t s_key;
+static const char *s_keys[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9",
+                               "*", "0", "#", "+", "Del", "Call" };
 
 // Only one request is in flight at a time. Replies carry the request's token,
 // so anything left over from an abandoned request is ignored.
@@ -122,7 +139,11 @@ static const char *result_message(int32_t result) {
     case RESULT_PERMISSION_REQUIRED:
       return "Allow access on phone";
     case RESULT_NOT_FOUND:
-      return "Number not found";
+      return "Number unavailable";
+    case RESULT_CALL_LOG_PERMISSION:
+      return "Allow call history";
+    case RESULT_INVALID_NUMBER:
+      return "Invalid number";
     default:
       return "Phone error";
   }
@@ -152,7 +173,8 @@ static void fail_request(const char *message) {
   s_waiting_list = NULL;
   s_waiting_call = false;
   // Ignore any late replies to the request that just failed.
-  s_token++;
+  s_token = s_token >= INT32_MAX ? 1 : s_token + 1;
+  persist_write_int(TOKEN_STORAGE_KEY, s_token);
 
   if (view) {
     list_show_error(view, message);
@@ -188,7 +210,8 @@ static DictionaryIterator *begin_request(int32_t request, const char **error) {
   cancel_response_timer();
   s_waiting_list = NULL;
   s_waiting_call = false;
-  s_token++;
+  s_token = s_token >= INT32_MAX ? 1 : s_token + 1;
+  persist_write_int(TOKEN_STORAGE_KEY, s_token);
 
   dict_write_int32(iterator, MESSAGE_KEY_REQUEST, request);
   dict_write_int32(iterator, MESSAGE_KEY_TOKEN, s_token);
@@ -267,7 +290,8 @@ static void list_finish_page(ListView *view) {
 
   view->state = LIST_STATE_READY;
   if (view->total == 0) {
-    view->message = view->list == LIST_FAVORITES ? "No favorites" : "No contacts";
+    view->message = view->list == LIST_RECENTS ? "No recent calls"
+      : view->list == LIST_FAVORITES ? "No favorites" : "No contacts";
   }
   menu_layer_reload_data(view->menu_layer);
 
@@ -298,14 +322,6 @@ static void copy_field(char *dest, size_t size, const char *start, const char *e
   dest[length] = '\0';
 }
 
-static int32_t parse_int(const char *start, const char *end) {
-  int32_t value = 0;
-  for (const char *c = start; c < end && *c >= '0' && *c <= '9'; c++) {
-    value = value * 10 + (*c - '0');
-  }
-  return value;
-}
-
 // ITEMS holds entries separated by ENTRY_SEPARATOR, each made of
 // "id FIELD_SEPARATOR title FIELD_SEPARATOR subtitle".
 static void list_store_items(ListView *view, int32_t first_index, const char *items) {
@@ -329,7 +345,7 @@ static void list_store_items(ListView *view, int32_t first_index, const char *it
 
     if (slot >= 0) {
       Entry *target = &view->entries[slot];
-      target->id = parse_int(fields[0], field_ends[0]);
+      copy_field(target->id, sizeof(target->id), fields[0], field_ends[0]);
       copy_field(target->title, sizeof(target->title), fields[1], field_ends[1]);
       copy_field(target->subtitle, sizeof(target->subtitle), fields[2], field_ends[2]);
       if (slot + 1 > view->received) {
@@ -430,7 +446,7 @@ static void list_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cel
   menu_cell_basic_draw(ctx, cell_layer, entry->title, entry->subtitle, NULL);
 }
 
-static void call_window_push(const Entry *entry);
+static void call_window_push(const Entry *entry, int32_t source);
 
 static void list_select(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
   ListView *view = context;
@@ -461,7 +477,7 @@ static void list_select(MenuLayer *menu_layer, MenuIndex *cell_index, void *cont
   if (view->list == LIST_LETTERS) {
     list_window_push(LIST_CONTACTS, entry->title);
   } else {
-    call_window_push(entry);
+    call_window_push(entry, view->list);
   }
 }
 
@@ -491,7 +507,8 @@ static void list_window_unload(Window *window) {
   if (s_waiting_list == view) {
     cancel_response_timer();
     s_waiting_list = NULL;
-    s_token++;
+    s_token = s_token >= INT32_MAX ? 1 : s_token + 1;
+    persist_write_int(TOKEN_STORAGE_KEY, s_token);
   }
   menu_layer_destroy(view->menu_layer);
   window_destroy(window);
@@ -510,6 +527,9 @@ static void list_window_push(int32_t list, const char *filter) {
     strncpy(view->filter, filter, sizeof(view->filter) - 1);
   }
   switch (list) {
+    case LIST_RECENTS:
+      strncpy(view->heading, "Recent calls", sizeof(view->heading) - 1);
+      break;
     case LIST_FAVORITES:
       strncpy(view->heading, "Favorites", sizeof(view->heading) - 1);
       break;
@@ -553,7 +573,7 @@ static void call_handle_reply(int32_t result) {
 
   cancel_response_timer();
   s_waiting_call = false;
-  call_show_status("Calling");
+  call_show_status("Sent to phone");
   vibes_short_pulse();
 
   // Hand over to the phone's call screen once the call is placed.
@@ -569,15 +589,16 @@ static void call_window_load(Window *window) {
   const int16_t inset = PBL_IF_ROUND_ELSE(18, 6);
   const int16_t middle = bounds.size.h / 2;
 
-  s_call_status_layer = text_layer_create(GRect(inset, middle - 44, bounds.size.w - 2 * inset, 24));
+  s_call_status_layer = text_layer_create(GRect(inset, middle - 50, bounds.size.w - 2 * inset, 44));
   text_layer_set_font(s_call_status_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
   text_layer_set_text_alignment(s_call_status_layer, GTextAlignmentCenter);
   text_layer_set_background_color(s_call_status_layer, GColorClear);
   text_layer_set_text_color(s_call_status_layer, GColorBlack);
   layer_add_child(root, text_layer_get_layer(s_call_status_layer));
 
-  s_call_name_layer = text_layer_create(GRect(inset, middle - 20, bounds.size.w - 2 * inset, 64));
-  text_layer_set_font(s_call_name_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+  s_call_name_layer = text_layer_create(GRect(inset, middle - 4, bounds.size.w - 2 * inset, 72));
+  text_layer_set_font(s_call_name_layer, fonts_get_system_font(
+      s_call_source == -1 ? FONT_KEY_GOTHIC_18_BOLD : FONT_KEY_GOTHIC_24_BOLD));
   text_layer_set_text_alignment(s_call_name_layer, GTextAlignmentCenter);
   text_layer_set_overflow_mode(s_call_name_layer, GTextOverflowModeTrailingEllipsis);
   text_layer_set_background_color(s_call_name_layer, GColorClear);
@@ -590,7 +611,8 @@ static void call_window_unload(Window *window) {
   if (s_waiting_call) {
     cancel_response_timer();
     s_waiting_call = false;
-    s_token++;
+    s_token = s_token >= INT32_MAX ? 1 : s_token + 1;
+    persist_write_int(TOKEN_STORAGE_KEY, s_token);
   }
   cancel_exit_timer();
   text_layer_destroy(s_call_status_layer);
@@ -601,7 +623,40 @@ static void call_window_unload(Window *window) {
   s_call_window = NULL;
 }
 
-static void call_window_push(const Entry *entry) {
+static void call_submit(ClickRecognizerRef recognizer, void *context) {
+  if (s_call_submitted) {
+    return;
+  }
+  const char *error = NULL;
+  DictionaryIterator *iterator = begin_request(s_call_source == -1 ? REQUEST_DIAL : REQUEST_CALL, &error);
+  if (!iterator) {
+    call_show_status(error);
+    return;
+  }
+  if (s_call_source == -1) {
+    dict_write_cstring(iterator, MESSAGE_KEY_NUMBER, s_call_name);
+  } else {
+    dict_write_cstring(iterator, MESSAGE_KEY_ITEM_ID, s_call_entry.id);
+    dict_write_int32(iterator, MESSAGE_KEY_LIST, s_call_source);
+  }
+  if (!send_request(&error)) {
+    call_show_status(error);
+    return;
+  }
+  // Never automatically retry a call after a lost reply: it may already be dialing.
+  s_call_submitted = true;
+  s_waiting_call = true;
+  call_show_status("Sending call...");
+}
+
+static void call_click_config(void *context) {
+  window_single_click_subscribe(BUTTON_ID_SELECT, call_submit);
+}
+
+static void call_window_push(const Entry *entry, int32_t source) {
+  s_call_entry = *entry;
+  s_call_source = source;
+  s_call_submitted = false;
   strncpy(s_call_name, entry->title, sizeof(s_call_name) - 1);
   s_call_name[sizeof(s_call_name) - 1] = '\0';
 
@@ -610,21 +665,109 @@ static void call_window_push(const Entry *entry) {
     .load = call_window_load,
     .unload = call_window_unload,
   });
+  window_set_click_config_provider(s_call_window, call_click_config);
   window_stack_push(s_call_window, true);
-  call_show_status("Dialing...");
+  if (source != -1 && (!entry->id[0] || strcmp(entry->id, "0") == 0)) {
+    s_call_submitted = true;
+    call_show_status("Number unavailable");
+  } else {
+    call_show_status("Select to call");
+  }
+}
 
-  const char *error = NULL;
-  DictionaryIterator *iterator = begin_request(REQUEST_CALL, &error);
-  if (!iterator) {
-    call_show_status(error);
-    return;
+// ---------------------------------------------------------------------------
+// Number keypad: Up/Down move, Select enters, Del removes, Call confirms.
+
+static void dial_draw(Layer *layer, GContext *ctx) {
+  GRect bounds = layer_get_bounds(layer);
+  graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_draw_text(ctx, "Dialer", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+      GRect(12, 3, bounds.size.w - 24, 24), GTextOverflowModeTrailingEllipsis,
+      GTextAlignmentCenter, NULL);
+  graphics_draw_text(ctx, s_number[0] ? s_number : "Enter number",
+      fonts_get_system_font(FONT_KEY_GOTHIC_18),
+      GRect(20, 26, bounds.size.w - 40, 42), GTextOverflowModeTrailingEllipsis,
+      GTextAlignmentCenter, NULL);
+  int width = PBL_IF_ROUND_ELSE(108, 120);
+  int left = (bounds.size.w - width) / 2;
+  int top = bounds.size.h / 2 - 18;
+  int height = (bounds.size.h - top - 12) / 5;
+  for (int i = 0; i < 15; i++) {
+    GRect cell = GRect(left + (i % 3) * (width / 3), top + (i / 3) * height,
+                      width / 3 - 2, height - 1);
+    graphics_context_set_fill_color(ctx, i == s_key ? GColorBlack : GColorWhite);
+    graphics_fill_rect(ctx, cell, 3, GCornersAll);
+    graphics_context_set_text_color(ctx, i == s_key ? GColorWhite : GColorBlack);
+    cell.origin.y -= 3;
+    graphics_draw_text(ctx, s_keys[i], fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+        cell, GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
   }
-  dict_write_int32(iterator, MESSAGE_KEY_ITEM_ID, entry->id);
-  if (!send_request(&error)) {
-    call_show_status(error);
-    return;
+}
+
+static void dial_up(ClickRecognizerRef recognizer, void *context) {
+  s_key = (s_key + 14) % 15;
+  layer_mark_dirty(s_dial_layer);
+}
+
+static void dial_down(ClickRecognizerRef recognizer, void *context) {
+  s_key = (s_key + 1) % 15;
+  layer_mark_dirty(s_dial_layer);
+}
+
+static void dial_select(ClickRecognizerRef recognizer, void *context) {
+  size_t length = strlen(s_number);
+  if (s_key == 13) {
+    if (length) s_number[length - 1] = '\0';
+  } else if (s_key == 14) {
+    bool has_digit = false;
+    for (size_t i = 0; i < length; i++) {
+      if (s_number[i] >= '0' && s_number[i] <= '9') has_digit = true;
+    }
+    if (has_digit) {
+      Entry entry = {0};
+      strncpy(entry.title, s_number, sizeof(entry.title) - 1);
+      call_window_push(&entry, -1);
+    } else {
+      vibes_short_pulse();
+    }
+  } else if (length < NUMBER_SIZE - 1 && (s_key != 12 || length == 0)) {
+    s_number[length] = s_keys[s_key][0];
+    s_number[length + 1] = '\0';
+  } else {
+    vibes_short_pulse();
   }
-  s_waiting_call = true;
+  layer_mark_dirty(s_dial_layer);
+}
+
+static void dial_click_config(void *context) {
+  window_single_repeating_click_subscribe(BUTTON_ID_UP, 150, dial_up);
+  window_single_repeating_click_subscribe(BUTTON_ID_DOWN, 150, dial_down);
+  window_single_click_subscribe(BUTTON_ID_SELECT, dial_select);
+}
+
+static void dial_window_load(Window *window) {
+  Layer *root = window_get_root_layer(window);
+  window_set_background_color(window, GColorWhite);
+  s_dial_layer = layer_create(layer_get_bounds(root));
+  layer_set_update_proc(s_dial_layer, dial_draw);
+  layer_add_child(root, s_dial_layer);
+}
+
+static void dial_window_unload(Window *window) {
+  layer_destroy(s_dial_layer);
+  s_dial_layer = NULL;
+  window_destroy(window);
+  s_dial_window = NULL;
+}
+
+static void dial_window_push(void) {
+  s_dial_window = window_create();
+  window_set_click_config_provider(s_dial_window, dial_click_config);
+  window_set_window_handlers(s_dial_window, (WindowHandlers) {
+    .load = dial_window_load,
+    .unload = dial_window_unload,
+  });
+  window_stack_push(s_dial_window, true);
 }
 
 // ---------------------------------------------------------------------------
@@ -663,7 +806,12 @@ static void outbox_failed(DictionaryIterator *iterator, AppMessageResult reason,
 // Main menu
 
 static const char *main_row_title(MainRow row) {
-  return row == MAIN_ROW_FAVORITES ? "Favorites" : "Contacts";
+  switch (row) {
+    case MAIN_ROW_DIALER: return "Dialer";
+    case MAIN_ROW_RECENTS: return "Recent calls";
+    case MAIN_ROW_FAVORITES: return "Favorites";
+    default: return "Contacts";
+  }
 }
 
 static void draw_star_icon(GContext *ctx, GPoint origin) {
@@ -702,7 +850,18 @@ static void main_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cel
     : GColorBlack;
   graphics_context_set_fill_color(ctx, foreground);
   const GPoint icon_origin = GPoint(left, middle - ICON_SIZE / 2);
-  if (row == MAIN_ROW_FAVORITES) {
+  graphics_context_set_stroke_color(ctx, foreground);
+  if (row == MAIN_ROW_DIALER) {
+    for (int i = 0; i < 9; i++) {
+      graphics_fill_circle(ctx, GPoint(icon_origin.x + 5 + (i % 3) * 7,
+          icon_origin.y + 5 + (i / 3) * 7), 2);
+    }
+  } else if (row == MAIN_ROW_RECENTS) {
+    GPoint center = GPoint(icon_origin.x + 12, icon_origin.y + 12);
+    graphics_draw_circle(ctx, center, 10);
+    graphics_draw_line(ctx, center, GPoint(center.x, center.y - 7));
+    graphics_draw_line(ctx, center, GPoint(center.x + 5, center.y + 3));
+  } else if (row == MAIN_ROW_FAVORITES) {
     draw_star_icon(ctx, icon_origin);
   } else {
     draw_person_icon(ctx, icon_origin);
@@ -717,7 +876,12 @@ static void main_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cel
 }
 
 static void main_select(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
-  list_window_push(cell_index->row == MAIN_ROW_FAVORITES ? LIST_FAVORITES : LIST_LETTERS, NULL);
+  switch (cell_index->row) {
+    case MAIN_ROW_DIALER: dial_window_push(); break;
+    case MAIN_ROW_RECENTS: list_window_push(LIST_RECENTS, NULL); break;
+    case MAIN_ROW_FAVORITES: list_window_push(LIST_FAVORITES, NULL); break;
+    default: list_window_push(LIST_LETTERS, NULL); break;
+  }
 }
 
 static void main_window_load(Window *window) {
@@ -742,6 +906,7 @@ static void main_window_unload(Window *window) {
 }
 
 static void init(void) {
+  s_token = persist_read_int(TOKEN_STORAGE_KEY);
   app_message_register_inbox_received(inbox_received);
   app_message_register_inbox_dropped(inbox_dropped);
   app_message_register_outbox_failed(outbox_failed);

@@ -47,18 +47,23 @@ public final class DialerService extends BaseJavaPebbleListenerService {
     private static final int KEY_TOTAL = 10;
     private static final int KEY_ITEMS = 11;
     private static final int KEY_FINAL = 12;
+    private static final int KEY_NUMBER = 13;
 
     private static final int REQUEST_LIST = 1;
     private static final int REQUEST_CALL = 2;
+    private static final int REQUEST_DIAL = 3;
 
     private static final int LIST_FAVORITES = 0;
     private static final int LIST_LETTERS = 1;
     private static final int LIST_CONTACTS = 2;
+    private static final int LIST_RECENTS = 3;
 
     private static final int RESULT_OK = 0;
     private static final int RESULT_FAILED = 1;
     private static final int RESULT_PERMISSION_REQUIRED = 2;
     private static final int RESULT_NOT_FOUND = 3;
+    private static final int RESULT_CALL_LOG_PERMISSION = 4;
+    private static final int RESULT_INVALID_NUMBER = 5;
 
     // Separators the watch splits ITEMS on; stripped from names before sending.
     private static final char FIELD_SEPARATOR = '\u001f';
@@ -74,6 +79,12 @@ public final class DialerService extends BaseJavaPebbleListenerService {
     // Only the newest request's pages are worth sending.
     private final AtomicInteger latestToken = new AtomicInteger();
     private JavaPebbleSender sender;
+    // Accessed only on executor. Retransmitted call messages must not dial twice.
+    private final Map<String, Integer> callResults = new java.util.LinkedHashMap<String, Integer>() {
+        @Override protected boolean removeEldestEntry(Map.Entry<String, Integer> eldest) {
+            return size() > 64;
+        }
+    };
 
     @Override
     public void onCreate() {
@@ -106,7 +117,7 @@ public final class DialerService extends BaseJavaPebbleListenerService {
 
         int request = intValue(data.get(KEY_REQUEST), -1);
         int token = intValue(data.get(KEY_TOKEN), 0);
-        if (request != REQUEST_LIST && request != REQUEST_CALL) {
+        if (request != REQUEST_LIST && request != REQUEST_CALL && request != REQUEST_DIAL) {
             responder.accept(ReceiveResult.Nack.INSTANCE);
             return;
         }
@@ -120,26 +131,38 @@ public final class DialerService extends BaseJavaPebbleListenerService {
             if (request == REQUEST_LIST) {
                 sendList(watch, token, requestData);
             } else {
-                int result = placeCall(intValue(requestData.get(KEY_ITEM_ID), -1));
+                String callKey = watch + ":" + token;
+                Integer result = callResults.get(callKey);
+                if (result == null) {
+                    result = placeCall(request, requestData);
+                    callResults.put(callKey, result);
+                }
                 send(watch, token, Collections.singletonList(resultMessage(token, result)), 0);
             }
         });
     }
 
     private void sendList(String watch, int token, Map<Integer, PebbleDictionaryItem> request) {
-        if (checkSelfPermission(Manifest.permission.READ_CONTACTS)
-                != PackageManager.PERMISSION_GRANTED) {
+        int list = intValue(request.get(KEY_LIST), -1);
+        boolean recents = list == LIST_RECENTS;
+        String permission = recents ? Manifest.permission.READ_CALL_LOG : Manifest.permission.READ_CONTACTS;
+        if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
             send(watch, token, Collections.singletonList(
-                    resultMessage(token, RESULT_PERMISSION_REQUIRED)), 0);
+                    resultMessage(token, recents ? RESULT_CALL_LOG_PERMISSION : RESULT_PERMISSION_REQUIRED)), 0);
             return;
         }
 
         List<String> entries;
         try {
-            entries = listEntries(intValue(request.get(KEY_LIST), -1), textValue(request.get(KEY_FILTER)));
+            entries = listEntries(list, textValue(request.get(KEY_FILTER)));
+        }
+        catch (SecurityException error) {
+            send(watch, token, Collections.singletonList(resultMessage(token,
+                    recents ? RESULT_CALL_LOG_PERMISSION : RESULT_PERMISSION_REQUIRED)), 0);
+            return;
         }
         catch (RuntimeException error) {
-            Log.e(TAG, "Could not read contacts", error);
+            Log.e(TAG, "Could not read list", error);
             send(watch, token, Collections.singletonList(resultMessage(token, RESULT_FAILED)), 0);
             return;
         }
@@ -148,7 +171,7 @@ public final class DialerService extends BaseJavaPebbleListenerService {
             return;
         }
 
-        int offset = Math.max(0, intValue(request.get(KEY_OFFSET), 0));
+        int offset = clamp(intValue(request.get(KEY_OFFSET), 0), 0, entries.size());
         int limit = clamp(intValue(request.get(KEY_LIMIT), 20), 1, MAX_PAGE_SIZE);
         int capacity = clamp(intValue(request.get(KEY_CAPACITY), MIN_CAPACITY),
                 MIN_CAPACITY, MAX_CAPACITY);
@@ -186,6 +209,11 @@ public final class DialerService extends BaseJavaPebbleListenerService {
     private List<String> listEntries(int list, String filter) {
         List<String> entries = new ArrayList<>();
         switch (list) {
+            case LIST_RECENTS:
+                for (RecentCalls.Entry entry : RecentCalls.load(this)) {
+                    entries.add(encode(entry.id, entry.title, entry.subtitle));
+                }
+                return entries;
             case LIST_FAVORITES:
                 for (ContactDirectory.PhoneEntry entry : ContactDirectory.favorites(this)) {
                     entries.add(encodeNumber(entry));
@@ -211,26 +239,40 @@ public final class DialerService extends BaseJavaPebbleListenerService {
         }
     }
 
-    private int placeCall(int dataId) {
-        if (checkSelfPermission(Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED
-                || checkSelfPermission(Manifest.permission.READ_CONTACTS)
-                != PackageManager.PERMISSION_GRANTED) {
+    private int placeCall(int request, Map<Integer, PebbleDictionaryItem> data) {
+        if (checkSelfPermission(Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
             return RESULT_PERMISSION_REQUIRED;
         }
-        if (dataId <= 0) {
-            return RESULT_NOT_FOUND;
-        }
-
+        boolean recent = intValue(data.get(KEY_LIST), LIST_CONTACTS) == LIST_RECENTS;
         try {
-            String number = ContactDirectory.numberFor(this, dataId);
-            if (number == null) {
-                return RESULT_NOT_FOUND;
+            String number;
+            if (request == REQUEST_DIAL) {
+                number = textValue(data.get(KEY_NUMBER));
+                if (!DialNumber.isValid(number)) {
+                    return RESULT_INVALID_NUMBER;
+                }
+            } else {
+                String permission = recent ? Manifest.permission.READ_CALL_LOG : Manifest.permission.READ_CONTACTS;
+                if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
+                    return recent ? RESULT_CALL_LOG_PERMISSION : RESULT_PERMISSION_REQUIRED;
+                }
+                long id = idValue(data.get(KEY_ITEM_ID));
+                if (id <= 0) {
+                    return RESULT_NOT_FOUND;
+                }
+                number = recent ? RecentCalls.numberFor(this, id) : ContactDirectory.numberFor(this, id);
+                if (number == null) {
+                    return RESULT_NOT_FOUND;
+                }
             }
-            // Telecom shows its own in-call screen, so this works while the app
-            // is in the background, unlike starting an ACTION_CALL activity.
             TelecomManager telecom = getSystemService(TelecomManager.class);
+            if (telecom == null || !getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEPHONY)) {
+                return RESULT_FAILED;
+            }
+            // The system owns the call UI and SIM choice; this does not launch
+            // an activity from the background or replace the default dialer.
             telecom.placeCall(Uri.fromParts("tel", number, null), new Bundle());
-            return RESULT_OK;
+            return RESULT_OK; // Accepted by Telecom, not a connected-call guarantee.
         }
         catch (SecurityException error) {
             Log.e(TAG, "Android rejected the call", error);
@@ -239,6 +281,17 @@ public final class DialerService extends BaseJavaPebbleListenerService {
         catch (RuntimeException error) {
             Log.e(TAG, "Could not place the call", error);
             return RESULT_FAILED;
+        }
+    }
+
+    private static long idValue(PebbleDictionaryItem item) {
+        if (item instanceof PebbleDictionaryItem.Int32) {
+            return ((PebbleDictionaryItem.Int32) item).getValue();
+        }
+        try {
+            return Long.parseLong(textValue(item));
+        } catch (NumberFormatException error) {
+            return -1;
         }
     }
 
@@ -285,12 +338,10 @@ public final class DialerService extends BaseJavaPebbleListenerService {
 
     private static String encodeNumber(ContactDirectory.PhoneEntry entry) {
         String subtitle = entry.label.isEmpty() ? entry.number : entry.label + " " + entry.number;
-        // Data IDs fit in an int on real devices; anything larger is skipped
-        // by the watch's lookup and reported as "Number not found".
-        return encode((int) entry.dataId, entry.name, subtitle);
+        return encode(entry.dataId, entry.name, subtitle);
     }
 
-    private static String encode(int id, String title, String subtitle) {
+    private static String encode(long id, String title, String subtitle) {
         return String.valueOf(id) + FIELD_SEPARATOR + field(title) + FIELD_SEPARATOR + field(subtitle);
     }
 

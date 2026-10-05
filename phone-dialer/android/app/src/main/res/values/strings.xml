@@ -1,10 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Phone Dialer</string>
-    <string name="grant_access">Grant contacts and phone access</string>
-    <string name="open_settings">Open app settings</string>
-    <string name="permission_granted">Permissions granted</string>
-    <string name="status_permission_required">Contacts and phone access are required before the watch can list contacts and place calls.</string>
-    <string name="status_permission_blocked">Android will no longer ask for these permissions. Allow Contacts and Phone in the app settings.</string>
-    <string name="status_ready">Ready. Open Phone Dialer on your Pebble and pick a favorite or a contact.</string>
+    <string name="setup_instructions">Install the Phone Dialer watch app in your Pebble app, then allow the features you want below.\n\nDialer: enter a number on your watch.\nRecent calls: browse your latest 100 calls and call back.\nFavorites and Contacts: browse your address book.</string>
+    <string name="permission_help">Phone allows calls. Contacts enables Favorites and Contacts. Call history enables Recent calls. Data stays on your phone and paired watch.\n\nIf access was denied, use the buttons to open app settings. Some Android installers restrict call history access; see the included installation guide if Call history cannot be enabled.\n\nKeep your Pebble phone app connected. For dual SIM phones, set a default calling SIM in Android settings or finish SIM selection on the phone. Emergency calls may require the phone dialer.</string>
 </resources>
