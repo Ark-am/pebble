@@ -10,6 +10,7 @@ build output, and documentation.
 | --- | --- | --- |
 | [Qibla Compass](./qibla-compass/) | Points toward the Qibla using the watch compass, the phone's location, and magnetic-declination correction. | Emery (Pebble Time 2) |
 | [Phone Sound Mode](./phone-sound-mode/) | Changes a paired Android phone's sound mode from the watch using a native Android companion app. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
+| [Phone Dialer](./phone-dialer/) | Calls favorites or any contact in a paired Android phone's address book from the watch using a native Android companion app. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Meridian](./meridian/) | Analog watchface with weather, date, battery, connection and Quiet Time alerts, and health data. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Gnomon 2](./epoch/) | Classic analog watchface with turned hour numbers and tapered hands, plus weather, health data, the date, a battery ring, and connection and Quiet Time alerts. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Baltic](./baltic/) | Dress-watch face with Breguet-style numbers, a minute scale, a small seconds dial, and five dial colours. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
@@ -26,6 +27,7 @@ steps, and platform-specific notes.
 ├── .gitignore           # Shared ignore rules for every project
 ├── qibla-compass/       # Qibla direction app
 ├── phone-sound-mode/    # Watch app and Android companion
+├── phone-dialer/        # Watch dialer and Android companion
 ├── meridian/            # Analog watchface
 ├── epoch/               # Classic analog watchface
 ├── baltic/              # Dress-watch face

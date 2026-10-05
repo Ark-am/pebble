@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Phone Dialer</string>
+    <string name="grant_access">Grant contacts and phone access</string>
+    <string name="open_settings">Open app settings</string>
+    <string name="permission_granted">Permissions granted</string>
+    <string name="status_permission_required">Contacts and phone access are required before the watch can list contacts and place calls.</string>
+    <string name="status_permission_blocked">Android will no longer ask for these permissions. Allow Contacts and Phone in the app settings.</string>
+    <string name="status_ready">Ready. Open Phone Dialer on your Pebble and pick a favorite or a contact.</string>
+</resources>

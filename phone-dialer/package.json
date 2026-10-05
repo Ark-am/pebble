@@ -1,0 +1,62 @@
+{
+  "name": "phone-dialer",
+  "author": "ark-am",
+  "version": "1.0.0",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "Phone Dialer",
+    "uuid": "8269f312-4d4c-4149-95fa-9f5042fcf467",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "messageKeys": {
+      "REQUEST": 1,
+      "TOKEN": 2,
+      "LIST": 3,
+      "FILTER": 4,
+      "OFFSET": 5,
+      "LIMIT": 6,
+      "CAPACITY": 7,
+      "ITEM_ID": 8,
+      "RESULT": 9,
+      "TOTAL": 10,
+      "ITEMS": 11,
+      "FINAL": 12
+    },
+    "resources": {
+      "media": [
+        {
+          "type": "png",
+          "name": "IMAGE_MENU_ICON",
+          "file": "images/menu_icon.png",
+          "menuIcon": true
+        }
+      ]
+    },
+    "companionApp": {
+      "android": {
+        "url": "https://github.com/ark-am/pebble-phone-dialer",
+        "apps": [
+          {
+            "package": "com.arkam.pebbledialer"
+          }
+        ]
+      }
+    }
+  }
+}
