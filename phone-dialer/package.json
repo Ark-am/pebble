@@ -37,7 +37,9 @@
       "TOTAL": 10,
       "ITEMS": 11,
       "FINAL": 12,
-      "NUMBER": 13
+      "NUMBER": 13,
+      "MENU_ORDER": 14,
+      "MENU_STAMP": 15
     },
     "resources": {
       "media": [

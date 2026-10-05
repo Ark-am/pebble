@@ -48,6 +48,11 @@ See [Android's permission documentation](https://developer.android.com/reference
 
 ## Watch controls
 
+- **Main menu order**: open **Phone Dialer** on the phone and use the arrows
+  under **Main menu order**. The change appears straight away if the watch app
+  is open, otherwise the next time it opens. The watch keeps the order, so the
+  menu stays the same while the phone is away. It cannot be changed on the
+  watch, so it is never rearranged by accident.
 - **Dialer**: a phone keypad with Delete (backspace icon), `+` and a green
   Call key along the bottom. On touch watches (Pebble Time 2 and Pebble Round 2),
   tap a key to press it. With the buttons, Up/Down move the highlight and
@@ -135,8 +140,9 @@ Android package: com.arkam.pebbledialer
 | List (`REQUEST=1`) | `LIST` (0 favorites, 1 letters, 2 contacts, 3 recents), `FILTER`, `OFFSET`, `LIMIT`, `CAPACITY` | `TOTAL`, `OFFSET`, `ITEMS`; last packet also has `FINAL` |
 | Call record (`REQUEST=2`) | `ITEM_ID` (decimal string), `LIST` (3 for call log, otherwise contacts) | `RESULT` |
 | Dial number (`REQUEST=3`) | `NUMBER` (validated keypad text) | `RESULT` |
+| Menu order (`REQUEST=4`) | `MENU_ORDER` (row digits, e.g. `0123`), `MENU_STAMP` (seconds since 1970 of the last change) | `MENU_ORDER` and `MENU_STAMP` only if the phone's order is newer; the phone may also send them unprompted |
 
-Every request carries a persistent, incrementing `TOKEN`, echoed in the reply.
+Every list, call and dial request carries a persistent, incrementing `TOKEN`, echoed in the reply.
 Replies to abandoned requests are ignored. The companion also deduplicates the
 last 64 call tokens per service lifetime. It accepts legacy integer contact IDs;
 new IDs use strings to avoid truncating Android's 64-bit provider IDs.

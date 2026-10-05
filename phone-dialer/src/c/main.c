@@ -8,6 +8,8 @@ enum {
   REQUEST_LIST = 1,
   REQUEST_CALL = 2,
   REQUEST_DIAL = 3,
+  // Not a reply-driven request: shares the main menu order with the phone.
+  REQUEST_SYNC_MENU = 4,
 };
 
 enum {
@@ -41,6 +43,13 @@ enum {
 #define OUTBOX_SIZE 128
 #define NUMBER_SIZE 32
 #define TOKEN_STORAGE_KEY 1
+#define MENU_ORDER_STORAGE_KEY 2
+// Key 3 held the old on-watch reorder hint flag; keep it unused.
+#define MENU_STAMP_STORAGE_KEY 4
+// The phone's companion may still be starting when the watch app opens.
+#define MENU_SYNC_DELAY_MS 1000
+#define MENU_SYNC_RETRY_MS 3000
+#define MENU_SYNC_ATTEMPTS 3
 
 #ifndef MIN
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -108,6 +117,16 @@ typedef enum {
 
 static Window *s_main_window;
 static MenuLayer *s_main_menu_layer;
+// Main menu order, chosen in the phone app's settings and kept on the watch
+// so the menu is right even when the phone is away.
+static uint8_t s_main_order[MAIN_ROW_COUNT] = {
+  MAIN_ROW_DIALER, MAIN_ROW_RECENTS, MAIN_ROW_FAVORITES, MAIN_ROW_CONTACTS,
+};
+// When the order last changed, so the watch and the phone keep the newer one.
+static int32_t s_main_order_stamp;
+static bool s_menu_sync_in_flight;
+static int s_menu_sync_attempts;
+static AppTimer *s_menu_sync_timer;
 static GPath *s_star_path;
 
 static Window *s_call_window;
@@ -165,6 +184,8 @@ static const GPathInfo STAR_PATH_INFO = {
 };
 
 static void list_window_push(int32_t list, const char *filter);
+static void apply_phone_main_order(const char *text, int32_t stamp);
+static void schedule_menu_sync(uint32_t delay_ms);
 
 // ---------------------------------------------------------------------------
 // Requests
@@ -1107,6 +1128,14 @@ static void dial_window_push(void) {
 // AppMessage
 
 static void inbox_received(DictionaryIterator *iterator, void *context) {
+  // Menu order updates can arrive at any time and are not tied to a request.
+  const Tuple *order_tuple = dict_find(iterator, MESSAGE_KEY_MENU_ORDER);
+  if (order_tuple && order_tuple->type == TUPLE_CSTRING) {
+    const Tuple *stamp_tuple = dict_find(iterator, MESSAGE_KEY_MENU_STAMP);
+    apply_phone_main_order(order_tuple->value->cstring, stamp_tuple ? stamp_tuple->value->int32 : 0);
+    return;
+  }
+
   const Tuple *token_tuple = dict_find(iterator, MESSAGE_KEY_TOKEN);
   if (!token_tuple || token_tuple->value->int32 != s_token) {
     return;
@@ -1129,7 +1158,16 @@ static void inbox_dropped(AppMessageResult reason, void *context) {
   }
 }
 
+static void outbox_sent(DictionaryIterator *iterator, void *context) {
+  s_menu_sync_in_flight = false;
+}
+
 static void outbox_failed(DictionaryIterator *iterator, AppMessageResult reason, void *context) {
+  if (s_menu_sync_in_flight) {
+    s_menu_sync_in_flight = false;
+    schedule_menu_sync(MENU_SYNC_RETRY_MS);
+    return;
+  }
   if (s_waiting_list || s_waiting_call) {
     fail_request("Phone unavailable");
   }
@@ -1161,8 +1199,97 @@ static uint16_t main_get_num_rows(MenuLayer *menu_layer, uint16_t section_index,
   return MAIN_ROW_COUNT;
 }
 
+// The order travels to and from the phone as digits, one per row: "0123".
+static bool parse_main_order(const char *text, uint8_t *order) {
+  bool seen[MAIN_ROW_COUNT] = { false };
+  for (int i = 0; i < MAIN_ROW_COUNT; i++) {
+    const int row = text[i] - '0';
+    if (row < 0 || row >= MAIN_ROW_COUNT || seen[row]) {
+      return false;
+    }
+    seen[row] = true;
+    order[i] = row;
+  }
+  return text[MAIN_ROW_COUNT] == '\0';
+}
+
+static void load_main_order(void) {
+  uint8_t stored[MAIN_ROW_COUNT];
+  char text[MAIN_ROW_COUNT + 1];
+  if (persist_read_data(MENU_ORDER_STORAGE_KEY, stored, sizeof(stored)) != sizeof(stored)) {
+    return;
+  }
+  // Only accept a complete arrangement of the known rows.
+  for (int i = 0; i < MAIN_ROW_COUNT; i++) {
+    text[i] = '0' + MIN(stored[i], 9);
+  }
+  text[MAIN_ROW_COUNT] = '\0';
+  if (parse_main_order(text, s_main_order)) {
+    s_main_order_stamp = persist_read_int(MENU_STAMP_STORAGE_KEY);
+  }
+}
+
+static void save_main_order(void) {
+  persist_write_data(MENU_ORDER_STORAGE_KEY, s_main_order, sizeof(s_main_order));
+  persist_write_int(MENU_STAMP_STORAGE_KEY, s_main_order_stamp);
+}
+
+// Tells the phone the watch's order. The phone keeps it if it is newer and
+// answers with its own if that is newer. If the phone is busy or away, the
+// next launch tries again, so nothing is lost.
+static void sync_main_order(void);
+
+static void menu_sync_timer_fired(void *context) {
+  s_menu_sync_timer = NULL;
+  sync_main_order();
+}
+
+static void schedule_menu_sync(uint32_t delay_ms) {
+  if (s_menu_sync_timer) {
+    app_timer_cancel(s_menu_sync_timer);
+  }
+  s_menu_sync_timer = app_timer_register(delay_ms, menu_sync_timer_fired, NULL);
+}
+
+static void sync_main_order(void) {
+  DictionaryIterator *iterator;
+  if (s_menu_sync_attempts >= MENU_SYNC_ATTEMPTS) {
+    return;
+  }
+  if (app_message_outbox_begin(&iterator) != APP_MSG_OK) {
+    // Busy with a list or call; try again shortly.
+    s_menu_sync_attempts++;
+    schedule_menu_sync(MENU_SYNC_RETRY_MS);
+    return;
+  }
+  char text[MAIN_ROW_COUNT + 1];
+  for (int i = 0; i < MAIN_ROW_COUNT; i++) {
+    text[i] = '0' + s_main_order[i];
+  }
+  text[MAIN_ROW_COUNT] = '\0';
+  dict_write_int32(iterator, MESSAGE_KEY_REQUEST, REQUEST_SYNC_MENU);
+  dict_write_cstring(iterator, MESSAGE_KEY_MENU_ORDER, text);
+  dict_write_int32(iterator, MESSAGE_KEY_MENU_STAMP, s_main_order_stamp);
+  s_menu_sync_attempts++;
+  s_menu_sync_in_flight = app_message_outbox_send() == APP_MSG_OK;
+}
+
+// An order from the phone, chosen in the companion app's settings.
+static void apply_phone_main_order(const char *text, int32_t stamp) {
+  uint8_t order[MAIN_ROW_COUNT];
+  if (stamp <= s_main_order_stamp || !parse_main_order(text, order)) {
+    return;
+  }
+  memcpy(s_main_order, order, sizeof(s_main_order));
+  s_main_order_stamp = stamp;
+  save_main_order();
+  if (s_main_menu_layer) {
+    menu_layer_reload_data(s_main_menu_layer);
+  }
+}
+
 static void main_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
-  const MainRow row = cell_index->row;
+  const MainRow row = s_main_order[cell_index->row];
   const char *title = main_row_title(row);
   const GRect bounds = layer_get_bounds(cell_layer);
   GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
@@ -1213,7 +1340,7 @@ static void main_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cel
 }
 
 static void main_select(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
-  switch (cell_index->row) {
+  switch (s_main_order[cell_index->row]) {
     case MAIN_ROW_DIALER: dial_window_push(); break;
     case MAIN_ROW_RECENTS: list_window_push(LIST_RECENTS, NULL); break;
     case MAIN_ROW_FAVORITES: list_window_push(LIST_FAVORITES, NULL); break;
@@ -1223,8 +1350,9 @@ static void main_select(MenuLayer *menu_layer, MenuIndex *cell_index, void *cont
 
 static void main_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
+  const GRect bounds = layer_get_bounds(root);
 
-  s_main_menu_layer = menu_layer_create(layer_get_bounds(root));
+  s_main_menu_layer = menu_layer_create(bounds);
   menu_layer_set_callbacks(s_main_menu_layer, NULL, (MenuLayerCallbacks) {
     .get_num_rows = main_get_num_rows,
     .draw_row = main_draw_row,
@@ -1247,8 +1375,11 @@ static void init(void) {
   app_message_register_inbox_received(inbox_received);
   app_message_register_inbox_dropped(inbox_dropped);
   app_message_register_outbox_failed(outbox_failed);
+  app_message_register_outbox_sent(outbox_sent);
   s_inbox_size = MIN(app_message_inbox_size_maximum(), (uint32_t)MAX_INBOX_SIZE);
   app_message_open(s_inbox_size, OUTBOX_SIZE);
+  load_main_order();
+  schedule_menu_sync(MENU_SYNC_DELAY_MS);
 
   s_main_window = window_create();
   window_set_window_handlers(s_main_window, (WindowHandlers) {
@@ -1259,6 +1390,9 @@ static void init(void) {
 }
 
 static void deinit(void) {
+  if (s_menu_sync_timer) {
+    app_timer_cancel(s_menu_sync_timer);
+  }
   cancel_response_timer();
   cancel_exit_timer();
   window_destroy(s_main_window);

@@ -23,6 +23,7 @@ public final class MainActivity extends Activity {
     private static final String[] LABELS = { "Phone", "Contacts", "Call history" };
     private final Button[] permissionButtons = new Button[PERMISSIONS.length];
     private TextView statusView;
+    private LinearLayout menuOrderRows;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,6 +63,23 @@ public final class MainActivity extends Activity {
             layout.addView(button, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
+        TextView menuTitle = new TextView(this);
+        menuTitle.setText(R.string.menu_order_title);
+        menuTitle.setTextSize(20);
+        menuTitle.setPadding(0, padding, 0, padding / 3);
+        layout.addView(menuTitle);
+
+        TextView menuHelp = new TextView(this);
+        menuHelp.setText(R.string.menu_order_help);
+        menuHelp.setTextSize(14);
+        menuHelp.setPadding(0, 0, 0, padding / 3);
+        layout.addView(menuHelp);
+
+        menuOrderRows = new LinearLayout(this);
+        menuOrderRows.setOrientation(LinearLayout.VERTICAL);
+        layout.addView(menuOrderRows, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
         TextView help = new TextView(this);
         help.setText(R.string.permission_help);
         help.setTextSize(14);
@@ -94,6 +112,52 @@ public final class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         refreshPermissionState();
+        // The order may have been changed on the watch since this screen was last shown.
+        refreshMenuOrder();
+    }
+
+    private void refreshMenuOrder() {
+        String order = MenuOrder.load(this).order;
+        menuOrderRows.removeAllViews();
+        for (int position = 0; position < order.length(); position++) {
+            final int index = position;
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+
+            TextView label = new TextView(this);
+            label.setText((position + 1) + ".  " + MenuOrder.LABELS[order.charAt(position) - '0']);
+            label.setTextSize(17);
+            row.addView(label, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+            Button up = new Button(this);
+            up.setText("\u2191");
+            up.setContentDescription("Move " + MenuOrder.LABELS[order.charAt(position) - '0'] + " up");
+            up.setEnabled(position > 0);
+            up.setOnClickListener(view -> moveMenuItem(index, index - 1));
+            row.addView(up);
+
+            Button down = new Button(this);
+            down.setText("\u2193");
+            down.setContentDescription("Move " + MenuOrder.LABELS[order.charAt(position) - '0'] + " down");
+            down.setEnabled(position < order.length() - 1);
+            down.setOnClickListener(view -> moveMenuItem(index, index + 1));
+            row.addView(down);
+
+            menuOrderRows.addView(row, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+    }
+
+    private void moveMenuItem(int from, int to) {
+        char[] order = MenuOrder.load(this).order.toCharArray();
+        char moved = order[from];
+        order[from] = order[to];
+        order[to] = moved;
+        MenuOrder changed = MenuOrder.changedNow(new String(order));
+        MenuOrder.save(this, changed);
+        MenuOrder.pushToWatch(this, changed);
+        refreshMenuOrder();
     }
 
     @Override
