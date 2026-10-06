@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.Gravity;
@@ -15,10 +16,16 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 public final class MainActivity extends Activity {
-    private static final String[] PERMISSIONS = {
-            Manifest.permission.CALL_PHONE,
-            Manifest.permission.READ_CONTACTS,
-            Manifest.permission.READ_CALL_LOG,
+    // Each button asks for one group. Phone covers placing calls and, from
+    // Android 9, ending them from the watch; both are in the same Android group,
+    // so one prompt grants both.
+    private static final String[][] PERMISSIONS = {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                    ? new String[] { Manifest.permission.CALL_PHONE,
+                                     Manifest.permission.ANSWER_PHONE_CALLS }
+                    : new String[] { Manifest.permission.CALL_PHONE },
+            { Manifest.permission.READ_CONTACTS },
+            { Manifest.permission.READ_CALL_LOG },
     };
     private static final String[] LABELS = { "Phone", "Contacts", "Call history" };
     private final Button[] permissionButtons = new Button[PERMISSIONS.length];
@@ -74,19 +81,37 @@ public final class MainActivity extends Activity {
         return checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED;
     }
 
+    private boolean granted(String[] group) {
+        for (String permission : group) {
+            if (!granted(permission)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private boolean blocked(String permission) {
         return !granted(permission)
                 && getPreferences(MODE_PRIVATE).getBoolean(permission, false)
                 && !shouldShowRequestPermissionRationale(permission);
     }
 
+    private boolean blocked(String[] group) {
+        for (String permission : group) {
+            if (blocked(permission)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void requestAccess(int index) {
-        String permission = PERMISSIONS[index];
-        if (blocked(permission)) {
+        String[] group = PERMISSIONS[index];
+        if (blocked(group)) {
             startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                     Uri.fromParts("package", getPackageName(), null)));
         } else {
-            requestPermissions(new String[] { permission }, index + 1);
+            requestPermissions(group, index + 1);
         }
     }
 
@@ -118,7 +143,7 @@ public final class MainActivity extends Activity {
         }
         status.append(granted(Manifest.permission.CALL_PHONE)
                 ? "\nDialer ready on your Pebble."
-                : "\nAllow Phone to place calls from your Pebble.");
+                : "\nAllow Phone to place and end calls from your Pebble.");
         statusView.setText(status);
     }
 }

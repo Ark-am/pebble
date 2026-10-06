@@ -19,7 +19,8 @@ The prepared files are in `dist/`:
 
 1. Copy the APK to an Android 7.0+ phone and open it. Allow installation from
    that file/browser app when Android asks.
-2. Open **Phone Dialer** on the phone. Tap **Allow Phone** to enable calling,
+2. Open **Phone Dialer** on the phone. Tap **Allow Phone** to enable calling
+   (and, on Android 9 and newer, ending calls from the watch),
    **Allow Contacts** for Favorites/Contacts, and **Allow Call history** for
    Recent calls. These permissions are independent; denying call history does
    not disable the keypad or contacts.
@@ -88,9 +89,13 @@ Contact names are shortened to fit the watch; dialing resolves the full number
 from the phone's current contact or call-log record. No number is derived from
 truncated display text.
 
-A vibration and **Sent to phone** mean Android accepted the request. The watch
-then returns to its watchface. This does not guarantee that the remote party is
-ringing or that the call connected. Android owns the call screen and SIM choice.
+Once Android accepts the call, the watch vibrates and shows the call screen:
+**Calling**, the name, the number, and a red **End** button. Press Down (or tap
+**End** on touch watches) to hang up; Back leaves the screen and the call
+continues on the phone. When the call ends, whether from the watch, the phone
+or the other person, the watch shows **Call ended** and returns to its
+watchface. Calling means Android placed the call; it does not show whether the
+other person is ringing or has answered. Android owns the call screen and SIM choice.
 On dual-SIM phones, set a default calling SIM or complete selection on the phone.
 Use the phone itself for emergency calls. Short/service-code support depends on
 Android and the carrier.
@@ -144,6 +149,16 @@ Android package: com.arkam.pebbledialer
 | List (`REQUEST=1`) | `LIST` (0 favorites, 1 letters, 2 contacts, 3 recents), `FILTER`, `OFFSET`, `LIMIT`, `CAPACITY` | `TOTAL`, `OFFSET`, `ITEMS`; last packet also has `FINAL` |
 | Call record (`REQUEST=2`) | `ITEM_ID` (decimal string), `LIST` (3 for call log, otherwise contacts) | `RESULT` |
 | Dial number (`REQUEST=3`) | `NUMBER` (validated keypad text) | `RESULT` |
+| Hang up (`REQUEST=5`) | nothing else | `RESULT` |
+
+A successful call reply also carries `NUMBER`, the number dialled, for the call
+screen. While that call lasts, the companion checks Android's audio mode once
+a second (`MODE_IN_CALL` needs no extra permission) and, when the call ends,
+sends `CALL_STATE` (0, ended) to the watch unprompted. If the phone never
+reports a call, the watch is not told anything, rather than being told a live
+call has ended. Hanging up uses `TelecomManager.endCall()`, which needs
+`ANSWER_PHONE_CALLS` and Android 9 or newer; `REQUEST=4` is unused, as it was
+the old settings sync.
 
 The Settings page sends `THEME` (0 dark, 1 light), `MENU_1` to `MENU_4`
 (0 Dialer, 1 Recent calls, 2 Favorites, 3 Contacts), `TOUCH_ENABLED` and

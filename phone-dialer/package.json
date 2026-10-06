@@ -46,7 +46,8 @@
       "MENU_1": 20,
       "MENU_2": 21,
       "MENU_3": 22,
-      "MENU_4": 23
+      "MENU_4": 23,
+      "CALL_STATE": 24
     },
     "resources": {
       "media": [

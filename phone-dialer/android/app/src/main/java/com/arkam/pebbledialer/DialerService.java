@@ -2,8 +2,13 @@ package com.arkam.pebbledialer;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.media.AudioManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.telecom.TelecomManager;
 import android.util.Log;
 
@@ -48,10 +53,19 @@ public final class DialerService extends BaseJavaPebbleListenerService {
     private static final int KEY_ITEMS = 11;
     private static final int KEY_FINAL = 12;
     private static final int KEY_NUMBER = 13;
+    private static final int KEY_CALL_STATE = 24;
 
     private static final int REQUEST_LIST = 1;
     private static final int REQUEST_CALL = 2;
     private static final int REQUEST_DIAL = 3;
+    // 4 was the old settings sync; keep it unused so an old watch app is not misread.
+    private static final int REQUEST_HANGUP = 5;
+
+    // Sent to the watch, unprompted, when a call it started has ended.
+    private static final int CALL_STATE_ENDED = 0;
+    // How often, and for how long, to check whether a call is still going.
+    private static final long CALL_POLL_MS = 1000;
+    private static final long CALL_START_TIMEOUT_MS = 60_000;
 
     private static final int LIST_FAVORITES = 0;
     private static final int LIST_LETTERS = 1;
@@ -64,6 +78,8 @@ public final class DialerService extends BaseJavaPebbleListenerService {
     private static final int RESULT_NOT_FOUND = 3;
     private static final int RESULT_CALL_LOG_PERMISSION = 4;
     private static final int RESULT_INVALID_NUMBER = 5;
+    private static final int RESULT_HANGUP_PERMISSION = 6;
+    private static final int RESULT_HANGUP_UNSUPPORTED = 7;
 
     // Separators the watch splits ITEMS on; stripped from names before sending.
     private static final char FIELD_SEPARATOR = '\u001f';
@@ -79,6 +95,15 @@ public final class DialerService extends BaseJavaPebbleListenerService {
     // Only the newest request's pages are worth sending.
     private final AtomicInteger latestToken = new AtomicInteger();
     private JavaPebbleSender sender;
+    // The number of the last call placed; read and written on the executor only.
+    private String lastDialedNumber;
+
+    // Watching the call this app placed, to tell the watch when it ends. Main thread only.
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private String callWatch;
+    private boolean callSeen;
+    private long callStartedAt;
+    private final Runnable callPoll = this::pollCall;
     // Accessed only on executor. Retransmitted call messages must not dial twice.
     private final Map<String, Integer> callResults = new java.util.LinkedHashMap<String, Integer>() {
         @Override protected boolean removeEldestEntry(Map.Entry<String, Integer> eldest) {
@@ -94,6 +119,7 @@ public final class DialerService extends BaseJavaPebbleListenerService {
 
     @Override
     public void onDestroy() {
+        mainHandler.removeCallbacks(callPoll);
         executor.shutdownNow();
         try {
             sender.close();
@@ -117,7 +143,8 @@ public final class DialerService extends BaseJavaPebbleListenerService {
 
         int request = intValue(data.get(KEY_REQUEST), -1);
         int token = intValue(data.get(KEY_TOKEN), 0);
-        if (request != REQUEST_LIST && request != REQUEST_CALL && request != REQUEST_DIAL) {
+        if (request != REQUEST_LIST && request != REQUEST_CALL && request != REQUEST_DIAL
+                && request != REQUEST_HANGUP) {
             responder.accept(ReceiveResult.Nack.INSTANCE);
             return;
         }
@@ -130,14 +157,26 @@ public final class DialerService extends BaseJavaPebbleListenerService {
         executor.execute(() -> {
             if (request == REQUEST_LIST) {
                 sendList(watch, token, requestData);
+            } else if (request == REQUEST_HANGUP) {
+                send(watch, token, Collections.singletonList(resultMessage(token, endCall())), 0);
             } else {
                 String callKey = watch + ":" + token;
                 Integer result = callResults.get(callKey);
+                Map<Integer, PebbleDictionaryItem> reply;
                 if (result == null) {
+                    lastDialedNumber = null;
                     result = placeCall(request, requestData);
                     callResults.put(callKey, result);
+                    reply = resultMessage(token, result);
+                    if (result == RESULT_OK && lastDialedNumber != null) {
+                        // The watch shows the number on its call screen.
+                        reply.put(KEY_NUMBER, new PebbleDictionaryItem.Text(field(lastDialedNumber)));
+                        mainHandler.post(() -> watchCall(watch));
+                    }
+                } else {
+                    reply = resultMessage(token, result);
                 }
-                send(watch, token, Collections.singletonList(resultMessage(token, result)), 0);
+                send(watch, token, Collections.singletonList(reply), 0);
             }
         });
     }
@@ -272,6 +311,7 @@ public final class DialerService extends BaseJavaPebbleListenerService {
             // The system owns the call UI and SIM choice; this does not launch
             // an activity from the background or replace the default dialer.
             telecom.placeCall(Uri.fromParts("tel", number, null), new Bundle());
+            lastDialedNumber = number;
             return RESULT_OK; // Accepted by Telecom, not a connected-call guarantee.
         }
         catch (SecurityException error) {
@@ -282,6 +322,82 @@ public final class DialerService extends BaseJavaPebbleListenerService {
             Log.e(TAG, "Could not place the call", error);
             return RESULT_FAILED;
         }
+    }
+
+    /** Ends the current call for the watch's End button. */
+    @SuppressWarnings("deprecation")
+    private int endCall() {
+        // TelecomManager.endCall() exists from Android 9. It is deprecated in favour
+        // of InCallService, which only the default phone app can use.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            return RESULT_HANGUP_UNSUPPORTED;
+        }
+        if (checkSelfPermission(Manifest.permission.ANSWER_PHONE_CALLS)
+                != PackageManager.PERMISSION_GRANTED) {
+            return RESULT_HANGUP_PERMISSION;
+        }
+        try {
+            TelecomManager telecom = getSystemService(TelecomManager.class);
+            if (telecom == null) {
+                return RESULT_FAILED;
+            }
+            // False means there was no call left to end, which is just as good.
+            telecom.endCall();
+            mainHandler.post(this::stopWatchingCall);
+            return RESULT_OK;
+        }
+        catch (SecurityException error) {
+            Log.e(TAG, "Android rejected ending the call", error);
+            return RESULT_HANGUP_PERMISSION;
+        }
+        catch (RuntimeException error) {
+            Log.e(TAG, "Could not end the call", error);
+            return RESULT_FAILED;
+        }
+    }
+
+    /**
+     * Starts watching a call placed for the watch, to tell it when the call
+     * ends. Android reports MODE_IN_CALL while a phone call is going, which
+     * needs no extra permission. If the phone never reports a call, the watch
+     * is not told anything, rather than being told a live call has ended.
+     */
+    private void watchCall(String watch) {
+        callWatch = watch;
+        callSeen = false;
+        callStartedAt = SystemClock.elapsedRealtime();
+        mainHandler.removeCallbacks(callPoll);
+        mainHandler.postDelayed(callPoll, CALL_POLL_MS);
+    }
+
+    private void stopWatchingCall() {
+        callWatch = null;
+        mainHandler.removeCallbacks(callPoll);
+    }
+
+    private void pollCall() {
+        if (callWatch == null) {
+            return;
+        }
+        AudioManager audio = getSystemService(AudioManager.class);
+        int mode = audio == null ? AudioManager.MODE_NORMAL : audio.getMode();
+        boolean inCall = mode == AudioManager.MODE_IN_CALL
+                || mode == AudioManager.MODE_IN_COMMUNICATION;
+        if (inCall) {
+            callSeen = true;
+        } else if (callSeen) {
+            String watch = callWatch;
+            stopWatchingCall();
+            Map<Integer, PebbleDictionaryItem> message = new HashMap<>();
+            message.put(KEY_CALL_STATE, new PebbleDictionaryItem.Int32(CALL_STATE_ENDED));
+            sender.sendDataToPebble(WATCHAPP_UUID, message, results -> { },
+                    Collections.singletonList(new WatchIdentifier(watch)));
+            return;
+        } else if (SystemClock.elapsedRealtime() - callStartedAt > CALL_START_TIMEOUT_MS) {
+            stopWatchingCall();
+            return;
+        }
+        mainHandler.postDelayed(callPoll, CALL_POLL_MS);
     }
 
     private static long idValue(PebbleDictionaryItem item) {

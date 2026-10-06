@@ -8,6 +8,8 @@ enum {
   REQUEST_LIST = 1,
   REQUEST_CALL = 2,
   REQUEST_DIAL = 3,
+  // 4 was the old settings sync; keep it unused so an old companion is not misread.
+  REQUEST_HANGUP = 5,
 };
 
 enum {
@@ -24,6 +26,8 @@ enum {
   RESULT_NOT_FOUND = 3,
   RESULT_CALL_LOG_PERMISSION = 4,
   RESULT_INVALID_NUMBER = 5,
+  RESULT_HANGUP_PERMISSION = 6,
+  RESULT_HANGUP_UNSUPPORTED = 7,
 };
 
 // Separators the companion uses inside the ITEMS string.
@@ -207,9 +211,23 @@ static Layer *s_call_button_layer;
 static GPath *s_call_icon_path;
 static GPathInfo s_call_icon_info;
 static GPoint s_call_icon_points[24];
+static TextLayer *s_call_number_layer;
+static char s_call_number[TITLE_SIZE];
+static GPath *s_hangup_icon_path;
+static GPathInfo s_hangup_icon_info;
+static GPoint s_hangup_icon_points[24];
 static Entry s_call_entry;
 static int32_t s_call_source;
-static bool s_call_submitted;
+
+typedef enum {
+  CALL_CONFIRM,   // Waiting for Select (or a tap on Call) to place the call.
+  CALL_SENDING,   // Asked the phone to place the call.
+  CALL_ACTIVE,    // The call is going; Down (or a tap on End) hangs up.
+  CALL_ENDING,    // Asked the phone to end the call.
+  CALL_ENDED,     // Shown briefly before returning to the watchface.
+  CALL_BLOCKED,   // Nothing to call, or the call request failed.
+} CallState;
+static CallState s_call_state;
 static Window *s_dial_window;
 static Layer *s_dial_layer;
 static char s_number[NUMBER_SIZE];
@@ -273,6 +291,10 @@ static const char *result_message(int32_t result) {
       return "Allow call history";
     case RESULT_INVALID_NUMBER:
       return "Invalid number";
+    case RESULT_HANGUP_PERMISSION:
+      return "Allow Phone on phone to end calls";
+    case RESULT_HANGUP_UNSUPPORTED:
+      return "End the call on the phone";
     default:
       return "Phone error";
   }
@@ -293,7 +315,7 @@ static void cancel_exit_timer(void) {
 }
 
 static void list_show_error(ListView *view, const char *message);
-static void call_show_error(const char *status);
+static void call_request_failed(const char *message);
 
 static void fail_request(const char *message) {
   cancel_response_timer();
@@ -308,7 +330,7 @@ static void fail_request(const char *message) {
   if (view) {
     list_show_error(view, message);
   } else if (waiting_call) {
-    call_show_error(message);
+    call_request_failed(message);
   }
 }
 
@@ -963,57 +985,153 @@ static void call_show_error(const char *status) {
   call_set_status(status, THEME_WARNING);
 }
 
-static void call_handle_reply(int32_t result) {
-  if (result != RESULT_OK) {
-    fail_request(result_message(result));
+// What the call screen is showing. It starts as a confirmation, and once the
+// phone has placed the call it becomes the in-call screen with an End button.
+static bool call_button_shown(void) {
+  return s_call_state == CALL_ACTIVE || s_call_state == CALL_ENDING ||
+         (s_call_state == CALL_CONFIRM && touch_available());
+}
+
+// Places the text and the button for the current state.
+static void call_layout(void) {
+  if (!s_call_window) {
     return;
   }
+  const GRect bounds = layer_get_bounds(window_get_root_layer(s_call_window));
+  const int16_t inset = PBL_IF_ROUND_ELSE(18, 6);
+  const int16_t width = bounds.size.w - 2 * inset;
+  const bool button = call_button_shown();
+  const bool number = s_call_number[0] != '\0';
+  // Leave room for the button below the name.
+  const int16_t middle = bounds.size.h / 2 - (button ? 22 : 0);
 
-  cancel_response_timer();
-  s_waiting_call = false;
-  call_set_status("Sent to phone", THEME_CALL);
+  layer_set_frame(text_layer_get_layer(s_call_status_layer),
+                  GRect(inset, middle - 50, width, 44));
+  layer_set_frame(text_layer_get_layer(s_call_name_layer),
+                  GRect(inset, middle - 4, width, number ? 30 : button ? 56 : 72));
+  layer_set_frame(text_layer_get_layer(s_call_number_layer),
+                  GRect(inset, middle + 26, width, 24));
+  layer_set_hidden(text_layer_get_layer(s_call_number_layer), !number);
+  layer_set_hidden(s_call_button_layer, !button);
+  layer_mark_dirty(s_call_button_layer);
+}
+
+static void call_ended(void) {
+  s_call_state = CALL_ENDED;
+  call_show_status("Call ended");
+  call_layout();
   vibes_short_pulse();
-
-  // Hand over to the phone's call screen once the call is placed.
   cancel_exit_timer();
   s_exit_timer = app_timer_register(EXIT_DELAY_MS, exit_to_watchface, NULL);
 }
 
-// The Call button on touch watches: green, with a handset and "Call".
-static void call_button_draw(Layer *layer, GContext *ctx) {
-  if (s_call_submitted) {
+// A call or hang-up request failed or went unanswered.
+static void call_request_failed(const char *message) {
+  if (s_call_state == CALL_ENDING) {
+    // The call may still be going, so End stays available to try again.
+    s_call_state = CALL_ACTIVE;
+  } else if (s_call_state == CALL_SENDING) {
+    // Never retry a call automatically: it may already be dialing.
+    s_call_state = CALL_BLOCKED;
+  }
+  call_show_error(message);
+  call_layout();
+}
+
+static void call_handle_reply(int32_t result, DictionaryIterator *iterator) {
+  if (result != RESULT_OK) {
+    fail_request(result_message(result));
     return;
   }
+  cancel_response_timer();
+  s_waiting_call = false;
+
+  if (s_call_state == CALL_ENDING) {
+    call_ended();
+    return;
+  }
+
+  // The phone has placed the call: show who is being called and offer End.
+  const Tuple *number = dict_find(iterator, MESSAGE_KEY_NUMBER);
+  if (number && number->type == TUPLE_CSTRING && s_call_source != -1) {
+    strncpy(s_call_number, number->value->cstring, sizeof(s_call_number) - 1);
+    s_call_number[sizeof(s_call_number) - 1] = '\0';
+  }
+  s_call_state = CALL_ACTIVE;
+  call_set_status(touch_available() ? "Calling\nTap End or press Down" : "Calling\nPress Down to end",
+                  THEME_CALL);
+  call_layout();
+  vibes_short_pulse();
+}
+
+// The phone reports that the call has ended (the other side hung up, or it
+// was ended on the phone).
+static void call_phone_ended(void) {
+  if (!s_call_window || (s_call_state != CALL_ACTIVE && s_call_state != CALL_ENDING)) {
+    return;
+  }
+  if (s_waiting_call) {
+    cancel_response_timer();
+    s_waiting_call = false;
+  }
+  call_ended();
+}
+
+// The button below the name: green Call on the confirmation (touch watches),
+// red End during a call.
+static void call_button_draw(Layer *layer, GContext *ctx) {
+  const bool end = s_call_state != CALL_CONFIRM;
   const GRect bounds = layer_get_bounds(layer);
-  graphics_context_set_fill_color(ctx, s_theme.call_key);
+  graphics_context_set_fill_color(ctx, end ? PBL_IF_COLOR_ELSE(s_theme.delete_key, s_theme.call_key)
+                                           : s_theme.call_key);
   graphics_fill_rect(ctx, bounds, bounds.size.h / 2, GCornersAll);
 
+  const char *label = end ? "End" : "Call";
   const GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
   const GSize text = graphics_text_layout_get_content_size(
-    "Call", font, bounds, GTextOverflowModeFill, GTextAlignmentLeft);
+    label, font, bounds, GTextOverflowModeFill, GTextAlignmentLeft);
   const int16_t icon = 18;
   const int16_t gap = 6;
   const int16_t left = (bounds.size.w - icon - gap - text.w) / 2;
   const int16_t middle = bounds.size.h / 2;
+  GPath *path = end ? s_hangup_icon_path : s_call_icon_path;
   graphics_context_set_fill_color(ctx, s_theme.function_key_text);
-  gpath_move_to(s_call_icon_path, GPoint(left + icon / 2, middle));
-  gpath_draw_filled(ctx, s_call_icon_path);
+  gpath_move_to(path, GPoint(left + icon / 2, middle));
+  gpath_draw_filled(ctx, path);
   graphics_context_set_text_color(ctx, s_theme.function_key_text);
-  graphics_draw_text(ctx, "Call", font, GRect(left + icon + gap, middle - 16, text.w + 4, 30),
+  graphics_draw_text(ctx, label, font, GRect(left + icon + gap, middle - 16, text.w + 4, 30),
                      GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 }
 
 static void call_submit(ClickRecognizerRef recognizer, void *context);
+static void call_hang_up(ClickRecognizerRef recognizer, void *context);
 
 static void call_tap(GPoint point) {
-  if (!s_call_button_layer || s_call_submitted) {
+  if (!call_button_shown()) {
     return;
   }
   const GRect target = grect_inset(layer_get_frame(s_call_button_layer), GEdgeInsets(-6));
-  if (grect_contains_point(&target, &point)) {
+  if (!grect_contains_point(&target, &point)) {
+    return;
+  }
+  if (s_call_state == CALL_CONFIRM) {
     touch_feedback();
     call_submit(NULL, NULL);
+  } else if (s_call_state == CALL_ACTIVE) {
+    touch_feedback();
+    call_hang_up(NULL, NULL);
   }
+}
+
+static TextLayer *call_text_layer(Layer *root, const char *font, GColor color) {
+  TextLayer *layer = text_layer_create(GRect(0, 0, 0, 0));
+  text_layer_set_font(layer, fonts_get_system_font(font));
+  text_layer_set_text_alignment(layer, GTextAlignmentCenter);
+  text_layer_set_overflow_mode(layer, GTextOverflowModeTrailingEllipsis);
+  text_layer_set_background_color(layer, GColorClear);
+  text_layer_set_text_color(layer, color);
+  layer_add_child(root, text_layer_get_layer(layer));
+  return layer;
 }
 
 static void call_window_load(Window *window) {
@@ -1021,39 +1139,26 @@ static void call_window_load(Window *window) {
   const GRect bounds = layer_get_bounds(root);
   window_set_background_color(window, THEME_BACKGROUND);
 
-  const int16_t inset = PBL_IF_ROUND_ELSE(18, 6);
-  const bool touch = touch_available();
-  // Leave room for the Call button below the name on touch watches.
-  const int16_t middle = bounds.size.h / 2 - (touch ? 22 : 0);
-
-  s_call_status_layer = text_layer_create(GRect(inset, middle - 50, bounds.size.w - 2 * inset, 44));
-  text_layer_set_font(s_call_status_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
-  text_layer_set_text_alignment(s_call_status_layer, GTextAlignmentCenter);
-  text_layer_set_background_color(s_call_status_layer, GColorClear);
-  text_layer_set_text_color(s_call_status_layer, THEME_HINT);
-  layer_add_child(root, text_layer_get_layer(s_call_status_layer));
-
-  s_call_name_layer = text_layer_create(GRect(inset, middle - 4, bounds.size.w - 2 * inset,
-                                             touch ? 56 : 72));
-  text_layer_set_font(s_call_name_layer, fonts_get_system_font(
-      s_call_source == -1 ? FONT_KEY_GOTHIC_18_BOLD : FONT_KEY_GOTHIC_24_BOLD));
-  text_layer_set_text_alignment(s_call_name_layer, GTextAlignmentCenter);
-  text_layer_set_overflow_mode(s_call_name_layer, GTextOverflowModeTrailingEllipsis);
-  text_layer_set_background_color(s_call_name_layer, GColorClear);
-  text_layer_set_text_color(s_call_name_layer, THEME_TEXT);
+  s_call_status_layer = call_text_layer(root, FONT_KEY_GOTHIC_18, THEME_HINT);
+  s_call_name_layer = call_text_layer(root, s_call_source == -1 ? FONT_KEY_GOTHIC_18_BOLD
+                                                                : FONT_KEY_GOTHIC_24_BOLD, THEME_TEXT);
   text_layer_set_text(s_call_name_layer, s_call_name);
-  layer_add_child(root, text_layer_get_layer(s_call_name_layer));
+  s_call_number_layer = call_text_layer(root, FONT_KEY_GOTHIC_18, THEME_HINT);
+  text_layer_set_text(s_call_number_layer, s_call_number);
 
-  if (touch) {
-    const int16_t w = bounds.size.w;
-    const int16_t h = bounds.size.h;
-    const GRect button = PBL_IF_ROUND_ELSE(GRect(w * 26 / 100, h * 71 / 100, w * 48 / 100, 38),
-                                           GRect(w / 5, h - 46, w * 3 / 5, 38));
-    s_call_icon_path = create_handset_path(s_call_icon_points, &s_call_icon_info, 18);
-    s_call_button_layer = layer_create(button);
-    layer_set_update_proc(s_call_button_layer, call_button_draw);
-    layer_add_child(root, s_call_button_layer);
-  }
+  const int16_t w = bounds.size.w;
+  const int16_t h = bounds.size.h;
+  const GRect button = PBL_IF_ROUND_ELSE(GRect(w * 26 / 100, h * 71 / 100, w * 48 / 100, 38),
+                                         GRect(w / 5, h - 46, w * 3 / 5, 38));
+  s_call_icon_path = create_handset_path(s_call_icon_points, &s_call_icon_info, 18);
+  // The same handset turned on its side is the usual "hang up" symbol.
+  s_hangup_icon_path = create_handset_path(s_hangup_icon_points, &s_hangup_icon_info, 18);
+  gpath_rotate_to(s_hangup_icon_path, TRIG_MAX_ANGLE * 3 / 8);
+  s_call_button_layer = layer_create(button);
+  layer_set_update_proc(s_call_button_layer, call_button_draw);
+  layer_add_child(root, s_call_button_layer);
+
+  call_layout();
 }
 
 static void call_window_appear(Window *window) {
@@ -1074,20 +1179,22 @@ static void call_window_unload(Window *window) {
   cancel_exit_timer();
   text_layer_destroy(s_call_status_layer);
   text_layer_destroy(s_call_name_layer);
+  text_layer_destroy(s_call_number_layer);
+  layer_destroy(s_call_button_layer);
+  gpath_destroy(s_call_icon_path);
+  gpath_destroy(s_hangup_icon_path);
   s_call_status_layer = NULL;
   s_call_name_layer = NULL;
-  if (s_call_button_layer) {
-    layer_destroy(s_call_button_layer);
-    gpath_destroy(s_call_icon_path);
-    s_call_button_layer = NULL;
-    s_call_icon_path = NULL;
-  }
+  s_call_number_layer = NULL;
+  s_call_button_layer = NULL;
+  s_call_icon_path = NULL;
+  s_hangup_icon_path = NULL;
   window_destroy(window);
   s_call_window = NULL;
 }
 
 static void call_submit(ClickRecognizerRef recognizer, void *context) {
-  if (s_call_submitted) {
+  if (s_call_state != CALL_CONFIRM) {
     return;
   }
   const char *error = NULL;
@@ -1106,23 +1213,39 @@ static void call_submit(ClickRecognizerRef recognizer, void *context) {
     call_show_error(error);
     return;
   }
-  // Never automatically retry a call after a lost reply: it may already be dialing.
-  s_call_submitted = true;
+  s_call_state = CALL_SENDING;
   s_waiting_call = true;
   call_show_status("Sending call...");
-  if (s_call_button_layer) {
-    layer_mark_dirty(s_call_button_layer);
+  call_layout();
+}
+
+// Down, or a tap on End: asks the phone to end the call.
+static void call_hang_up(ClickRecognizerRef recognizer, void *context) {
+  if (s_call_state != CALL_ACTIVE) {
+    return;
   }
+  const char *error = NULL;
+  DictionaryIterator *iterator = begin_request(REQUEST_HANGUP, &error);
+  if (!iterator || !send_request(&error)) {
+    call_show_error(error);
+    return;
+  }
+  s_call_state = CALL_ENDING;
+  s_waiting_call = true;
+  call_show_status("Ending call...");
+  layer_mark_dirty(s_call_button_layer);
 }
 
 static void call_click_config(void *context) {
   window_single_click_subscribe(BUTTON_ID_SELECT, call_submit);
+  window_single_click_subscribe(BUTTON_ID_DOWN, call_hang_up);
 }
 
 static void call_window_push(const Entry *entry, int32_t source) {
   s_call_entry = *entry;
   s_call_source = source;
-  s_call_submitted = false;
+  s_call_state = CALL_CONFIRM;
+  s_call_number[0] = '\0';
   strncpy(s_call_name, entry->title, sizeof(s_call_name) - 1);
   s_call_name[sizeof(s_call_name) - 1] = '\0';
 
@@ -1136,8 +1259,9 @@ static void call_window_push(const Entry *entry, int32_t source) {
   window_set_click_config_provider(s_call_window, call_click_config);
   window_stack_push(s_call_window, true);
   if (source != -1 && (!entry->id[0] || strcmp(entry->id, "0") == 0)) {
-    s_call_submitted = true;
+    s_call_state = CALL_BLOCKED;
     call_show_error("Number unavailable");
+    call_layout();
   } else {
     call_show_status(touch_available() ? "Tap Call or press Select" : "Select to call");
   }
@@ -1507,6 +1631,11 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
   if (apply_settings(iterator)) {
     return;
   }
+  // So can the phone's notice that the call we placed has ended.
+  if (dict_find(iterator, MESSAGE_KEY_CALL_STATE)) {
+    call_phone_ended();
+    return;
+  }
 
   const Tuple *token_tuple = dict_find(iterator, MESSAGE_KEY_TOKEN);
   if (!token_tuple || token_tuple->value->int32 != s_token) {
@@ -1517,7 +1646,7 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
   const int32_t result = result_tuple ? result_tuple->value->int32 : RESULT_FAILED;
 
   if (s_waiting_call) {
-    call_handle_reply(result);
+    call_handle_reply(result, iterator);
   } else if (s_waiting_list) {
     list_handle_reply(s_waiting_list, iterator, result);
   }
@@ -1640,9 +1769,8 @@ static void refresh_theme(void) {
     window_set_background_color(s_call_window, THEME_BACKGROUND);
     text_layer_set_text_color(s_call_name_layer, THEME_TEXT);
     text_layer_set_text_color(s_call_status_layer, THEME_HINT);
-    if (s_call_button_layer) {
-      layer_mark_dirty(s_call_button_layer);
-    }
+    text_layer_set_text_color(s_call_number_layer, THEME_HINT);
+    layer_mark_dirty(s_call_button_layer);
   }
 }
 
