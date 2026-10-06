@@ -11,8 +11,6 @@ import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
-import android.widget.RadioButton;
-import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -25,10 +23,6 @@ public final class MainActivity extends Activity {
     private static final String[] LABELS = { "Phone", "Contacts", "Call history" };
     private final Button[] permissionButtons = new Button[PERMISSIONS.length];
     private TextView statusView;
-    private LinearLayout menuOrderRows;
-    private RadioGroup themeChoice;
-    // Set while the screen updates the choice itself, so that is not saved as a change.
-    private boolean showingTheme;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -68,51 +62,6 @@ public final class MainActivity extends Activity {
             layout.addView(button, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
-        TextView menuTitle = new TextView(this);
-        menuTitle.setText(R.string.menu_order_title);
-        menuTitle.setTextSize(20);
-        menuTitle.setPadding(0, padding, 0, padding / 3);
-        layout.addView(menuTitle);
-
-        TextView menuHelp = new TextView(this);
-        menuHelp.setText(R.string.menu_order_help);
-        menuHelp.setTextSize(14);
-        menuHelp.setPadding(0, 0, 0, padding / 3);
-        layout.addView(menuHelp);
-
-        menuOrderRows = new LinearLayout(this);
-        menuOrderRows.setOrientation(LinearLayout.VERTICAL);
-        layout.addView(menuOrderRows, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        TextView themeTitle = new TextView(this);
-        themeTitle.setText(R.string.theme_title);
-        themeTitle.setTextSize(20);
-        themeTitle.setPadding(0, padding, 0, padding / 3);
-        layout.addView(themeTitle);
-
-        TextView themeHelp = new TextView(this);
-        themeHelp.setText(R.string.theme_help);
-        themeHelp.setTextSize(14);
-        themeHelp.setPadding(0, 0, 0, padding / 3);
-        layout.addView(themeHelp);
-
-        themeChoice = new RadioGroup(this);
-        RadioButton dark = new RadioButton(this);
-        dark.setId(android.R.id.button1);
-        dark.setText(R.string.theme_dark);
-        RadioButton light = new RadioButton(this);
-        light.setId(android.R.id.button2);
-        light.setText(R.string.theme_light);
-        themeChoice.addView(dark);
-        themeChoice.addView(light);
-        themeChoice.setOnCheckedChangeListener((group, checkedId) -> {
-            if (!showingTheme) {
-                chooseTheme(checkedId == android.R.id.button2 ? WatchTheme.LIGHT : WatchTheme.DARK);
-            }
-        });
-        layout.addView(themeChoice);
-
         TextView help = new TextView(this);
         help.setText(R.string.permission_help);
         help.setTextSize(14);
@@ -145,66 +94,6 @@ public final class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         refreshPermissionState();
-        // The order may have been changed on the watch since this screen was last shown.
-        refreshMenuOrder();
-        refreshTheme();
-    }
-
-    private void refreshTheme() {
-        showingTheme = true;
-        themeChoice.check(WatchTheme.load(this).theme == WatchTheme.LIGHT
-                ? android.R.id.button2 : android.R.id.button1);
-        showingTheme = false;
-    }
-
-    private void chooseTheme(int theme) {
-        WatchTheme changed = WatchTheme.changedNow(theme);
-        WatchTheme.save(this, changed);
-        MenuOrder.pushToWatch(this, changed.message());
-    }
-
-    private void refreshMenuOrder() {
-        String order = MenuOrder.load(this).order;
-        menuOrderRows.removeAllViews();
-        for (int position = 0; position < order.length(); position++) {
-            final int index = position;
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-
-            TextView label = new TextView(this);
-            label.setText((position + 1) + ".  " + MenuOrder.LABELS[order.charAt(position) - '0']);
-            label.setTextSize(17);
-            row.addView(label, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-
-            Button up = new Button(this);
-            up.setText("\u2191");
-            up.setContentDescription("Move " + MenuOrder.LABELS[order.charAt(position) - '0'] + " up");
-            up.setEnabled(position > 0);
-            up.setOnClickListener(view -> moveMenuItem(index, index - 1));
-            row.addView(up);
-
-            Button down = new Button(this);
-            down.setText("\u2193");
-            down.setContentDescription("Move " + MenuOrder.LABELS[order.charAt(position) - '0'] + " down");
-            down.setEnabled(position < order.length() - 1);
-            down.setOnClickListener(view -> moveMenuItem(index, index + 1));
-            row.addView(down);
-
-            menuOrderRows.addView(row, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        }
-    }
-
-    private void moveMenuItem(int from, int to) {
-        char[] order = MenuOrder.load(this).order.toCharArray();
-        char moved = order[from];
-        order[from] = order[to];
-        order[to] = moved;
-        MenuOrder changed = MenuOrder.changedNow(new String(order));
-        MenuOrder.save(this, changed);
-        MenuOrder.pushToWatch(this, changed.message());
-        refreshMenuOrder();
     }
 
     @Override

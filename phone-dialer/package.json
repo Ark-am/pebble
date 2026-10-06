@@ -6,7 +6,9 @@
     "pebble-app"
   ],
   "private": true,
-  "dependencies": {},
+  "dependencies": {
+    "@rebble/clay": "^1.1.0"
+  },
   "pebble": {
     "displayName": "Phone Dialer",
     "uuid": "8269f312-4d4c-4149-95fa-9f5042fcf467",
@@ -38,10 +40,13 @@
       "ITEMS": 11,
       "FINAL": 12,
       "NUMBER": 13,
-      "MENU_ORDER": 14,
-      "MENU_STAMP": 15,
       "THEME": 16,
-      "THEME_STAMP": 17
+      "TOUCH_ENABLED": 18,
+      "TOUCH_VIBE": 19,
+      "MENU_1": 20,
+      "MENU_2": 21,
+      "MENU_3": 22,
+      "MENU_4": 23
     },
     "resources": {
       "media": [
@@ -62,6 +67,9 @@
           }
         ]
       }
-    }
+    },
+    "capabilities": [
+      "configurable"
+    ]
   }
 }

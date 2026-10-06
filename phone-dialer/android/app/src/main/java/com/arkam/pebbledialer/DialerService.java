@@ -31,7 +31,7 @@ import io.rebble.pebblekit2.common.model.WatchIdentifier;
 
 public final class DialerService extends BaseJavaPebbleListenerService {
     private static final String TAG = "PhoneDialer";
-    static final UUID WATCHAPP_UUID =
+    private static final UUID WATCHAPP_UUID =
             UUID.fromString("8269f312-4d4c-4149-95fa-9f5042fcf467");
 
     // Must match messageKeys in the watch app's package.json.
@@ -52,7 +52,6 @@ public final class DialerService extends BaseJavaPebbleListenerService {
     private static final int REQUEST_LIST = 1;
     private static final int REQUEST_CALL = 2;
     private static final int REQUEST_DIAL = 3;
-    private static final int REQUEST_SYNC_SETTINGS = 4;
 
     private static final int LIST_FAVORITES = 0;
     private static final int LIST_LETTERS = 1;
@@ -117,20 +116,6 @@ public final class DialerService extends BaseJavaPebbleListenerService {
         }
 
         int request = intValue(data.get(KEY_REQUEST), -1);
-        if (request == REQUEST_SYNC_SETTINGS) {
-            // Not part of the token-ordered requests, so it never cancels a list in progress.
-            responder.accept(ReceiveResult.Ack.INSTANCE);
-            MenuOrder watchOrder = new MenuOrder(
-                    textValue(data.get(MenuOrder.KEY_MENU_ORDER)),
-                    intValue(data.get(MenuOrder.KEY_MENU_STAMP), 0));
-            // Older watch apps do not send a theme; a stamp of 0 lets the phone's win.
-            WatchTheme watchTheme = new WatchTheme(
-                    intValue(data.get(WatchTheme.KEY_THEME), WatchTheme.DARK),
-                    intValue(data.get(WatchTheme.KEY_THEME_STAMP), 0));
-            executor.execute(() -> syncSettings(watch, watchOrder, watchTheme));
-            return;
-        }
-
         int token = intValue(data.get(KEY_TOKEN), 0);
         if (request != REQUEST_LIST && request != REQUEST_CALL && request != REQUEST_DIAL) {
             responder.accept(ReceiveResult.Nack.INSTANCE);
@@ -155,30 +140,6 @@ public final class DialerService extends BaseJavaPebbleListenerService {
                 send(watch, token, Collections.singletonList(resultMessage(token, result)), 0);
             }
         });
-    }
-
-    /** Keeps whichever menu order and theme changed last, on both the phone and the watch. */
-    private void syncSettings(String watch, MenuOrder watchOrder, WatchTheme watchTheme) {
-        Map<Integer, PebbleDictionaryItem> reply = new HashMap<>();
-
-        MenuOrder phoneOrder = MenuOrder.load(this);
-        if (MenuOrder.isValid(watchOrder.order) && watchOrder.stamp > phoneOrder.stamp) {
-            MenuOrder.save(this, watchOrder);
-        } else if (phoneOrder.stamp > watchOrder.stamp) {
-            reply.putAll(phoneOrder.message());
-        }
-
-        WatchTheme phoneTheme = WatchTheme.load(this);
-        if (WatchTheme.isValid(watchTheme.theme) && watchTheme.stamp > phoneTheme.stamp) {
-            WatchTheme.save(this, watchTheme);
-        } else if (phoneTheme.stamp > watchTheme.stamp) {
-            reply.putAll(phoneTheme.message());
-        }
-
-        if (!reply.isEmpty()) {
-            sender.sendDataToPebble(WATCHAPP_UUID, reply, results -> { },
-                    Collections.singletonList(new WatchIdentifier(watch)));
-        }
     }
 
     private void sendList(String watch, int token, Map<Integer, PebbleDictionaryItem> request) {

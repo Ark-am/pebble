@@ -48,25 +48,24 @@ See [Android's permission documentation](https://developer.android.com/reference
 
 ## Watch controls
 
-- **Main menu order**: change it on the phone or on the watch.
-  1. On the phone (recommended): open **Phone Dialer** and use the arrows under
-     **Main menu order**. The change appears straight away if the watch app is
-     open, otherwise the next time it opens.
-  2. On the watch: hold Select on a main-menu row to pick it up (the watch
-     vibrates and the row shows up/down arrows), move it with Up/Down, and
-     press Select to put it down. Leaving the app while moving a row keeps the
-     new position. A hint appears at launch until this has been used once.
+- **Settings**: in the Pebble phone app, open **Phone Dialer** and tap the
+  settings (gear) button. This is the only place to change these options, so
+  nothing can be rearranged or switched off by accident on the watch:
+  - **Theme**: Dark or Light. Until it is saved once, colour watches start
+    dark and black-and-white watches start light.
+  - **Main menu order**: what appears first, second, third and fourth.
+    Choosing an item that is already in another place swaps the two.
+  - **Touch input** (touch watches only): switch tapping and swiping on or off.
+    When off, the watch uses the buttons only.
+  - **Vibrate on tap** (touch watches only): a short tick when you tap a
+    keypad key or the Call button.
 
-  The watch and phone keep whichever change is newer, and the watch keeps the
-  order so the menu stays the same while the phone is away.
+  Saved settings reach the watch straight away if the app is open, otherwise
+  the next time it opens, and the watch keeps them while the phone is away.
 - **Touch** (Pebble Time 2, Pebble Round 2): menus and lists scroll with a
   swipe; tap a row to highlight it and tap it again to open it, as in the
   watch's own menus. Swipe right to go back. On the keypad, tap a key to press
   it. On the call screen, tap the green **Call** button.
-- **Theme**: open **Phone Dialer** on the phone and choose **Dark** or
-  **Light** under **Watch theme**. It changes straight away if the watch app is
-  open, otherwise the next time it opens. Until a theme is chosen, colour
-  watches start dark and black-and-white watches start light.
 - **Dialer**: a phone keypad with Delete (backspace icon), `+` and a green
   Call key along the bottom. Tap keys on touch watches. With the buttons,
   Up/Down move the highlight and Select presses the highlighted key; hold
@@ -112,6 +111,7 @@ Use Android Studio's bundled JDK if the default Java installation is older.
 
 ```sh
 # From phone-dialer/
+npm install      # the settings page library (Clay)
 pebble build
 
 cd android
@@ -121,19 +121,6 @@ cd android
 Outputs: `build/phone-dialer.pbw` and
 `android/app/build/outputs/apk/debug/app-debug.apk`.
 
-The watch smoke test uses a simulated companion and never places real calls:
-
-```sh
-pebble install --emulator aplite
-pebble repl --emulator aplite
-# At the Python prompt:
-exec(open('tests/watch_smoke.py').read())
-```
-
-It checks manual number transport, confirmation, repeated-button protection,
-batched recent-call replies, next/previous pages, 64-bit record IDs, and
-permission errors. Screenshots are written to `build/qa/`.
-
 Before relying on the app, check on a physical paired phone/watch: granting and
 denying each permission independently, calls with the phone locked/backgrounded,
 recent incoming/outgoing/missed calls, and any dual-SIM prompt. A desktop build
@@ -141,8 +128,11 @@ and emulator cannot verify the phone manufacturer's Telecom behavior.
 
 ## Protocol and data
 
-The watch and companion use the AppMessage keys in `package.json`. There is no
-PebbleKit JS component. The watch UUID and native Android package are unchanged:
+The watch and companion use the AppMessage keys in `package.json`. The watch
+app also has a small PebbleKit JS part, `src/pkjs/`, which only serves the
+Settings page; the Pebble phone app delivers the watch's messages to both it
+and the Android companion. The watch UUID and native Android package are
+unchanged:
 
 ```text
 Watch UUID:      8269f312-4d4c-4149-95fa-9f5042fcf467
@@ -154,7 +144,10 @@ Android package: com.arkam.pebbledialer
 | List (`REQUEST=1`) | `LIST` (0 favorites, 1 letters, 2 contacts, 3 recents), `FILTER`, `OFFSET`, `LIMIT`, `CAPACITY` | `TOTAL`, `OFFSET`, `ITEMS`; last packet also has `FINAL` |
 | Call record (`REQUEST=2`) | `ITEM_ID` (decimal string), `LIST` (3 for call log, otherwise contacts) | `RESULT` |
 | Dial number (`REQUEST=3`) | `NUMBER` (validated keypad text) | `RESULT` |
-| Settings (`REQUEST=4`) | `MENU_ORDER` (row digits, e.g. `0123`), `MENU_STAMP`, `THEME` (0 dark, 1 light), `THEME_STAMP`; stamps are seconds since 1970 of the last change | Each setting whose phone copy is newer (`MENU_ORDER`/`MENU_STAMP`, `THEME`/`THEME_STAMP`); the phone may also send them unprompted |
+
+The Settings page sends `THEME` (0 dark, 1 light), `MENU_1` to `MENU_4`
+(0 Dialer, 1 Recent calls, 2 Favorites, 3 Contacts), `TOUCH_ENABLED` and
+`TOUCH_VIBE` straight to the watch; the companion is not involved.
 
 Every list, call and dial request carries a persistent, incrementing `TOKEN`, echoed in the reply.
 Replies to abandoned requests are ignored. The companion also deduplicates the

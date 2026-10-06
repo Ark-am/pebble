@@ -1,12 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Phone Dialer</string>
-    <string name="setup_instructions">Install the Phone Dialer watch app in your Pebble app, then allow the features you want below.\n\nDialer: enter a number on your watch.\nRecent calls: browse your latest 100 calls and call back.\nFavorites and Contacts: browse your address book.</string>
+    <string name="setup_instructions">Install the Phone Dialer watch app in your Pebble app, then allow the features you want below.\n\nDialer: enter a number on your watch.\nRecent calls: browse your latest 100 calls and call back.\nFavorites and Contacts: browse your address book.\n\nTheme, main menu order and touch options are in the watch app\'s Settings, under Phone Dialer in the Pebble app.</string>
     <string name="permission_help">Phone allows calls. Contacts enables Favorites and Contacts. Call history enables Recent calls. Data stays on your phone and paired watch.\n\nIf access was denied, use the buttons to open app settings. Some Android installers restrict call history access; see the included installation guide if Call history cannot be enabled.\n\nKeep your Pebble phone app connected. For dual SIM phones, set a default calling SIM in Android settings or finish SIM selection on the phone. Emergency calls may require the phone dialer.</string>
-    <string name="menu_order_title">Main menu order</string>
-    <string name="menu_order_help">Order of the items in Phone Dialer on your watch. Changes appear on the watch straight away if the app is open there, otherwise the next time it opens. You can also hold Select on a row on the watch to move it.</string>
-    <string name="theme_title">Watch theme</string>
-    <string name="theme_help">Colours of Phone Dialer on your watch. Like the menu order, a change appears straight away if the app is open on the watch, otherwise the next time it opens.</string>
-    <string name="theme_dark">Dark: light text on black</string>
-    <string name="theme_light">Light: dark text on white</string>
 </resources>

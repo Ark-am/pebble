@@ -8,9 +8,6 @@ enum {
   REQUEST_LIST = 1,
   REQUEST_CALL = 2,
   REQUEST_DIAL = 3,
-  // Not a reply-driven request: shares the settings (menu order and theme)
-  // with the phone.
-  REQUEST_SYNC_SETTINGS = 4,
 };
 
 enum {
@@ -45,15 +42,10 @@ enum {
 #define NUMBER_SIZE 32
 #define TOKEN_STORAGE_KEY 1
 #define MENU_ORDER_STORAGE_KEY 2
-#define REORDER_HINT_STORAGE_KEY 3
-#define REORDER_HINT_MS 3500
-#define MENU_STAMP_STORAGE_KEY 4
+// Keys 3, 4 and 6 held earlier settings (reorder hint, sync stamps); keep them unused.
 #define THEME_STORAGE_KEY 5
-#define THEME_STAMP_STORAGE_KEY 6
-// The phone's companion may still be starting when the watch app opens.
-#define MENU_SYNC_DELAY_MS 1000
-#define MENU_SYNC_RETRY_MS 3000
-#define MENU_SYNC_ATTEMPTS 3
+#define TOUCH_STORAGE_KEY 7
+#define TOUCH_VIBE_STORAGE_KEY 8
 
 #ifndef MIN
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -101,8 +93,9 @@ typedef struct {
 
 static Theme s_theme;
 static int32_t s_theme_id = PBL_IF_COLOR_ELSE(THEME_DARK, THEME_LIGHT);
-// When the theme last changed, so the watch and the phone keep the newer one.
-static int32_t s_theme_stamp;
+// Touch settings from the Settings page; both are on until changed there.
+static bool s_touch_enabled = true;
+static bool s_touch_vibe = true;
 
 #define THEME_BACKGROUND (s_theme.background)
 #define THEME_TEXT (s_theme.text)
@@ -199,20 +192,11 @@ typedef enum {
 
 static Window *s_main_window;
 static MenuLayer *s_main_menu_layer;
-// Main menu order, chosen in the phone app's settings or on the watch (hold
-// Select on a row, move it with Up/Down, Select to put it down). Kept on the
-// watch so the menu is right even when the phone is away.
+// Main menu order, chosen on the Settings page in the Pebble phone app and
+// kept on the watch so the menu is right even when the phone is away.
 static uint8_t s_main_order[MAIN_ROW_COUNT] = {
   MAIN_ROW_DIALER, MAIN_ROW_RECENTS, MAIN_ROW_FAVORITES, MAIN_ROW_CONTACTS,
 };
-// When the order last changed, so the watch and the phone keep the newer one.
-static int32_t s_main_order_stamp;
-static bool s_menu_sync_in_flight;
-static int s_menu_sync_attempts;
-static AppTimer *s_menu_sync_timer;
-static bool s_main_moving;
-static TextLayer *s_hint_layer;
-static AppTimer *s_hint_timer;
 static GPath *s_star_path;
 
 static Window *s_call_window;
@@ -274,9 +258,7 @@ static const GPathInfo STAR_PATH_INFO = {
 };
 
 static void list_window_push(int32_t list, const char *filter);
-static void apply_phone_main_order(const char *text, int32_t stamp);
-static void apply_phone_theme(int32_t id, int32_t stamp);
-static void schedule_menu_sync(uint32_t delay_ms);
+static bool apply_settings(DictionaryIterator *iterator);
 
 // ---------------------------------------------------------------------------
 // Requests
@@ -881,10 +863,29 @@ static void touch_event(const TouchEvent *event, void *context) {
 
 static bool touch_available(void) {
 #if defined(APP_TOUCH)
-  return touch_service_is_enabled();
+  return s_touch_enabled && touch_service_is_enabled();
 #else
   return false;
 #endif
+}
+
+// Menus and lists follow touch only while touch input is switched on.
+static void apply_touch_navigation(void) {
+#if defined(APP_TOUCH)
+  app_touch_navigation_enable(s_touch_enabled);
+#endif
+}
+
+// A brief tick when a key or button is tapped, if switched on in Settings.
+static void touch_feedback(void) {
+  if (!s_touch_vibe) {
+    return;
+  }
+  static const uint32_t segments[] = { 30 };
+  vibes_enqueue_custom_pattern((VibePattern) {
+    .durations = segments,
+    .num_segments = ARRAY_LENGTH(segments),
+  });
 }
 
 // Sends taps on this window to the handler while it is on screen. The
@@ -892,6 +893,9 @@ static bool touch_available(void) {
 // also turned into a button press.
 static void touch_attach(Window *window, TapHandler handler) {
 #if defined(APP_TOUCH)
+  if (!s_touch_enabled) {
+    return;
+  }
   window_set_touch_bridge_disabled(window, true);
   if (!s_touch_window) {
     touch_service_subscribe(touch_event, NULL);
@@ -1007,6 +1011,7 @@ static void call_tap(GPoint point) {
   }
   const GRect target = grect_inset(layer_get_frame(s_call_button_layer), GEdgeInsets(-6));
   if (grect_contains_point(&target, &point)) {
+    touch_feedback();
     call_submit(NULL, NULL);
   }
 }
@@ -1434,6 +1439,7 @@ static void dial_tap(GPoint point) {
     return;
   }
 
+  touch_feedback();
   s_key = key;
   s_show_focus = false;
   s_pressed_key = key;
@@ -1497,19 +1503,8 @@ static void dial_window_push(void) {
 // AppMessage
 
 static void inbox_received(DictionaryIterator *iterator, void *context) {
-  // Settings can arrive at any time and are not tied to a request.
-  const Tuple *order_tuple = dict_find(iterator, MESSAGE_KEY_MENU_ORDER);
-  const Tuple *theme_tuple = dict_find(iterator, MESSAGE_KEY_THEME);
-  if (order_tuple || theme_tuple) {
-    if (order_tuple && order_tuple->type == TUPLE_CSTRING) {
-      const Tuple *stamp_tuple = dict_find(iterator, MESSAGE_KEY_MENU_STAMP);
-      apply_phone_main_order(order_tuple->value->cstring,
-                             stamp_tuple ? stamp_tuple->value->int32 : 0);
-    }
-    if (theme_tuple) {
-      const Tuple *stamp_tuple = dict_find(iterator, MESSAGE_KEY_THEME_STAMP);
-      apply_phone_theme(theme_tuple->value->int32, stamp_tuple ? stamp_tuple->value->int32 : 0);
-    }
+  // Settings from the Settings page can arrive at any time.
+  if (apply_settings(iterator)) {
     return;
   }
 
@@ -1535,16 +1530,7 @@ static void inbox_dropped(AppMessageResult reason, void *context) {
   }
 }
 
-static void outbox_sent(DictionaryIterator *iterator, void *context) {
-  s_menu_sync_in_flight = false;
-}
-
 static void outbox_failed(DictionaryIterator *iterator, AppMessageResult reason, void *context) {
-  if (s_menu_sync_in_flight) {
-    s_menu_sync_in_flight = false;
-    schedule_menu_sync(MENU_SYNC_RETRY_MS);
-    return;
-  }
   if (s_waiting_list || s_waiting_call) {
     fail_request("Phone unavailable");
   }
@@ -1576,111 +1562,69 @@ static uint16_t main_get_num_rows(MenuLayer *menu_layer, uint16_t section_index,
   return MAIN_ROW_COUNT;
 }
 
-// The order travels to and from the phone as digits, one per row: "0123".
-static bool parse_main_order(const char *text, uint8_t *order) {
-  bool seen[MAIN_ROW_COUNT] = { false };
-  for (int i = 0; i < MAIN_ROW_COUNT; i++) {
-    const int row = text[i] - '0';
-    if (row < 0 || row >= MAIN_ROW_COUNT || seen[row]) {
-      return false;
-    }
-    seen[row] = true;
-    order[i] = row;
-  }
-  return text[MAIN_ROW_COUNT] == '\0';
-}
+// Settings come from the Settings page in the Pebble phone app (Clay, see
+// src/pkjs/config.js). They are kept on the watch, so they still apply when
+// the phone is away.
 
 static void load_main_order(void) {
   uint8_t stored[MAIN_ROW_COUNT];
-  char text[MAIN_ROW_COUNT + 1];
   if (persist_read_data(MENU_ORDER_STORAGE_KEY, stored, sizeof(stored)) != sizeof(stored)) {
     return;
   }
   // Only accept a complete arrangement of the known rows.
+  bool seen[MAIN_ROW_COUNT] = { false };
   for (int i = 0; i < MAIN_ROW_COUNT; i++) {
-    text[i] = '0' + MIN(stored[i], 9);
+    if (stored[i] >= MAIN_ROW_COUNT || seen[stored[i]]) {
+      return;
+    }
+    seen[stored[i]] = true;
   }
-  text[MAIN_ROW_COUNT] = '\0';
-  if (parse_main_order(text, s_main_order)) {
-    s_main_order_stamp = persist_read_int(MENU_STAMP_STORAGE_KEY);
-  }
+  memcpy(s_main_order, stored, sizeof(s_main_order));
 }
 
-static void save_main_order(void) {
-  persist_write_data(MENU_ORDER_STORAGE_KEY, s_main_order, sizeof(s_main_order));
-  persist_write_int(MENU_STAMP_STORAGE_KEY, s_main_order_stamp);
-}
-
-// Tells the phone the watch's settings (menu order and theme). The phone keeps
-// each one that is newer and answers with any of its own that are newer. If the phone is busy or away, the
-// next launch tries again, so nothing is lost.
-static void sync_main_order(void);
-
-static void menu_sync_timer_fired(void *context) {
-  s_menu_sync_timer = NULL;
-  sync_main_order();
-}
-
-static void schedule_menu_sync(uint32_t delay_ms) {
-  if (s_menu_sync_timer) {
-    app_timer_cancel(s_menu_sync_timer);
-  }
-  s_menu_sync_timer = app_timer_register(delay_ms, menu_sync_timer_fired, NULL);
-}
-
-static void sync_main_order(void) {
-  DictionaryIterator *iterator;
-  if (s_menu_sync_attempts >= MENU_SYNC_ATTEMPTS) {
-    return;
-  }
-  if (app_message_outbox_begin(&iterator) != APP_MSG_OK) {
-    // Busy with a list or call; try again shortly.
-    s_menu_sync_attempts++;
-    schedule_menu_sync(MENU_SYNC_RETRY_MS);
-    return;
-  }
-  char text[MAIN_ROW_COUNT + 1];
-  for (int i = 0; i < MAIN_ROW_COUNT; i++) {
-    text[i] = '0' + s_main_order[i];
-  }
-  text[MAIN_ROW_COUNT] = '\0';
-  dict_write_int32(iterator, MESSAGE_KEY_REQUEST, REQUEST_SYNC_SETTINGS);
-  dict_write_cstring(iterator, MESSAGE_KEY_MENU_ORDER, text);
-  dict_write_int32(iterator, MESSAGE_KEY_MENU_STAMP, s_main_order_stamp);
-  dict_write_int32(iterator, MESSAGE_KEY_THEME, s_theme_id);
-  dict_write_int32(iterator, MESSAGE_KEY_THEME_STAMP, s_theme_stamp);
-  s_menu_sync_attempts++;
-  s_menu_sync_in_flight = app_message_outbox_send() == APP_MSG_OK;
-}
-
-// An order from the phone, chosen in the companion app's settings.
-static void apply_phone_main_order(const char *text, int32_t stamp) {
+// Builds the order from the page's four choices. A row chosen twice keeps its
+// first position, and rows left out fill the remaining places in their usual
+// order, so the menu always shows every row once.
+static void set_main_order(const int32_t *choices) {
   uint8_t order[MAIN_ROW_COUNT];
-  if (stamp <= s_main_order_stamp || s_main_moving || !parse_main_order(text, order)) {
-    return;
+  bool used[MAIN_ROW_COUNT] = { false };
+  int count = 0;
+  for (int i = 0; i < MAIN_ROW_COUNT; i++) {
+    const int32_t row = choices[i];
+    if (row >= 0 && row < MAIN_ROW_COUNT && !used[row]) {
+      used[row] = true;
+      order[count++] = row;
+    }
+  }
+  for (int row = 0; row < MAIN_ROW_COUNT; row++) {
+    if (!used[row]) {
+      order[count++] = row;
+    }
   }
   memcpy(s_main_order, order, sizeof(s_main_order));
-  s_main_order_stamp = stamp;
-  save_main_order();
-  if (s_main_menu_layer) {
-    menu_layer_reload_data(s_main_menu_layer);
-  }
+  persist_write_data(MENU_ORDER_STORAGE_KEY, s_main_order, sizeof(s_main_order));
 }
 
-static void load_theme(void) {
-  if (persist_exists(THEME_STAMP_STORAGE_KEY)) {
+static void load_settings(void) {
+  load_main_order();
+  if (persist_exists(THEME_STORAGE_KEY)) {
     const int32_t id = persist_read_int(THEME_STORAGE_KEY);
     if (id == THEME_DARK || id == THEME_LIGHT) {
       s_theme_id = id;
-      s_theme_stamp = persist_read_int(THEME_STAMP_STORAGE_KEY);
     }
+  }
+  if (persist_exists(TOUCH_STORAGE_KEY)) {
+    s_touch_enabled = persist_read_bool(TOUCH_STORAGE_KEY);
+  }
+  if (persist_exists(TOUCH_VIBE_STORAGE_KEY)) {
+    s_touch_vibe = persist_read_bool(TOUCH_VIBE_STORAGE_KEY);
   }
   theme_load(s_theme_id);
 }
 
 static void main_apply_theme(void);
 
-// Recolours every screen that is open, after the phone changes the theme.
+// Recolours every screen that is open, after the theme changes.
 static void refresh_theme(void) {
   main_apply_theme();
   for (int i = 0; i < MAX_OPEN_LISTS; i++) {
@@ -1702,41 +1646,64 @@ static void refresh_theme(void) {
   }
 }
 
-// A theme from the phone, chosen in the companion app's settings.
-static void apply_phone_theme(int32_t id, int32_t stamp) {
-  if (stamp <= s_theme_stamp || (id != THEME_DARK && id != THEME_LIGHT)) {
-    return;
-  }
-  s_theme_id = id;
-  s_theme_stamp = stamp;
-  persist_write_int(THEME_STORAGE_KEY, s_theme_id);
-  persist_write_int(THEME_STAMP_STORAGE_KEY, s_theme_stamp);
-  theme_load(s_theme_id);
-  refresh_theme();
+// Clay sends selects as text and toggles as numbers.
+static int32_t tuple_int(const Tuple *tuple) {
+  return tuple->type == TUPLE_CSTRING ? atoi(tuple->value->cstring) : tuple->value->int32;
 }
 
-// Small up and down arrows show which row is being moved.
-static void draw_move_arrows(GContext *ctx, GRect bounds, GColor color) {
-  const int16_t x = bounds.size.w - PBL_IF_ROUND_ELSE(30, 14);
-  const int16_t middle = bounds.size.h / 2;
-  graphics_context_set_fill_color(ctx, color);
-  for (int i = 0; i < 6; i++) {
-    graphics_fill_rect(ctx, GRect(x - i, middle - 9 + i, 2 * i + 1, 1), 0, GCornerNone);
-    graphics_fill_rect(ctx, GRect(x - i, middle + 9 - i, 2 * i + 1, 1), 0, GCornerNone);
+// Applies the values saved on the Settings page. Returns false if the message
+// held no settings (it is then a reply to a list or call request).
+static bool apply_settings(DictionaryIterator *iterator) {
+  bool found = false;
+  const Tuple *tuple;
+
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_THEME))) {
+    found = true;
+    const int32_t id = tuple_int(tuple);
+    if ((id == THEME_DARK || id == THEME_LIGHT) && id != s_theme_id) {
+      s_theme_id = id;
+      persist_write_int(THEME_STORAGE_KEY, s_theme_id);
+      theme_load(s_theme_id);
+      refresh_theme();
+    }
   }
+
+  const uint32_t menu_keys[MAIN_ROW_COUNT] = {
+    MESSAGE_KEY_MENU_1, MESSAGE_KEY_MENU_2, MESSAGE_KEY_MENU_3, MESSAGE_KEY_MENU_4,
+  };
+  int32_t choices[MAIN_ROW_COUNT];
+  bool menu_found = false;
+  for (int i = 0; i < MAIN_ROW_COUNT; i++) {
+    tuple = dict_find(iterator, menu_keys[i]);
+    choices[i] = tuple ? tuple_int(tuple) : s_main_order[i];
+    menu_found = menu_found || tuple;
+  }
+  if (menu_found) {
+    found = true;
+    set_main_order(choices);
+    if (s_main_menu_layer) {
+      menu_layer_reload_data(s_main_menu_layer);
+    }
+  }
+
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_TOUCH_ENABLED))) {
+    found = true;
+    s_touch_enabled = tuple_int(tuple) != 0;
+    persist_write_bool(TOUCH_STORAGE_KEY, s_touch_enabled);
+    apply_touch_navigation();
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_TOUCH_VIBE))) {
+    found = true;
+    s_touch_vibe = tuple_int(tuple) != 0;
+    persist_write_bool(TOUCH_VIBE_STORAGE_KEY, s_touch_vibe);
+  }
+  return found;
 }
 
 static void main_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index, void *context) {
   const MainRow row = s_main_order[cell_index->row];
   const char *title = main_row_title(row);
   const GRect bounds = layer_get_bounds(cell_layer);
-  const bool moving = s_main_moving && menu_cell_layer_is_highlighted(cell_layer);
-  if (moving) {
-    // The row being moved stands out in the call colour on colour watches.
-    graphics_context_set_fill_color(ctx, PBL_IF_COLOR_ELSE(THEME_CALL, THEME_HIGHLIGHT));
-    graphics_fill_rect(ctx, bounds, 0, GCornerNone);
-    draw_move_arrows(ctx, bounds, THEME_HIGHLIGHT_TEXT);
-  }
   GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
 
 #if defined(PBL_ROUND)
@@ -1755,8 +1722,7 @@ static void main_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cel
     ? THEME_HIGHLIGHT_TEXT
     : THEME_TEXT;
   const GColor icon_color = PBL_IF_COLOR_ELSE(
-    moving ? foreground
-      : row == MAIN_ROW_DIALER ? THEME_CALL : row == MAIN_ROW_FAVORITES ? THEME_WARNING : foreground,
+    row == MAIN_ROW_DIALER ? THEME_CALL : row == MAIN_ROW_FAVORITES ? THEME_WARNING : foreground,
     foreground);
   graphics_context_set_fill_color(ctx, icon_color);
   const GPoint icon_origin = GPoint(left, middle - ICON_SIZE / 2);
@@ -1785,59 +1751,13 @@ static void main_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cel
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 }
 
-static void hide_reorder_hint(void *context) {
-  s_hint_timer = NULL;
-  if (s_hint_layer) {
-    layer_set_hidden(text_layer_get_layer(s_hint_layer), true);
-  }
-}
-
-static void main_drop(void) {
-  s_main_moving = false;
-  s_main_order_stamp = time(NULL);
-  save_main_order();
-  s_menu_sync_attempts = 0;
-  sync_main_order();
-  layer_mark_dirty(menu_layer_get_layer(s_main_menu_layer));
-}
-
 static void main_select(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
-  if (s_main_moving) {
-    main_drop();
-    return;
-  }
   switch (s_main_order[cell_index->row]) {
     case MAIN_ROW_DIALER: dial_window_push(); break;
     case MAIN_ROW_RECENTS: list_window_push(LIST_RECENTS, NULL); break;
     case MAIN_ROW_FAVORITES: list_window_push(LIST_FAVORITES, NULL); break;
     default: list_window_push(LIST_LETTERS, NULL); break;
   }
-}
-
-static void main_pick_up(MenuLayer *menu_layer, MenuIndex *cell_index, void *context) {
-  if (s_main_moving) {
-    main_drop();
-    return;
-  }
-  s_main_moving = true;
-  vibes_short_pulse();
-  hide_reorder_hint(NULL);
-  // Once someone has found the gesture, the hint is no longer needed.
-  persist_write_bool(REORDER_HINT_STORAGE_KEY, true);
-  layer_mark_dirty(menu_layer_get_layer(menu_layer));
-}
-
-// While a row is picked up, Up/Down carry it along instead of just moving the
-// highlight: swap it with its neighbour and let the highlight follow.
-static void main_selection_will_change(MenuLayer *menu_layer, MenuIndex *new_index,
-                                       MenuIndex old_index, void *context) {
-  if (!s_main_moving || new_index->row == old_index.row) {
-    return;
-  }
-  const uint8_t moved = s_main_order[old_index.row];
-  s_main_order[old_index.row] = s_main_order[new_index->row];
-  s_main_order[new_index->row] = moved;
-  layer_mark_dirty(menu_layer_get_layer(menu_layer));
 }
 
 static void main_apply_theme(void) {
@@ -1847,10 +1767,6 @@ static void main_apply_theme(void) {
   menu_layer_set_normal_colors(s_main_menu_layer, THEME_BACKGROUND, THEME_TEXT);
   menu_layer_set_highlight_colors(s_main_menu_layer, THEME_HIGHLIGHT, THEME_HIGHLIGHT_TEXT);
   layer_mark_dirty(menu_layer_get_layer(s_main_menu_layer));
-  if (s_hint_layer) {
-    text_layer_set_background_color(s_hint_layer, THEME_HIGHLIGHT);
-    text_layer_set_text_color(s_hint_layer, THEME_HIGHLIGHT_TEXT);
-  }
 }
 
 static void main_window_load(Window *window) {
@@ -1862,68 +1778,30 @@ static void main_window_load(Window *window) {
     .get_num_rows = main_get_num_rows,
     .draw_row = main_draw_row,
     .select_click = main_select,
-    .select_long_click = main_pick_up,
-    .selection_will_change = main_selection_will_change,
   });
   main_apply_theme();
   menu_layer_set_click_config_onto_window(s_main_menu_layer, window);
   layer_add_child(root, menu_layer_get_layer(s_main_menu_layer));
   s_star_path = gpath_create(&STAR_PATH_INFO);
-
-  if (!persist_exists(REORDER_HINT_STORAGE_KEY)) {
-    // Shown on launch until the user has reordered once on the watch.
-    const int16_t height = PBL_IF_ROUND_ELSE(44, 24);
-    s_hint_layer = text_layer_create(GRect(0, bounds.size.h - height, bounds.size.w, height));
-    text_layer_set_background_color(s_hint_layer, THEME_HIGHLIGHT);
-    text_layer_set_text_color(s_hint_layer, THEME_HIGHLIGHT_TEXT);
-    text_layer_set_font(s_hint_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
-    text_layer_set_text_alignment(s_hint_layer, GTextAlignmentCenter);
-    text_layer_set_text(s_hint_layer, "Hold Select to reorder");
-    layer_add_child(root, text_layer_get_layer(s_hint_layer));
-#if defined(PBL_ROUND)
-    text_layer_enable_screen_text_flow_and_paging(s_hint_layer, 4);
-#endif
-    s_hint_timer = app_timer_register(REORDER_HINT_MS, hide_reorder_hint, NULL);
-  }
 }
 
 static void main_window_unload(Window *window) {
-  if (s_main_moving) {
-    s_main_moving = false;
-    s_main_order_stamp = time(NULL);
-    save_main_order();
-    s_menu_sync_attempts = 0;
-    sync_main_order();
-  }
-  if (s_hint_timer) {
-    app_timer_cancel(s_hint_timer);
-    s_hint_timer = NULL;
-  }
-  if (s_hint_layer) {
-    text_layer_destroy(s_hint_layer);
-    s_hint_layer = NULL;
-  }
   menu_layer_destroy(s_main_menu_layer);
   s_main_menu_layer = NULL;
   gpath_destroy(s_star_path);
 }
 
 static void init(void) {
-  load_theme();
-#if defined(APP_TOUCH)
+  load_settings();
   // Third-party apps get no touch navigation unless they ask; with it, the
   // menus scroll and select by touch.
-  app_touch_navigation_enable(true);
-#endif
+  apply_touch_navigation();
   s_token = persist_read_int(TOKEN_STORAGE_KEY);
   app_message_register_inbox_received(inbox_received);
   app_message_register_inbox_dropped(inbox_dropped);
   app_message_register_outbox_failed(outbox_failed);
-  app_message_register_outbox_sent(outbox_sent);
   s_inbox_size = MIN(app_message_inbox_size_maximum(), (uint32_t)MAX_INBOX_SIZE);
   app_message_open(s_inbox_size, OUTBOX_SIZE);
-  load_main_order();
-  schedule_menu_sync(MENU_SYNC_DELAY_MS);
 
   s_main_window = window_create();
   window_set_window_handlers(s_main_window, (WindowHandlers) {
@@ -1934,9 +1812,6 @@ static void init(void) {
 }
 
 static void deinit(void) {
-  if (s_menu_sync_timer) {
-    app_timer_cancel(s_menu_sync_timer);
-  }
   cancel_response_timer();
   cancel_exit_timer();
   window_destroy(s_main_window);
