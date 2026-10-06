@@ -54,12 +54,17 @@ public final class DialerService extends BaseJavaPebbleListenerService {
     private static final int KEY_FINAL = 12;
     private static final int KEY_NUMBER = 13;
     private static final int KEY_CALL_STATE = 24;
+    private static final int KEY_COMPANION_VERSION = 25;
 
     private static final int REQUEST_LIST = 1;
     private static final int REQUEST_CALL = 2;
     private static final int REQUEST_DIAL = 3;
     // 4 was the old settings sync; keep it unused so an old watch app is not misread.
     private static final int REQUEST_HANGUP = 5;
+
+    // Sent with every call reply, so the watch knows what this app can do.
+    // 2: can end calls (REQUEST_HANGUP). Older companions sent nothing.
+    private static final int COMPANION_VERSION = 2;
 
     // Sent to the watch, unprompted, when a call it started has ended.
     private static final int CALL_STATE_ENDED = 0;
@@ -176,6 +181,7 @@ public final class DialerService extends BaseJavaPebbleListenerService {
                 } else {
                     reply = resultMessage(token, result);
                 }
+                reply.put(KEY_COMPANION_VERSION, new PebbleDictionaryItem.Int32(COMPANION_VERSION));
                 send(watch, token, Collections.singletonList(reply), 0);
             }
         });

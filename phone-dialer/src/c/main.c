@@ -12,6 +12,9 @@ enum {
   REQUEST_HANGUP = 5,
 };
 
+// The phone app's COMPANION_VERSION from which it can end calls.
+#define COMPANION_CAN_HANG_UP 2
+
 enum {
   LIST_FAVORITES = 0,
   LIST_LETTERS = 1,
@@ -209,6 +212,9 @@ static GPathInfo s_hangup_icon_info;
 static GPoint s_hangup_icon_points[24];
 static Entry s_call_entry;
 static int32_t s_call_source;
+// Whether the phone app that placed the call can also end it. Phone apps from
+// before hang-up was added do not say, and would never answer a hang-up.
+static bool s_call_can_hang_up;
 
 typedef enum {
   CALL_CONFIRM,   // Waiting for Select (or a tap on Call) to place the call.
@@ -1048,6 +1054,8 @@ static void call_handle_reply(int32_t result, DictionaryIterator *iterator) {
     strncpy(s_call_number, number->value->cstring, sizeof(s_call_number) - 1);
     s_call_number[sizeof(s_call_number) - 1] = '\0';
   }
+  const Tuple *version = dict_find(iterator, MESSAGE_KEY_COMPANION_VERSION);
+  s_call_can_hang_up = version && version->value->int32 >= COMPANION_CAN_HANG_UP;
   s_call_state = CALL_ACTIVE;
   call_set_status(touch_available() ? "Calling\nTap End or press Down" : "Calling\nPress Down to end",
                   s_theme.call);
@@ -1214,6 +1222,12 @@ static void call_hang_up(ClickRecognizerRef recognizer, void *context) {
   if (s_call_state != CALL_ACTIVE) {
     return;
   }
+  if (!s_call_can_hang_up) {
+    // An older phone app would never answer; say so now instead of timing out.
+    call_show_error("Update Phone Dialer on your phone");
+    vibes_short_pulse();
+    return;
+  }
   const char *error = NULL;
   DictionaryIterator *iterator = begin_request(REQUEST_HANGUP, &error);
   if (!iterator || !send_request(&error)) {
@@ -1235,6 +1249,7 @@ static void call_window_push(const Entry *entry, int32_t source) {
   s_call_entry = *entry;
   s_call_source = source;
   s_call_state = CALL_CONFIRM;
+  s_call_can_hang_up = false;
   s_call_number[0] = '\0';
   strncpy(s_call_name, entry->title, sizeof(s_call_name) - 1);
   s_call_name[sizeof(s_call_name) - 1] = '\0';

@@ -149,7 +149,10 @@ Android package: com.arkam.pebbledialer
 | Hang up (`REQUEST=5`) | nothing else | `RESULT` |
 
 A successful call reply also carries `NUMBER`, the number dialled, for the call
-screen. While that call lasts, the companion checks Android's audio mode once
+screen, and every call reply carries `COMPANION_VERSION` (2: can hang up).
+Companions from before hang-up send no version; the watch then says
+**Update Phone Dialer on your phone** when End is pressed, instead of waiting
+for a reply that never comes. While that call lasts, the companion checks Android's audio mode once
 a second (`MODE_IN_CALL` needs no extra permission) and, when the call ends,
 sends `CALL_STATE` (0, ended) to the watch unprompted. If the phone never
 reports a call, the watch is not told anything, rather than being told a live
