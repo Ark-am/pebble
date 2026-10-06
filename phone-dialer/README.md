@@ -1,7 +1,7 @@
 # Phone Dialer for Pebble
 
 Dial a number, return a recent call, or call a favorite/contact from your Pebble
-through the included Android companion. Version 1.1.0.
+through the included Android companion.
 
 ## Store artwork
 
@@ -10,12 +10,9 @@ through the included Android companion. Version 1.1.0.
 
 ## Install
 
-The prepared files are in `dist/`:
-
-- `phone-dialer-1.1.0-android.apk`: signed debug APK, ready for direct installation.
-- `phone-dialer-1.1.0.pbw`: watch app for Aplite, Basalt, Chalk, Diorite, Emery,
-  Flint and Gabbro.
-- `phone-dialer-1.1.0-install.zip`: both files and this guide.
+Build both packages first (see [Build and validate](#build-and-validate)):
+the Android companion APK and the watch app PBW, which runs on Aplite, Basalt,
+Chalk, Diorite, Emery, Flint and Gabbro.
 
 1. Copy the APK to an Android 7.0+ phone and open it. Allow installation from
    that file/browser app when Android asks.
@@ -37,7 +34,7 @@ that old companion resets its permission settings; install this APK afterwards.
 For USB installation with Android debugging enabled:
 
 ```sh
-adb install -r dist/phone-dialer-1.1.0-android.apk
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Android treats `READ_CALL_LOG` as a hard-restricted permission: the installer

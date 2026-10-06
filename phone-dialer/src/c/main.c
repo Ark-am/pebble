@@ -101,15 +101,6 @@ static int32_t s_theme_id = PBL_IF_COLOR_ELSE(THEME_DARK, THEME_LIGHT);
 static bool s_touch_enabled = true;
 static bool s_touch_vibe = true;
 
-#define THEME_BACKGROUND (s_theme.background)
-#define THEME_TEXT (s_theme.text)
-#define THEME_HINT (s_theme.hint)
-#define THEME_DIVIDER (s_theme.divider)
-#define THEME_HIGHLIGHT (s_theme.highlight)
-#define THEME_HIGHLIGHT_TEXT (s_theme.highlight_text)
-#define THEME_CALL (s_theme.call)
-#define THEME_WARNING (s_theme.warning)
-
 static void theme_load(int32_t id) {
   const bool light = id == THEME_LIGHT;
 #if defined(PBL_COLOR)
@@ -317,6 +308,13 @@ static void cancel_exit_timer(void) {
 static void list_show_error(ListView *view, const char *message);
 static void call_request_failed(const char *message);
 
+// Moves to a new request token, so any late reply to the current request is
+// ignored. Kept across launches so a restarted app never reuses a token.
+static void abandon_request(void) {
+  s_token = s_token >= INT32_MAX ? 1 : s_token + 1;
+  persist_write_int(TOKEN_STORAGE_KEY, s_token);
+}
+
 static void fail_request(const char *message) {
   cancel_response_timer();
   ListView *view = s_waiting_list;
@@ -324,8 +322,7 @@ static void fail_request(const char *message) {
   s_waiting_list = NULL;
   s_waiting_call = false;
   // Ignore any late replies to the request that just failed.
-  s_token = s_token >= INT32_MAX ? 1 : s_token + 1;
-  persist_write_int(TOKEN_STORAGE_KEY, s_token);
+  abandon_request();
 
   if (view) {
     list_show_error(view, message);
@@ -361,8 +358,7 @@ static DictionaryIterator *begin_request(int32_t request, const char **error) {
   cancel_response_timer();
   s_waiting_list = NULL;
   s_waiting_call = false;
-  s_token = s_token >= INT32_MAX ? 1 : s_token + 1;
-  persist_write_int(TOKEN_STORAGE_KEY, s_token);
+  abandon_request();
 
   dict_write_int32(iterator, MESSAGE_KEY_REQUEST, request);
   dict_write_int32(iterator, MESSAGE_KEY_TOKEN, s_token);
@@ -538,10 +534,6 @@ static void list_handle_reply(ListView *view, DictionaryIterator *iterator, int3
 
 // List rows: the name large and bold, then a dimmer second line whose call
 // type or number label gets a touch of colour, and a thin divider between rows.
-#define LIST_SECONDARY (s_theme.list_secondary)
-#define LIST_GOOD (s_theme.list_good)
-#define LIST_BAD (s_theme.list_bad)
-#define LIST_DIVIDER (s_theme.divider)
 #define LIST_MARGIN 6
 // The separator recent calls put between the call type and the time.
 #define RECENT_SEPARATOR " \xc2\xb7 "
@@ -567,9 +559,9 @@ static GColor subtitle_lead_color(const ListView *view, const char *subtitle) {
   if (view->list == LIST_RECENTS &&
       (strncmp(subtitle, "Missed", 6) == 0 || strncmp(subtitle, "Declined", 8) == 0 ||
        strncmp(subtitle, "Blocked", 7) == 0)) {
-    return LIST_BAD;
+    return s_theme.list_bad;
   }
-  return LIST_GOOD;
+  return s_theme.list_good;
 }
 
 static void draw_list_cell(GContext *ctx, const Layer *cell_layer, const char *title,
@@ -579,10 +571,10 @@ static void draw_list_cell(GContext *ctx, const Layer *cell_layer, const char *t
   const bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
   if (highlighted) {
     // Keep the colours readable on the highlight; black-and-white goes all white.
-    title_color = THEME_HIGHLIGHT_TEXT;
-    lead_color = PBL_IF_COLOR_ELSE(lead_color, THEME_HIGHLIGHT_TEXT);
+    title_color = s_theme.highlight_text;
+    lead_color = PBL_IF_COLOR_ELSE(lead_color, s_theme.highlight_text);
   }
-  const GColor secondary = highlighted ? THEME_HIGHLIGHT_TEXT : LIST_SECONDARY;
+  const GColor secondary = highlighted ? s_theme.highlight_text : s_theme.list_secondary;
   const GFont title_font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
   const GFont subtitle_font = fonts_get_system_font(FONT_KEY_GOTHIC_18);
   const GTextAlignment alignment = PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft);
@@ -636,7 +628,7 @@ static void draw_list_cell(GContext *ctx, const Layer *cell_layer, const char *t
 
 #if !defined(PBL_ROUND)
   if (!highlighted) {
-    graphics_context_set_stroke_color(ctx, LIST_DIVIDER);
+    graphics_context_set_stroke_color(ctx, s_theme.divider);
     graphics_context_set_stroke_width(ctx, 1);
     graphics_draw_line(ctx, GPoint(margin, bounds.size.h - 1),
                        GPoint(bounds.size.w - margin - 1, bounds.size.h - 1));
@@ -675,8 +667,8 @@ static void list_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cel
   const ListView *view = context;
   if (list_shows_message(view)) {
     const bool error = view->state == LIST_STATE_ERROR;
-    draw_list_cell(ctx, cell_layer, view->message, error ? LIST_BAD : THEME_TEXT,
-                   error ? "Select to retry" : NULL, 0, LIST_GOOD);
+    draw_list_cell(ctx, cell_layer, view->message, error ? s_theme.list_bad : s_theme.text,
+                   error ? "Select to retry" : NULL, 0, s_theme.list_good);
     return;
   }
 
@@ -686,7 +678,7 @@ static void list_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cel
       static char range[24];
       snprintf(range, sizeof(range), "%d-%d",
                (int)(MAX(view->offset - PAGE_SIZE, 0) + 1), (int)view->offset);
-      draw_list_cell(ctx, cell_layer, "Previous", LIST_GOOD, range, 0, LIST_GOOD);
+      draw_list_cell(ctx, cell_layer, "Previous", s_theme.list_good, range, 0, s_theme.list_good);
       return;
     }
     row--;
@@ -697,12 +689,12 @@ static void list_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cel
     const int32_t first = view->offset + view->received + 1;
     const int32_t last = MIN(view->offset + view->received + PAGE_SIZE, view->total);
     snprintf(range, sizeof(range), "%d-%d of %d", (int)first, (int)last, (int)view->total);
-    draw_list_cell(ctx, cell_layer, "More", LIST_GOOD, range, 0, LIST_GOOD);
+    draw_list_cell(ctx, cell_layer, "More", s_theme.list_good, range, 0, s_theme.list_good);
     return;
   }
 
   const Entry *entry = &view->entries[row];
-  draw_list_cell(ctx, cell_layer, entry->title, THEME_TEXT, entry->subtitle,
+  draw_list_cell(ctx, cell_layer, entry->title, s_theme.text, entry->subtitle,
                  subtitle_lead_length(view, entry->subtitle),
                  subtitle_lead_color(view, entry->subtitle));
 }
@@ -747,8 +739,8 @@ static void list_select(MenuLayer *menu_layer, MenuIndex *cell_index, void *cont
 static ListView *s_open_lists[MAX_OPEN_LISTS];
 
 static void list_apply_theme(ListView *view) {
-  menu_layer_set_normal_colors(view->menu_layer, THEME_BACKGROUND, THEME_TEXT);
-  menu_layer_set_highlight_colors(view->menu_layer, THEME_HIGHLIGHT, THEME_HIGHLIGHT_TEXT);
+  menu_layer_set_normal_colors(view->menu_layer, s_theme.background, s_theme.text);
+  menu_layer_set_highlight_colors(view->menu_layer, s_theme.highlight, s_theme.highlight_text);
   layer_mark_dirty(menu_layer_get_layer(view->menu_layer));
 }
 
@@ -788,8 +780,7 @@ static void list_window_unload(Window *window) {
   if (s_waiting_list == view) {
     cancel_response_timer();
     s_waiting_list = NULL;
-    s_token = s_token >= INT32_MAX ? 1 : s_token + 1;
-    persist_write_int(TOKEN_STORAGE_KEY, s_token);
+    abandon_request();
   }
   menu_layer_destroy(view->menu_layer);
   window_destroy(window);
@@ -978,11 +969,11 @@ static void call_set_status(const char *status, GColor color) {
 }
 
 static void call_show_status(const char *status) {
-  call_set_status(status, THEME_HINT);
+  call_set_status(status, s_theme.hint);
 }
 
 static void call_show_error(const char *status) {
-  call_set_status(status, THEME_WARNING);
+  call_set_status(status, s_theme.warning);
 }
 
 // What the call screen is showing. It starts as a confirmation, and once the
@@ -1059,7 +1050,7 @@ static void call_handle_reply(int32_t result, DictionaryIterator *iterator) {
   }
   s_call_state = CALL_ACTIVE;
   call_set_status(touch_available() ? "Calling\nTap End or press Down" : "Calling\nPress Down to end",
-                  THEME_CALL);
+                  s_theme.call);
   call_layout();
   vibes_short_pulse();
 }
@@ -1137,13 +1128,13 @@ static TextLayer *call_text_layer(Layer *root, const char *font, GColor color) {
 static void call_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   const GRect bounds = layer_get_bounds(root);
-  window_set_background_color(window, THEME_BACKGROUND);
+  window_set_background_color(window, s_theme.background);
 
-  s_call_status_layer = call_text_layer(root, FONT_KEY_GOTHIC_18, THEME_HINT);
+  s_call_status_layer = call_text_layer(root, FONT_KEY_GOTHIC_18, s_theme.hint);
   s_call_name_layer = call_text_layer(root, s_call_source == -1 ? FONT_KEY_GOTHIC_18_BOLD
-                                                                : FONT_KEY_GOTHIC_24_BOLD, THEME_TEXT);
+                                                                : FONT_KEY_GOTHIC_24_BOLD, s_theme.text);
   text_layer_set_text(s_call_name_layer, s_call_name);
-  s_call_number_layer = call_text_layer(root, FONT_KEY_GOTHIC_18, THEME_HINT);
+  s_call_number_layer = call_text_layer(root, FONT_KEY_GOTHIC_18, s_theme.hint);
   text_layer_set_text(s_call_number_layer, s_call_number);
 
   const int16_t w = bounds.size.w;
@@ -1173,8 +1164,7 @@ static void call_window_unload(Window *window) {
   if (s_waiting_call) {
     cancel_response_timer();
     s_waiting_call = false;
-    s_token = s_token >= INT32_MAX ? 1 : s_token + 1;
-    persist_write_int(TOKEN_STORAGE_KEY, s_token);
+    abandon_request();
   }
   cancel_exit_timer();
   text_layer_destroy(s_call_status_layer);
@@ -1271,14 +1261,7 @@ static void call_window_push(const Entry *entry, int32_t source) {
 // Number keypad. Up/Down move the highlight, Select presses the highlighted
 // key, and on touch watches every key can also be tapped directly.
 
-// Keys follow the app theme (see theme_load).
-#define DIAL_BACKGROUND THEME_BACKGROUND
-#define DIAL_TEXT THEME_TEXT
-#define DIAL_HINT THEME_HINT
-#define DIAL_DIVIDER THEME_DIVIDER
-
 #define PRESS_FLASH_MS 150
-
 
 #if defined(PBL_ROUND)
 static int16_t isqrt(int32_t value) {
@@ -1427,7 +1410,7 @@ static void draw_key(GContext *ctx, int key) {
 static void draw_number(GContext *ctx) {
   const GRect area = s_display_rect;
   if (!s_number[0]) {
-    graphics_context_set_text_color(ctx, DIAL_HINT);
+    graphics_context_set_text_color(ctx, s_theme.hint);
     const GSize text = graphics_text_layout_get_content_size(
       "Enter number", s_number_small_font, area, GTextOverflowModeFill, GTextAlignmentCenter);
     graphics_draw_text(ctx, "Enter number", s_number_small_font,
@@ -1458,7 +1441,7 @@ static void draw_number(GContext *ctx) {
 
   const GSize size = graphics_text_layout_get_content_size(
     text, font, area, GTextOverflowModeFill, GTextAlignmentCenter);
-  graphics_context_set_text_color(ctx, DIAL_TEXT);
+  graphics_context_set_text_color(ctx, s_theme.text);
   graphics_draw_text(ctx, text, font,
                      GRect(area.origin.x, area.origin.y + (area.size.h - size.h) / 2 - size.h / 5,
                            area.size.w, size.h + size.h / 5),
@@ -1466,11 +1449,11 @@ static void draw_number(GContext *ctx) {
 }
 
 static void dial_draw(Layer *layer, GContext *ctx) {
-  graphics_context_set_fill_color(ctx, DIAL_BACKGROUND);
+  graphics_context_set_fill_color(ctx, s_theme.background);
   graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
 
   draw_number(ctx);
-  graphics_context_set_stroke_color(ctx, DIAL_DIVIDER);
+  graphics_context_set_stroke_color(ctx, s_theme.divider);
   graphics_context_set_stroke_width(ctx, 1);
   const int16_t divider_y = s_display_rect.origin.y + s_display_rect.size.h;
   graphics_draw_line(ctx, GPoint(s_display_rect.origin.x + 8, divider_y),
@@ -1577,7 +1560,7 @@ static void dial_tap(GPoint point) {
 static void dial_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   const GRect bounds = layer_get_bounds(root);
-  window_set_background_color(window, DIAL_BACKGROUND);
+  window_set_background_color(window, s_theme.background);
   dial_layout(bounds);
   s_handset_path = create_handset_path(s_handset_points, &s_handset_info, s_icon_size);
 
@@ -1762,14 +1745,14 @@ static void refresh_theme(void) {
     }
   }
   if (s_dial_window) {
-    window_set_background_color(s_dial_window, THEME_BACKGROUND);
+    window_set_background_color(s_dial_window, s_theme.background);
     layer_mark_dirty(s_dial_layer);
   }
   if (s_call_window) {
-    window_set_background_color(s_call_window, THEME_BACKGROUND);
-    text_layer_set_text_color(s_call_name_layer, THEME_TEXT);
-    text_layer_set_text_color(s_call_status_layer, THEME_HINT);
-    text_layer_set_text_color(s_call_number_layer, THEME_HINT);
+    window_set_background_color(s_call_window, s_theme.background);
+    text_layer_set_text_color(s_call_name_layer, s_theme.text);
+    text_layer_set_text_color(s_call_status_layer, s_theme.hint);
+    text_layer_set_text_color(s_call_number_layer, s_theme.hint);
     layer_mark_dirty(s_call_button_layer);
   }
 }
@@ -1847,10 +1830,10 @@ static void main_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *cel
   // Match the colours set in main_window_load so icons invert with the text.
   // On colour watches the Dialer and Favorites icons keep the keypad's accents.
   const GColor foreground = menu_cell_layer_is_highlighted(cell_layer)
-    ? THEME_HIGHLIGHT_TEXT
-    : THEME_TEXT;
+    ? s_theme.highlight_text
+    : s_theme.text;
   const GColor icon_color = PBL_IF_COLOR_ELSE(
-    row == MAIN_ROW_DIALER ? THEME_CALL : row == MAIN_ROW_FAVORITES ? THEME_WARNING : foreground,
+    row == MAIN_ROW_DIALER ? s_theme.call : row == MAIN_ROW_FAVORITES ? s_theme.warning : foreground,
     foreground);
   graphics_context_set_fill_color(ctx, icon_color);
   const GPoint icon_origin = GPoint(left, middle - ICON_SIZE / 2);
@@ -1892,8 +1875,8 @@ static void main_apply_theme(void) {
   if (!s_main_menu_layer) {
     return;
   }
-  menu_layer_set_normal_colors(s_main_menu_layer, THEME_BACKGROUND, THEME_TEXT);
-  menu_layer_set_highlight_colors(s_main_menu_layer, THEME_HIGHLIGHT, THEME_HIGHLIGHT_TEXT);
+  menu_layer_set_normal_colors(s_main_menu_layer, s_theme.background, s_theme.text);
+  menu_layer_set_highlight_colors(s_main_menu_layer, s_theme.highlight, s_theme.highlight_text);
   layer_mark_dirty(menu_layer_get_layer(s_main_menu_layer));
 }
 
