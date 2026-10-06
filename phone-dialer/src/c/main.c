@@ -8,8 +8,9 @@ enum {
   REQUEST_LIST = 1,
   REQUEST_CALL = 2,
   REQUEST_DIAL = 3,
-  // Not a reply-driven request: shares the main menu order with the phone.
-  REQUEST_SYNC_MENU = 4,
+  // Not a reply-driven request: shares the settings (menu order and theme)
+  // with the phone.
+  REQUEST_SYNC_SETTINGS = 4,
 };
 
 enum {
@@ -47,6 +48,8 @@ enum {
 #define REORDER_HINT_STORAGE_KEY 3
 #define REORDER_HINT_MS 3500
 #define MENU_STAMP_STORAGE_KEY 4
+#define THEME_STORAGE_KEY 5
+#define THEME_STAMP_STORAGE_KEY 6
 // The phone's companion may still be starting when the watch app opens.
 #define MENU_SYNC_DELAY_MS 1000
 #define MENU_SYNC_RETRY_MS 3000
@@ -63,17 +66,95 @@ enum {
 // Long enough to read the confirmation before returning to the watchface.
 #define EXIT_DELAY_MS 1500
 
-// App theme. Colour watches: white on black with dark gray highlights, a
-// red-orange for problems and a blue-green for calling, like the keypad.
-// Black-and-white watches: black on white with inverted highlights.
-#define THEME_BACKGROUND PBL_IF_COLOR_ELSE(GColorBlack, GColorWhite)
-#define THEME_TEXT PBL_IF_COLOR_ELSE(GColorWhite, GColorBlack)
-#define THEME_HINT PBL_IF_COLOR_ELSE(GColorLightGray, GColorBlack)
-#define THEME_DIVIDER PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack)
-#define THEME_HIGHLIGHT PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack)
-#define THEME_HIGHLIGHT_TEXT GColorWhite
-#define THEME_CALL PBL_IF_COLOR_ELSE(GColorJaegerGreen, GColorBlack)
-#define THEME_WARNING PBL_IF_COLOR_ELSE(GColorOrange, GColorBlack)
+// App theme, chosen in the phone app: dark or light. Colour watches use gray
+// keys with a red-orange Delete and a blue-green Call; black-and-white watches
+// use outlines that invert when highlighted. Until a theme is chosen, colour
+// watches start dark and black-and-white watches start light.
+typedef enum {
+  THEME_DARK = 0,
+  THEME_LIGHT = 1,
+} ThemeId;
+
+typedef struct {
+  GColor background;
+  GColor text;
+  GColor hint;
+  GColor divider;
+  GColor highlight;
+  GColor highlight_text;
+  GColor call;
+  GColor warning;
+  GColor list_secondary;
+  GColor list_good;
+  GColor list_bad;
+  GColor key;
+  GColor key_text;
+  GColor key_pressed;
+  GColor key_pressed_text;
+  GColor key_ring;
+  GColor call_key;
+  GColor call_key_pressed;
+  GColor delete_key;
+  GColor delete_key_pressed;
+  GColor function_key_text;
+} Theme;
+
+static Theme s_theme;
+static int32_t s_theme_id = PBL_IF_COLOR_ELSE(THEME_DARK, THEME_LIGHT);
+// When the theme last changed, so the watch and the phone keep the newer one.
+static int32_t s_theme_stamp;
+
+#define THEME_BACKGROUND (s_theme.background)
+#define THEME_TEXT (s_theme.text)
+#define THEME_HINT (s_theme.hint)
+#define THEME_DIVIDER (s_theme.divider)
+#define THEME_HIGHLIGHT (s_theme.highlight)
+#define THEME_HIGHLIGHT_TEXT (s_theme.highlight_text)
+#define THEME_CALL (s_theme.call)
+#define THEME_WARNING (s_theme.warning)
+
+static void theme_load(int32_t id) {
+  const bool light = id == THEME_LIGHT;
+#if defined(PBL_COLOR)
+  if (light) {
+    s_theme = (Theme) {
+      .background = GColorWhite, .text = GColorBlack, .hint = GColorDarkGray,
+      .divider = GColorLightGray, .highlight = GColorLightGray, .highlight_text = GColorBlack,
+      .call = GColorJaegerGreen, .warning = GColorOrange,
+      .list_secondary = GColorDarkGray, .list_good = GColorJaegerGreen, .list_bad = GColorRed,
+      .key = GColorLightGray, .key_text = GColorBlack,
+      .key_pressed = GColorDarkGray, .key_pressed_text = GColorWhite, .key_ring = GColorBlack,
+      .call_key = GColorJaegerGreen, .call_key_pressed = GColorIslamicGreen,
+      .delete_key = GColorOrange, .delete_key_pressed = GColorRed,
+      .function_key_text = GColorWhite,
+    };
+  } else {
+    s_theme = (Theme) {
+      .background = GColorBlack, .text = GColorWhite, .hint = GColorLightGray,
+      .divider = GColorDarkGray, .highlight = GColorDarkGray, .highlight_text = GColorWhite,
+      .call = GColorJaegerGreen, .warning = GColorOrange,
+      .list_secondary = GColorLightGray, .list_good = GColorMediumAquamarine,
+      .list_bad = GColorSunsetOrange,
+      .key = GColorDarkGray, .key_text = GColorWhite,
+      .key_pressed = GColorLightGray, .key_pressed_text = GColorBlack, .key_ring = GColorWhite,
+      .call_key = GColorJaegerGreen, .call_key_pressed = GColorMalachite,
+      .delete_key = GColorOrange, .delete_key_pressed = GColorSunsetOrange,
+      .function_key_text = GColorWhite,
+    };
+  }
+#else
+  const GColor paper = light ? GColorWhite : GColorBlack;
+  const GColor ink = light ? GColorBlack : GColorWhite;
+  s_theme = (Theme) {
+    .background = paper, .text = ink, .hint = ink, .divider = ink,
+    .highlight = ink, .highlight_text = paper, .call = ink, .warning = ink,
+    .list_secondary = ink, .list_good = ink, .list_bad = ink,
+    .key = paper, .key_text = ink, .key_pressed = ink, .key_pressed_text = paper, .key_ring = ink,
+    .call_key = ink, .call_key_pressed = paper, .delete_key = paper, .delete_key_pressed = ink,
+    .function_key_text = paper,
+  };
+#endif
+}
 
 // Icons are drawn as vector shapes in a square box so they work on every
 // platform, including black-and-white ones, and follow the row's highlight.
@@ -138,6 +219,10 @@ static Window *s_call_window;
 static TextLayer *s_call_status_layer;
 static TextLayer *s_call_name_layer;
 static char s_call_name[TITLE_SIZE];
+static Layer *s_call_button_layer;
+static GPath *s_call_icon_path;
+static GPathInfo s_call_icon_info;
+static GPoint s_call_icon_points[24];
 static Entry s_call_entry;
 static int32_t s_call_source;
 static bool s_call_submitted;
@@ -190,6 +275,7 @@ static const GPathInfo STAR_PATH_INFO = {
 
 static void list_window_push(int32_t list, const char *filter);
 static void apply_phone_main_order(const char *text, int32_t stamp);
+static void apply_phone_theme(int32_t id, int32_t stamp);
 static void schedule_menu_sync(uint32_t delay_ms);
 
 // ---------------------------------------------------------------------------
@@ -448,10 +534,10 @@ static void list_handle_reply(ListView *view, DictionaryIterator *iterator, int3
 
 // List rows: the name large and bold, then a dimmer second line whose call
 // type or number label gets a touch of colour, and a thin divider between rows.
-#define LIST_SECONDARY PBL_IF_COLOR_ELSE(GColorLightGray, GColorBlack)
-#define LIST_GOOD PBL_IF_COLOR_ELSE(GColorMediumAquamarine, GColorBlack)
-#define LIST_BAD PBL_IF_COLOR_ELSE(GColorSunsetOrange, GColorBlack)
-#define LIST_DIVIDER PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack)
+#define LIST_SECONDARY (s_theme.list_secondary)
+#define LIST_GOOD (s_theme.list_good)
+#define LIST_BAD (s_theme.list_bad)
+#define LIST_DIVIDER (s_theme.divider)
 #define LIST_MARGIN 6
 // The separator recent calls put between the call type and the time.
 #define RECENT_SEPARATOR " \xc2\xb7 "
@@ -652,8 +738,24 @@ static void list_select(MenuLayer *menu_layer, MenuIndex *cell_index, void *cont
   }
 }
 
+// Lists currently open, so a theme change from the phone can recolour them.
+#define MAX_OPEN_LISTS 4
+static ListView *s_open_lists[MAX_OPEN_LISTS];
+
+static void list_apply_theme(ListView *view) {
+  menu_layer_set_normal_colors(view->menu_layer, THEME_BACKGROUND, THEME_TEXT);
+  menu_layer_set_highlight_colors(view->menu_layer, THEME_HIGHLIGHT, THEME_HIGHLIGHT_TEXT);
+  layer_mark_dirty(menu_layer_get_layer(view->menu_layer));
+}
+
 static void list_window_load(Window *window) {
   ListView *view = window_get_user_data(window);
+  for (int i = 0; i < MAX_OPEN_LISTS; i++) {
+    if (!s_open_lists[i]) {
+      s_open_lists[i] = view;
+      break;
+    }
+  }
   Layer *root = window_get_root_layer(window);
 
   view->menu_layer = menu_layer_create(layer_get_bounds(root));
@@ -665,8 +767,7 @@ static void list_window_load(Window *window) {
     .draw_row = list_draw_row,
     .select_click = list_select,
   });
-  menu_layer_set_normal_colors(view->menu_layer, THEME_BACKGROUND, THEME_TEXT);
-  menu_layer_set_highlight_colors(view->menu_layer, THEME_HIGHLIGHT, THEME_HIGHLIGHT_TEXT);
+  list_apply_theme(view);
   menu_layer_set_click_config_onto_window(view->menu_layer, window);
   layer_add_child(root, menu_layer_get_layer(view->menu_layer));
 
@@ -675,6 +776,11 @@ static void list_window_load(Window *window) {
 
 static void list_window_unload(Window *window) {
   ListView *view = window_get_user_data(window);
+  for (int i = 0; i < MAX_OPEN_LISTS; i++) {
+    if (s_open_lists[i] == view) {
+      s_open_lists[i] = NULL;
+    }
+  }
   if (s_waiting_list == view) {
     cancel_response_timer();
     s_waiting_list = NULL;
@@ -722,6 +828,114 @@ static void list_window_push(int32_t list, const char *filter) {
 }
 
 // ---------------------------------------------------------------------------
+// Touch (Pebble Time 2, Pebble Round 2). Menus use the system's touch
+// navigation; the keypad and call screen read raw touch events and work out
+// taps and swipes themselves, because tap recognizers never report a tap.
+
+#if defined(_PBL_API_EXISTS_touch_service_subscribe)
+#define APP_TOUCH 1
+#endif
+
+// A touch that moves less than this is a tap.
+#define TAP_SLOP 10
+// A rightward swipe at least this long goes back, like the Back button.
+#define SWIPE_BACK_MIN 40
+#define ABS(x) ((x) < 0 ? -(x) : (x))
+
+typedef void (*TapHandler)(GPoint point);
+
+#if defined(APP_TOUCH)
+static Window *s_touch_window;
+static TapHandler s_tap_handler;
+static GPoint s_touch_start;
+static bool s_touch_active;
+
+static void touch_event(const TouchEvent *event, void *context) {
+  const GPoint point = GPoint(event->x, event->y);
+  switch (event->type) {
+    case TouchEvent_Touchdown:
+      s_touch_active = !event->non_navigational;
+      s_touch_start = point;
+      break;
+    case TouchEvent_PositionUpdate:
+      break;
+    case TouchEvent_Liftoff: {
+      if (!s_touch_active) {
+        break;
+      }
+      s_touch_active = false;
+      const int dx = point.x - s_touch_start.x;
+      const int dy = point.y - s_touch_start.y;
+      if (ABS(dx) <= TAP_SLOP && ABS(dy) <= TAP_SLOP) {
+        if (s_tap_handler) {
+          s_tap_handler(s_touch_start);
+        }
+      } else if (dx >= SWIPE_BACK_MIN && ABS(dy) < dx / 2) {
+        window_stack_pop(true);
+      }
+      break;
+    }
+  }
+}
+#endif
+
+static bool touch_available(void) {
+#if defined(APP_TOUCH)
+  return touch_service_is_enabled();
+#else
+  return false;
+#endif
+}
+
+// Sends taps on this window to the handler while it is on screen. The
+// system's touch navigation is switched off for the window so a tap is not
+// also turned into a button press.
+static void touch_attach(Window *window, TapHandler handler) {
+#if defined(APP_TOUCH)
+  window_set_touch_bridge_disabled(window, true);
+  if (!s_touch_window) {
+    touch_service_subscribe(touch_event, NULL);
+  }
+  s_touch_window = window;
+  s_tap_handler = handler;
+  s_touch_active = false;
+#endif
+}
+
+static void touch_detach(Window *window) {
+#if defined(APP_TOUCH)
+  // Windows can appear before the previous one disappears; only the window
+  // that owns the subscription may end it.
+  if (s_touch_window != window) {
+    return;
+  }
+  touch_service_unsubscribe();
+  s_touch_window = NULL;
+  s_tap_handler = NULL;
+#endif
+}
+
+// Phone handset centred on (0, 0) and 180 units across; scaled to fit a key.
+static const GPoint HANDSET_POINTS[] = {
+  {-54, -12}, {-38, 13}, {-14, 38}, {12, 54}, {34, 32}, {44, 29}, {62, 34}, {80, 35},
+  {90, 45}, {90, 80}, {80, 90}, {47, 87}, {15, 77}, {-14, 61}, {-40, 40}, {-61, 14},
+  {-77, -15}, {-87, -47}, {-90, -80}, {-80, -90}, {-45, -90}, {-35, -80}, {-29, -44},
+  {-32, -34},
+};
+
+// Fills points and info with the handset scaled to size and makes a path.
+static GPath *create_handset_path(GPoint *points, GPathInfo *info, int16_t size) {
+  for (size_t i = 0; i < ARRAY_LENGTH(HANDSET_POINTS); i++) {
+    points[i] = GPoint(HANDSET_POINTS[i].x * size / 180, HANDSET_POINTS[i].y * size / 180);
+  }
+  *info = (GPathInfo) {
+    .num_points = ARRAY_LENGTH(HANDSET_POINTS),
+    .points = points,
+  };
+  return gpath_create(info);
+}
+
+// ---------------------------------------------------------------------------
 // Calling
 
 static void exit_to_watchface(void *context) {
@@ -761,13 +975,51 @@ static void call_handle_reply(int32_t result) {
   s_exit_timer = app_timer_register(EXIT_DELAY_MS, exit_to_watchface, NULL);
 }
 
+// The Call button on touch watches: green, with a handset and "Call".
+static void call_button_draw(Layer *layer, GContext *ctx) {
+  if (s_call_submitted) {
+    return;
+  }
+  const GRect bounds = layer_get_bounds(layer);
+  graphics_context_set_fill_color(ctx, s_theme.call_key);
+  graphics_fill_rect(ctx, bounds, bounds.size.h / 2, GCornersAll);
+
+  const GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
+  const GSize text = graphics_text_layout_get_content_size(
+    "Call", font, bounds, GTextOverflowModeFill, GTextAlignmentLeft);
+  const int16_t icon = 18;
+  const int16_t gap = 6;
+  const int16_t left = (bounds.size.w - icon - gap - text.w) / 2;
+  const int16_t middle = bounds.size.h / 2;
+  graphics_context_set_fill_color(ctx, s_theme.function_key_text);
+  gpath_move_to(s_call_icon_path, GPoint(left + icon / 2, middle));
+  gpath_draw_filled(ctx, s_call_icon_path);
+  graphics_context_set_text_color(ctx, s_theme.function_key_text);
+  graphics_draw_text(ctx, "Call", font, GRect(left + icon + gap, middle - 16, text.w + 4, 30),
+                     GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+}
+
+static void call_submit(ClickRecognizerRef recognizer, void *context);
+
+static void call_tap(GPoint point) {
+  if (!s_call_button_layer || s_call_submitted) {
+    return;
+  }
+  const GRect target = grect_inset(layer_get_frame(s_call_button_layer), GEdgeInsets(-6));
+  if (grect_contains_point(&target, &point)) {
+    call_submit(NULL, NULL);
+  }
+}
+
 static void call_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   const GRect bounds = layer_get_bounds(root);
   window_set_background_color(window, THEME_BACKGROUND);
 
   const int16_t inset = PBL_IF_ROUND_ELSE(18, 6);
-  const int16_t middle = bounds.size.h / 2;
+  const bool touch = touch_available();
+  // Leave room for the Call button below the name on touch watches.
+  const int16_t middle = bounds.size.h / 2 - (touch ? 22 : 0);
 
   s_call_status_layer = text_layer_create(GRect(inset, middle - 50, bounds.size.w - 2 * inset, 44));
   text_layer_set_font(s_call_status_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18));
@@ -776,7 +1028,8 @@ static void call_window_load(Window *window) {
   text_layer_set_text_color(s_call_status_layer, THEME_HINT);
   layer_add_child(root, text_layer_get_layer(s_call_status_layer));
 
-  s_call_name_layer = text_layer_create(GRect(inset, middle - 4, bounds.size.w - 2 * inset, 72));
+  s_call_name_layer = text_layer_create(GRect(inset, middle - 4, bounds.size.w - 2 * inset,
+                                             touch ? 56 : 72));
   text_layer_set_font(s_call_name_layer, fonts_get_system_font(
       s_call_source == -1 ? FONT_KEY_GOTHIC_18_BOLD : FONT_KEY_GOTHIC_24_BOLD));
   text_layer_set_text_alignment(s_call_name_layer, GTextAlignmentCenter);
@@ -785,6 +1038,25 @@ static void call_window_load(Window *window) {
   text_layer_set_text_color(s_call_name_layer, THEME_TEXT);
   text_layer_set_text(s_call_name_layer, s_call_name);
   layer_add_child(root, text_layer_get_layer(s_call_name_layer));
+
+  if (touch) {
+    const int16_t w = bounds.size.w;
+    const int16_t h = bounds.size.h;
+    const GRect button = PBL_IF_ROUND_ELSE(GRect(w * 26 / 100, h * 71 / 100, w * 48 / 100, 38),
+                                           GRect(w / 5, h - 46, w * 3 / 5, 38));
+    s_call_icon_path = create_handset_path(s_call_icon_points, &s_call_icon_info, 18);
+    s_call_button_layer = layer_create(button);
+    layer_set_update_proc(s_call_button_layer, call_button_draw);
+    layer_add_child(root, s_call_button_layer);
+  }
+}
+
+static void call_window_appear(Window *window) {
+  touch_attach(window, call_tap);
+}
+
+static void call_window_disappear(Window *window) {
+  touch_detach(window);
 }
 
 static void call_window_unload(Window *window) {
@@ -799,6 +1071,12 @@ static void call_window_unload(Window *window) {
   text_layer_destroy(s_call_name_layer);
   s_call_status_layer = NULL;
   s_call_name_layer = NULL;
+  if (s_call_button_layer) {
+    layer_destroy(s_call_button_layer);
+    gpath_destroy(s_call_icon_path);
+    s_call_button_layer = NULL;
+    s_call_icon_path = NULL;
+  }
   window_destroy(window);
   s_call_window = NULL;
 }
@@ -827,6 +1105,9 @@ static void call_submit(ClickRecognizerRef recognizer, void *context) {
   s_call_submitted = true;
   s_waiting_call = true;
   call_show_status("Sending call...");
+  if (s_call_button_layer) {
+    layer_mark_dirty(s_call_button_layer);
+  }
 }
 
 static void call_click_config(void *context) {
@@ -843,6 +1124,8 @@ static void call_window_push(const Entry *entry, int32_t source) {
   s_call_window = window_create();
   window_set_window_handlers(s_call_window, (WindowHandlers) {
     .load = call_window_load,
+    .appear = call_window_appear,
+    .disappear = call_window_disappear,
     .unload = call_window_unload,
   });
   window_set_click_config_provider(s_call_window, call_click_config);
@@ -851,7 +1134,7 @@ static void call_window_push(const Entry *entry, int32_t source) {
     s_call_submitted = true;
     call_show_error("Number unavailable");
   } else {
-    call_show_status("Select to call");
+    call_show_status(touch_available() ? "Tap Call or press Select" : "Select to call");
   }
 }
 
@@ -859,14 +1142,7 @@ static void call_window_push(const Entry *entry, int32_t source) {
 // Number keypad. Up/Down move the highlight, Select presses the highlighted
 // key, and on touch watches every key can also be tapped directly.
 
-#if defined(_PBL_API_EXISTS_tap_recognizer_create)
-#define DIAL_TOUCH 1
-#endif
-
-// Colour watches: gray keys on black, like a calculator, with a red-orange
-// Delete key, a blue-green Call key and a white ring for the highlight.
-// Black-and-white watches: outlined keys that invert when highlighted or
-// pressed, and a solid Call key.
+// Keys follow the app theme (see theme_load).
 #define DIAL_BACKGROUND THEME_BACKGROUND
 #define DIAL_TEXT THEME_TEXT
 #define DIAL_HINT THEME_HINT
@@ -874,13 +1150,6 @@ static void call_window_push(const Entry *entry, int32_t source) {
 
 #define PRESS_FLASH_MS 150
 
-// Phone handset centred on (0, 0) and 180 units across; scaled to fit a key.
-static const GPoint HANDSET_POINTS[] = {
-  {-54, -12}, {-38, 13}, {-14, 38}, {12, 54}, {34, 32}, {44, 29}, {62, 34}, {80, 35},
-  {90, 45}, {90, 80}, {80, 90}, {47, 87}, {15, 77}, {-14, 61}, {-40, 40}, {-61, 14},
-  {-77, -15}, {-87, -47}, {-90, -80}, {-80, -90}, {-45, -90}, {-35, -80}, {-29, -44},
-  {-32, -34},
-};
 
 #if defined(PBL_ROUND)
 static int16_t isqrt(int32_t value) {
@@ -938,18 +1207,6 @@ static void dial_layout(GRect bounds) {
   s_icon_size = key_h * 7 / 10;
 }
 
-static void dial_create_handset(void) {
-  for (size_t i = 0; i < ARRAY_LENGTH(HANDSET_POINTS); i++) {
-    s_handset_points[i] = GPoint(HANDSET_POINTS[i].x * s_icon_size / 180,
-                                 HANDSET_POINTS[i].y * s_icon_size / 180);
-  }
-  s_handset_info = (GPathInfo) {
-    .num_points = ARRAY_LENGTH(HANDSET_POINTS),
-    .points = s_handset_points,
-  };
-  s_handset_path = gpath_create(&s_handset_info);
-}
-
 static GPoint rect_center(GRect rect) {
   return GPoint(rect.origin.x + rect.size.w / 2, rect.origin.y + rect.size.h / 2);
 }
@@ -986,32 +1243,32 @@ static void draw_key(GContext *ctx, int key) {
 
 #if defined(PBL_COLOR)
   GColor fill;
-  GColor ink = GColorWhite;
+  GColor ink = s_theme.function_key_text;
   if (key == KEY_CALL) {
-    fill = pressed ? GColorMalachite : GColorJaegerGreen;
+    fill = pressed ? s_theme.call_key_pressed : s_theme.call_key;
   } else if (key == KEY_DELETE) {
-    fill = pressed ? GColorSunsetOrange : GColorOrange;
+    fill = pressed ? s_theme.delete_key_pressed : s_theme.delete_key;
   } else {
-    fill = pressed ? GColorLightGray : GColorDarkGray;
-    ink = pressed ? GColorBlack : GColorWhite;
+    fill = pressed ? s_theme.key_pressed : s_theme.key;
+    ink = pressed ? s_theme.key_pressed_text : s_theme.key_text;
   }
 
   graphics_context_set_fill_color(ctx, fill);
   graphics_fill_rect(ctx, rect, radius, GCornersAll);
   if (focused) {
-    graphics_context_set_stroke_color(ctx, GColorWhite);
+    graphics_context_set_stroke_color(ctx, s_theme.key_ring);
     graphics_context_set_stroke_width(ctx, 3);
     graphics_draw_round_rect(ctx, grect_inset(rect, GEdgeInsets(1)), radius);
   }
 #else
   // The Call key is solid and inverts to an outline; the others do the opposite.
   const bool inverted = (focused || pressed) != (key == KEY_CALL);
-  const GColor fill = inverted ? GColorBlack : GColorWhite;
-  const GColor ink = inverted ? GColorWhite : GColorBlack;
+  const GColor fill = inverted ? s_theme.text : s_theme.background;
+  const GColor ink = inverted ? s_theme.background : s_theme.text;
 
   graphics_context_set_fill_color(ctx, fill);
   graphics_fill_rect(ctx, rect, radius, GCornersAll);
-  graphics_context_set_stroke_color(ctx, GColorBlack);
+  graphics_context_set_stroke_color(ctx, s_theme.text);
   // A heavier outline keeps the highlight visible on the Call key as well.
   graphics_context_set_stroke_width(ctx, focused ? 3 : 1);
   graphics_draw_round_rect(ctx, focused ? grect_inset(rect, GEdgeInsets(1)) : rect, radius);
@@ -1152,7 +1409,6 @@ static void dial_click_config(void *context) {
   window_single_click_subscribe(BUTTON_ID_SELECT, dial_select);
 }
 
-#if defined(DIAL_TOUCH)
 static void dial_clear_press(void *context) {
   s_press_timer = NULL;
   s_pressed_key = -1;
@@ -1172,11 +1428,8 @@ static int dial_key_at(GPoint point) {
   return -1;
 }
 
-static void dial_tap(const Recognizer *recognizer, RecognizerEvent event) {
-  if (event != RecognizerEvent_Completed) {
-    return;
-  }
-  const int key = dial_key_at(tap_recognizer_get_tap_point(recognizer));
+static void dial_tap(GPoint point) {
+  const int key = dial_key_at(point);
   if (key < 0) {
     return;
   }
@@ -1190,29 +1443,28 @@ static void dial_tap(const Recognizer *recognizer, RecognizerEvent event) {
   s_press_timer = app_timer_register(PRESS_FLASH_MS, dial_clear_press, NULL);
   dial_press(key);
 }
-#endif
 
 static void dial_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   const GRect bounds = layer_get_bounds(root);
   window_set_background_color(window, DIAL_BACKGROUND);
   dial_layout(bounds);
-  dial_create_handset();
+  s_handset_path = create_handset_path(s_handset_points, &s_handset_info, s_icon_size);
 
   s_dial_layer = layer_create(bounds);
   layer_set_update_proc(s_dial_layer, dial_draw);
   layer_add_child(root, s_dial_layer);
 
-  s_show_focus = true;
-#if defined(DIAL_TOUCH)
-  if (touch_service_is_enabled()) {
-    // Taps go to the keys instead of being turned into button presses, and
-    // the button highlight stays hidden until a button is used.
-    s_show_focus = false;
-    window_set_touch_bridge_disabled(window, true);
-    window_attach_recognizer(window, tap_recognizer_create(dial_tap, NULL));
-  }
-#endif
+  // With touch, the button highlight stays hidden until a button is used.
+  s_show_focus = !touch_available();
+}
+
+static void dial_window_appear(Window *window) {
+  touch_attach(window, dial_tap);
+}
+
+static void dial_window_disappear(Window *window) {
+  touch_detach(window);
 }
 
 static void dial_window_unload(Window *window) {
@@ -1234,6 +1486,8 @@ static void dial_window_push(void) {
   window_set_click_config_provider(s_dial_window, dial_click_config);
   window_set_window_handlers(s_dial_window, (WindowHandlers) {
     .load = dial_window_load,
+    .appear = dial_window_appear,
+    .disappear = dial_window_disappear,
     .unload = dial_window_unload,
   });
   window_stack_push(s_dial_window, true);
@@ -1243,11 +1497,19 @@ static void dial_window_push(void) {
 // AppMessage
 
 static void inbox_received(DictionaryIterator *iterator, void *context) {
-  // Menu order updates can arrive at any time and are not tied to a request.
+  // Settings can arrive at any time and are not tied to a request.
   const Tuple *order_tuple = dict_find(iterator, MESSAGE_KEY_MENU_ORDER);
-  if (order_tuple && order_tuple->type == TUPLE_CSTRING) {
-    const Tuple *stamp_tuple = dict_find(iterator, MESSAGE_KEY_MENU_STAMP);
-    apply_phone_main_order(order_tuple->value->cstring, stamp_tuple ? stamp_tuple->value->int32 : 0);
+  const Tuple *theme_tuple = dict_find(iterator, MESSAGE_KEY_THEME);
+  if (order_tuple || theme_tuple) {
+    if (order_tuple && order_tuple->type == TUPLE_CSTRING) {
+      const Tuple *stamp_tuple = dict_find(iterator, MESSAGE_KEY_MENU_STAMP);
+      apply_phone_main_order(order_tuple->value->cstring,
+                             stamp_tuple ? stamp_tuple->value->int32 : 0);
+    }
+    if (theme_tuple) {
+      const Tuple *stamp_tuple = dict_find(iterator, MESSAGE_KEY_THEME_STAMP);
+      apply_phone_theme(theme_tuple->value->int32, stamp_tuple ? stamp_tuple->value->int32 : 0);
+    }
     return;
   }
 
@@ -1349,8 +1611,8 @@ static void save_main_order(void) {
   persist_write_int(MENU_STAMP_STORAGE_KEY, s_main_order_stamp);
 }
 
-// Tells the phone the watch's order. The phone keeps it if it is newer and
-// answers with its own if that is newer. If the phone is busy or away, the
+// Tells the phone the watch's settings (menu order and theme). The phone keeps
+// each one that is newer and answers with any of its own that are newer. If the phone is busy or away, the
 // next launch tries again, so nothing is lost.
 static void sync_main_order(void);
 
@@ -1382,9 +1644,11 @@ static void sync_main_order(void) {
     text[i] = '0' + s_main_order[i];
   }
   text[MAIN_ROW_COUNT] = '\0';
-  dict_write_int32(iterator, MESSAGE_KEY_REQUEST, REQUEST_SYNC_MENU);
+  dict_write_int32(iterator, MESSAGE_KEY_REQUEST, REQUEST_SYNC_SETTINGS);
   dict_write_cstring(iterator, MESSAGE_KEY_MENU_ORDER, text);
   dict_write_int32(iterator, MESSAGE_KEY_MENU_STAMP, s_main_order_stamp);
+  dict_write_int32(iterator, MESSAGE_KEY_THEME, s_theme_id);
+  dict_write_int32(iterator, MESSAGE_KEY_THEME_STAMP, s_theme_stamp);
   s_menu_sync_attempts++;
   s_menu_sync_in_flight = app_message_outbox_send() == APP_MSG_OK;
 }
@@ -1401,6 +1665,54 @@ static void apply_phone_main_order(const char *text, int32_t stamp) {
   if (s_main_menu_layer) {
     menu_layer_reload_data(s_main_menu_layer);
   }
+}
+
+static void load_theme(void) {
+  if (persist_exists(THEME_STAMP_STORAGE_KEY)) {
+    const int32_t id = persist_read_int(THEME_STORAGE_KEY);
+    if (id == THEME_DARK || id == THEME_LIGHT) {
+      s_theme_id = id;
+      s_theme_stamp = persist_read_int(THEME_STAMP_STORAGE_KEY);
+    }
+  }
+  theme_load(s_theme_id);
+}
+
+static void main_apply_theme(void);
+
+// Recolours every screen that is open, after the phone changes the theme.
+static void refresh_theme(void) {
+  main_apply_theme();
+  for (int i = 0; i < MAX_OPEN_LISTS; i++) {
+    if (s_open_lists[i]) {
+      list_apply_theme(s_open_lists[i]);
+    }
+  }
+  if (s_dial_window) {
+    window_set_background_color(s_dial_window, THEME_BACKGROUND);
+    layer_mark_dirty(s_dial_layer);
+  }
+  if (s_call_window) {
+    window_set_background_color(s_call_window, THEME_BACKGROUND);
+    text_layer_set_text_color(s_call_name_layer, THEME_TEXT);
+    text_layer_set_text_color(s_call_status_layer, THEME_HINT);
+    if (s_call_button_layer) {
+      layer_mark_dirty(s_call_button_layer);
+    }
+  }
+}
+
+// A theme from the phone, chosen in the companion app's settings.
+static void apply_phone_theme(int32_t id, int32_t stamp) {
+  if (stamp <= s_theme_stamp || (id != THEME_DARK && id != THEME_LIGHT)) {
+    return;
+  }
+  s_theme_id = id;
+  s_theme_stamp = stamp;
+  persist_write_int(THEME_STORAGE_KEY, s_theme_id);
+  persist_write_int(THEME_STAMP_STORAGE_KEY, s_theme_stamp);
+  theme_load(s_theme_id);
+  refresh_theme();
 }
 
 // Small up and down arrows show which row is being moved.
@@ -1528,6 +1840,19 @@ static void main_selection_will_change(MenuLayer *menu_layer, MenuIndex *new_ind
   layer_mark_dirty(menu_layer_get_layer(menu_layer));
 }
 
+static void main_apply_theme(void) {
+  if (!s_main_menu_layer) {
+    return;
+  }
+  menu_layer_set_normal_colors(s_main_menu_layer, THEME_BACKGROUND, THEME_TEXT);
+  menu_layer_set_highlight_colors(s_main_menu_layer, THEME_HIGHLIGHT, THEME_HIGHLIGHT_TEXT);
+  layer_mark_dirty(menu_layer_get_layer(s_main_menu_layer));
+  if (s_hint_layer) {
+    text_layer_set_background_color(s_hint_layer, THEME_HIGHLIGHT);
+    text_layer_set_text_color(s_hint_layer, THEME_HIGHLIGHT_TEXT);
+  }
+}
+
 static void main_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   const GRect bounds = layer_get_bounds(root);
@@ -1540,8 +1865,7 @@ static void main_window_load(Window *window) {
     .select_long_click = main_pick_up,
     .selection_will_change = main_selection_will_change,
   });
-  menu_layer_set_normal_colors(s_main_menu_layer, THEME_BACKGROUND, THEME_TEXT);
-  menu_layer_set_highlight_colors(s_main_menu_layer, THEME_HIGHLIGHT, THEME_HIGHLIGHT_TEXT);
+  main_apply_theme();
   menu_layer_set_click_config_onto_window(s_main_menu_layer, window);
   layer_add_child(root, menu_layer_get_layer(s_main_menu_layer));
   s_star_path = gpath_create(&STAR_PATH_INFO);
@@ -1580,10 +1904,17 @@ static void main_window_unload(Window *window) {
     s_hint_layer = NULL;
   }
   menu_layer_destroy(s_main_menu_layer);
+  s_main_menu_layer = NULL;
   gpath_destroy(s_star_path);
 }
 
 static void init(void) {
+  load_theme();
+#if defined(APP_TOUCH)
+  // Third-party apps get no touch navigation unless they ask; with it, the
+  // menus scroll and select by touch.
+  app_touch_navigation_enable(true);
+#endif
   s_token = persist_read_int(TOKEN_STORAGE_KEY);
   app_message_register_inbox_received(inbox_received);
   app_message_register_inbox_dropped(inbox_dropped);

@@ -11,6 +11,8 @@ import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -24,6 +26,9 @@ public final class MainActivity extends Activity {
     private final Button[] permissionButtons = new Button[PERMISSIONS.length];
     private TextView statusView;
     private LinearLayout menuOrderRows;
+    private RadioGroup themeChoice;
+    // Set while the screen updates the choice itself, so that is not saved as a change.
+    private boolean showingTheme;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -80,6 +85,34 @@ public final class MainActivity extends Activity {
         layout.addView(menuOrderRows, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        TextView themeTitle = new TextView(this);
+        themeTitle.setText(R.string.theme_title);
+        themeTitle.setTextSize(20);
+        themeTitle.setPadding(0, padding, 0, padding / 3);
+        layout.addView(themeTitle);
+
+        TextView themeHelp = new TextView(this);
+        themeHelp.setText(R.string.theme_help);
+        themeHelp.setTextSize(14);
+        themeHelp.setPadding(0, 0, 0, padding / 3);
+        layout.addView(themeHelp);
+
+        themeChoice = new RadioGroup(this);
+        RadioButton dark = new RadioButton(this);
+        dark.setId(android.R.id.button1);
+        dark.setText(R.string.theme_dark);
+        RadioButton light = new RadioButton(this);
+        light.setId(android.R.id.button2);
+        light.setText(R.string.theme_light);
+        themeChoice.addView(dark);
+        themeChoice.addView(light);
+        themeChoice.setOnCheckedChangeListener((group, checkedId) -> {
+            if (!showingTheme) {
+                chooseTheme(checkedId == android.R.id.button2 ? WatchTheme.LIGHT : WatchTheme.DARK);
+            }
+        });
+        layout.addView(themeChoice);
+
         TextView help = new TextView(this);
         help.setText(R.string.permission_help);
         help.setTextSize(14);
@@ -114,6 +147,20 @@ public final class MainActivity extends Activity {
         refreshPermissionState();
         // The order may have been changed on the watch since this screen was last shown.
         refreshMenuOrder();
+        refreshTheme();
+    }
+
+    private void refreshTheme() {
+        showingTheme = true;
+        themeChoice.check(WatchTheme.load(this).theme == WatchTheme.LIGHT
+                ? android.R.id.button2 : android.R.id.button1);
+        showingTheme = false;
+    }
+
+    private void chooseTheme(int theme) {
+        WatchTheme changed = WatchTheme.changedNow(theme);
+        WatchTheme.save(this, changed);
+        MenuOrder.pushToWatch(this, changed.message());
     }
 
     private void refreshMenuOrder() {
@@ -156,7 +203,7 @@ public final class MainActivity extends Activity {
         order[to] = moved;
         MenuOrder changed = MenuOrder.changedNow(new String(order));
         MenuOrder.save(this, changed);
-        MenuOrder.pushToWatch(this, changed);
+        MenuOrder.pushToWatch(this, changed.message());
         refreshMenuOrder();
     }
 

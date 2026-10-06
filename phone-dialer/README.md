@@ -59,14 +59,22 @@ See [Android's permission documentation](https://developer.android.com/reference
 
   The watch and phone keep whichever change is newer, and the watch keeps the
   order so the menu stays the same while the phone is away.
+- **Touch** (Pebble Time 2, Pebble Round 2): menus and lists scroll with a
+  swipe; tap a row to highlight it and tap it again to open it, as in the
+  watch's own menus. Swipe right to go back. On the keypad, tap a key to press
+  it. On the call screen, tap the green **Call** button.
+- **Theme**: open **Phone Dialer** on the phone and choose **Dark** or
+  **Light** under **Watch theme**. It changes straight away if the watch app is
+  open, otherwise the next time it opens. Until a theme is chosen, colour
+  watches start dark and black-and-white watches start light.
 - **Dialer**: a phone keypad with Delete (backspace icon), `+` and a green
-  Call key along the bottom. On touch watches (Pebble Time 2 and Pebble Round 2),
-  tap a key to press it. With the buttons, Up/Down move the highlight and
-  Select presses the highlighted key; hold Up/Down to move faster. After using
-  touch, the first button press only brings the highlight back. `+` is
-  available at the beginning only. Press **Call**, review the number, and
-  confirm with Select. Back cancels. Up from the first key wraps directly to
-  Call. Numbers can contain up to 31 characters.
+  Call key along the bottom. Tap keys on touch watches. With the buttons,
+  Up/Down move the highlight and Select presses the highlighted key; hold
+  Up/Down to move faster. After using touch, the first button press only
+  brings the highlight back. `+` is available at the beginning only. Press
+  **Call**, review the number, and confirm with Select or the **Call** button.
+  Back cancels. Up from the first key wraps directly to Call. Numbers can
+  contain up to 31 characters.
 - **Recent calls**: the latest 100 system call-log entries, newest first, with
   incoming/outgoing/missed/declined/blocked type and date/time. Select an entry,
   then Select again to call back. Private and unknown numbers are displayed
@@ -146,7 +154,7 @@ Android package: com.arkam.pebbledialer
 | List (`REQUEST=1`) | `LIST` (0 favorites, 1 letters, 2 contacts, 3 recents), `FILTER`, `OFFSET`, `LIMIT`, `CAPACITY` | `TOTAL`, `OFFSET`, `ITEMS`; last packet also has `FINAL` |
 | Call record (`REQUEST=2`) | `ITEM_ID` (decimal string), `LIST` (3 for call log, otherwise contacts) | `RESULT` |
 | Dial number (`REQUEST=3`) | `NUMBER` (validated keypad text) | `RESULT` |
-| Menu order (`REQUEST=4`) | `MENU_ORDER` (row digits, e.g. `0123`), `MENU_STAMP` (seconds since 1970 of the last change) | `MENU_ORDER` and `MENU_STAMP` only if the phone's order is newer; the phone may also send them unprompted |
+| Settings (`REQUEST=4`) | `MENU_ORDER` (row digits, e.g. `0123`), `MENU_STAMP`, `THEME` (0 dark, 1 light), `THEME_STAMP`; stamps are seconds since 1970 of the last change | Each setting whose phone copy is newer (`MENU_ORDER`/`MENU_STAMP`, `THEME`/`THEME_STAMP`); the phone may also send them unprompted |
 
 Every list, call and dial request carries a persistent, incrementing `TOKEN`, echoed in the reply.
 Replies to abandoned requests are ignored. The companion also deduplicates the

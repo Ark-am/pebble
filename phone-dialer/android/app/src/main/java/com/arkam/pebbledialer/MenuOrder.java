@@ -81,12 +81,12 @@ final class MenuOrder {
     }
 
     /**
-     * Sends the order to the watch app if it is open. When it is not, the watch
-     * picks the order up the next time it starts.
+     * Sends settings to the watch app if it is open. When it is not, the watch
+     * picks them up the next time it starts.
      */
-    static void pushToWatch(Context context, MenuOrder menuOrder) {
+    static void pushToWatch(Context context, Map<Integer, PebbleDictionaryItem> message) {
         JavaPebbleSender sender = new DefaultJavaPebbleSender(context.getApplicationContext());
-        sender.sendDataToPebble(DialerService.WATCHAPP_UUID, menuOrder.message(), results -> {
+        sender.sendDataToPebble(DialerService.WATCHAPP_UUID, message, results -> {
             try {
                 sender.close();
             }

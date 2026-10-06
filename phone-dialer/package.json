@@ -39,7 +39,9 @@
       "FINAL": 12,
       "NUMBER": 13,
       "MENU_ORDER": 14,
-      "MENU_STAMP": 15
+      "MENU_STAMP": 15,
+      "THEME": 16,
+      "THEME_STAMP": 17
     },
     "resources": {
       "media": [
