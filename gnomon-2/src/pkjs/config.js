@@ -50,6 +50,19 @@ module.exports = [
         options: FONT_OPTIONS
       },
       {
+        type: 'select',
+        messageKey: 'HAND_STYLE',
+        label: 'Hour and minute hands',
+        defaultValue: '0',
+        options: [
+          { label: 'Leaf: a fine line from a leaf-shaped base', value: '0' },
+          { label: 'Baton: slim solid bars with a grey inlay', value: '1' },
+          { label: 'Dauphine: faceted spears, half light and half dark', value: '2' },
+          { label: 'Breguet: fine needles through an open ring', value: '3' },
+          { label: 'Sword: narrow blades that sweep to a point', value: '4' }
+        ]
+      },
+      {
         type: 'toggle',
         messageKey: 'SECOND_HAND',
         label: 'Show second hand',

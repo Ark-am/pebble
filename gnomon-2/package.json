@@ -45,7 +45,8 @@
       "SHOW_BATTERY",
       "AVOID_HANDS",
       "SECOND_HAND_COLOR",
-      "INFO_FONT"
+      "INFO_FONT",
+      "HAND_STYLE"
     ],
     "resources": {
       "media": [

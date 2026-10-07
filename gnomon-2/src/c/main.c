@@ -93,7 +93,7 @@
 #define AVOID_GAP 2
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 8
+#define SETTINGS_VERSION 9
 typedef struct {
   uint8_t version;
   bool dark;
@@ -117,6 +117,8 @@ typedef struct {
   // information (see font_styles.h).
   uint8_t number_font;
   uint8_t info_font;
+  // Added in version 9: the HandStyle.
+  uint8_t hand_style;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -129,6 +131,7 @@ static int settings_size(uint8_t version) {
     case 5: return offsetof(Settings, avoid_hands);
     case 6: return offsetof(Settings, second_hand_argb);
     case 7: return offsetof(Settings, number_font);
+    case 8: return offsetof(Settings, hand_style);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -1040,47 +1043,188 @@ static GPoint hand_point(GPoint centre, int32_t angle, int32_t across, int32_t a
                 centre.y + (y >= 0 ? y + half : y - half) / TRIG_MAX_RATIO);
 }
 
-// A thin line out to the tip, from a leaf-shaped base around the centre. A
-// hand drawn over another gets a narrow border in the dial colour, so the two
-// read as separate pieces where they cross.
-static NOINLINE void draw_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t length,
-                      int16_t width, bool separated) {
-  const int16_t leaf = length * LEAF_PERCENT / 100;
-  const GPoint line_start = hand_point(centre, angle, 0, leaf - 2);
-  const GPoint tip = hand_point(centre, angle, 0, length);
+// Hand styles; values match the settings page.
+typedef enum {
+  HANDS_LEAF,      // A thin line from a leaf-shaped base.
+  HANDS_BATON,     // A slim solid bar with a grey inlay and a pointed end.
+  HANDS_DAUPHINE,  // A slim faceted spear, half light and half dark.
+  HANDS_BREGUET,   // A tapering needle through an open ring near the tip.
+  HANDS_SWORD,     // A narrow blade that widens, then comes to a point.
+  HANDS_COUNT,
+} HandStyle;
 
-  const int16_t r = LEAF_RADIUS;
-  // The leaf's corners, across and along the hand.
-  GPoint points[] = {
-    hand_point(centre, angle, 0, -r),
-    hand_point(centre, angle, -r * 7 / 10, -r * 7 / 10),
-    hand_point(centre, angle, -r, leaf / 8),
-    hand_point(centre, angle, -r * 6 / 10, leaf / 2),
-    hand_point(centre, angle, -(width / 2), leaf),
-    hand_point(centre, angle, width / 2, leaf),
-    hand_point(centre, angle, r * 6 / 10, leaf / 2),
-    hand_point(centre, angle, r, leaf / 8),
-    hand_point(centre, angle, r * 7 / 10, -r * 7 / 10),
-  };
-  GPathInfo info = { .num_points = ARRAY_LENGTH(points), .points = points };
+// How wide a hand's shapes are on either side of its line: the minute hand
+// is a little slimmer than the hour hand.
+static int16_t hand_bulk(bool minute) {
+  return minute ? LEAF_RADIUS * 8 / 10 : LEAF_RADIUS;
+}
+
+// Half the width of a slim bar or needle, never under a pixel and a half.
+static int16_t slim_half_width(bool minute) {
+  const int16_t half = hand_bulk(minute) * 6 / 10;
+  return half > 2 ? half : 2;
+}
+
+// Each part of a hand is drawn twice for a hand with a border: first wider in
+// the dial colour all the way round, then itself over that, so the border
+// never cuts into the hand.
+static void hand_line(GContext *ctx, GPoint a, GPoint b, int16_t width, bool border) {
+  graphics_context_set_stroke_color(ctx, border ? s_palette.background : s_palette.foreground);
+  graphics_context_set_stroke_width(ctx, width + (border ? HAND_GAP * 2 : 0));
+  graphics_draw_line(ctx, a, b);
+}
+
+// A filled shape with an outline in the text colour, the given width.
+static void hand_shape(GContext *ctx, GPoint *points, int count, GColor fill,
+                       int16_t outline, bool border) {
+  GPathInfo info = { .num_points = count, .points = points };
   GPath *path = gpath_create(&info);
-  // The border goes all the way round first, so it never cuts into the hand
-  // where the line meets the leaf.
-  if (separated) {
+  if (border) {
     graphics_context_set_stroke_color(ctx, s_palette.background);
-    graphics_context_set_stroke_width(ctx, width + HAND_GAP * 2);
-    graphics_draw_line(ctx, line_start, tip);
-    graphics_context_set_stroke_width(ctx, LEAF_OUTLINE + HAND_GAP * 2);
-    gpath_draw_outline(ctx, path);
+    graphics_context_set_stroke_width(ctx, outline + HAND_GAP * 2);
+  } else {
+    graphics_context_set_fill_color(ctx, fill);
+    gpath_draw_filled(ctx, path);
+    graphics_context_set_stroke_color(ctx, s_palette.foreground);
+    graphics_context_set_stroke_width(ctx, outline);
   }
-  graphics_context_set_stroke_color(ctx, s_palette.foreground);
-  graphics_context_set_stroke_width(ctx, width);
-  graphics_draw_line(ctx, line_start, tip);
-  graphics_context_set_fill_color(ctx, s_palette.leaf);
-  gpath_draw_filled(ctx, path);
-  graphics_context_set_stroke_width(ctx, LEAF_OUTLINE);
   gpath_draw_outline(ctx, path);
   gpath_destroy(path);
+}
+
+// Fills a shape with no outline, for the facets and inlays inside a hand.
+static void hand_fill(GContext *ctx, GPoint *points, int count, GColor fill) {
+  GPathInfo info = { .num_points = count, .points = points };
+  GPath *path = gpath_create(&info);
+  graphics_context_set_fill_color(ctx, fill);
+  gpath_draw_filled(ctx, path);
+  gpath_destroy(path);
+}
+
+// An open ring, showing the dial through its middle.
+static void hand_ring(GContext *ctx, GPoint at, int16_t radius, bool border) {
+  if (!border) {
+    graphics_context_set_fill_color(ctx, s_palette.background);
+    graphics_fill_circle(ctx, at, radius);
+  }
+  graphics_context_set_stroke_color(ctx, border ? s_palette.background : s_palette.foreground);
+  graphics_context_set_stroke_width(ctx, LEAF_OUTLINE + (border ? HAND_GAP * 2 : 0));
+  graphics_draw_circle(ctx, at, radius);
+}
+
+static void draw_hand_parts(GContext *ctx, GPoint centre, int32_t angle, int16_t length,
+                            int16_t width, bool minute, bool border) {
+  const int16_t r = LEAF_RADIUS;
+  const int16_t bulk = hand_bulk(minute);
+  const GPoint tip = hand_point(centre, angle, 0, length);
+  switch (s_settings.hand_style) {
+    case HANDS_BATON: {
+      // A solid bar from a short tail, its end cut to a shallow point.
+      const int16_t half = slim_half_width(minute);
+      GPoint points[] = {
+        hand_point(centre, angle, -half, -r * 2),
+        hand_point(centre, angle, -half, length - half * 2),
+        tip,
+        hand_point(centre, angle, half, length - half * 2),
+        hand_point(centre, angle, half, -r * 2),
+      };
+      hand_shape(ctx, points, ARRAY_LENGTH(points), s_palette.foreground, 1, border);
+      if (!border && half >= 3) {
+        // A grey inlay down the outer part, like a watch's luminous strip.
+        graphics_context_set_stroke_color(ctx, s_palette.leaf);
+        graphics_context_set_stroke_width(ctx, (half - 2) * 2);
+        graphics_draw_line(ctx, hand_point(centre, angle, 0, length * 35 / 100),
+                           hand_point(centre, angle, 0, length - half * 3));
+      }
+      break;
+    }
+    case HANDS_DAUPHINE: {
+      // Widest a little way out, tapering to points at both ends. The left
+      // facet is light and the right dark, as if lit from the left; the
+      // ridge between them runs down the middle.
+      const int16_t widest = length * 18 / 100;
+      GPoint points[] = {
+        hand_point(centre, angle, 0, -r * 2),
+        hand_point(centre, angle, -bulk, widest),
+        tip,
+        hand_point(centre, angle, bulk, widest),
+      };
+      if (border) {
+        hand_shape(ctx, points, ARRAY_LENGTH(points), s_palette.leaf, 1, true);
+        break;
+      }
+      hand_fill(ctx, points, ARRAY_LENGTH(points), s_palette.leaf);
+      GPoint facet[] = { points[0], tip, points[3] };
+      hand_fill(ctx, facet, ARRAY_LENGTH(facet), s_palette.foreground);
+      GPathInfo info = { .num_points = ARRAY_LENGTH(points), .points = points };
+      GPath *outline = gpath_create(&info);
+      graphics_context_set_stroke_color(ctx, s_palette.foreground);
+      graphics_context_set_stroke_width(ctx, 1);
+      gpath_draw_outline(ctx, outline);
+      gpath_destroy(outline);
+      break;
+    }
+    case HANDS_BREGUET: {
+      // A needle tapering from the centre to a fine point, through an open
+      // ring most of the way out.
+      const int16_t half = slim_half_width(minute);
+      GPoint needle[] = {
+        hand_point(centre, angle, -half, -r * 2),
+        tip,
+        hand_point(centre, angle, half, -r * 2),
+      };
+      hand_shape(ctx, needle, ARRAY_LENGTH(needle), s_palette.foreground, 1, border);
+      hand_ring(ctx, hand_point(centre, angle, 0, length * 70 / 100), bulk, border);
+      break;
+    }
+    case HANDS_SWORD: {
+      // Narrow at the centre, widening to its broadest about two thirds of
+      // the way out, then sweeping to a point, with a ridge down the middle.
+      const int16_t base = slim_half_width(minute) - 1;
+      const int16_t shoulder = length * 66 / 100;
+      GPoint points[] = {
+        hand_point(centre, angle, -base, -r * 2),
+        hand_point(centre, angle, -bulk, shoulder),
+        tip,
+        hand_point(centre, angle, bulk, shoulder),
+        hand_point(centre, angle, base, -r * 2),
+      };
+      hand_shape(ctx, points, ARRAY_LENGTH(points), s_palette.leaf, LEAF_OUTLINE, border);
+      if (!border) {
+        hand_line(ctx, centre, hand_point(centre, angle, 0, shoulder), 1, false);
+      }
+      break;
+    }
+    default: {
+      const int16_t leaf = length * LEAF_PERCENT / 100;
+      hand_line(ctx, hand_point(centre, angle, 0, leaf - 2), tip, width, border);
+      // The leaf's corners, across and along the hand.
+      GPoint points[] = {
+        hand_point(centre, angle, 0, -r),
+        hand_point(centre, angle, -r * 7 / 10, -r * 7 / 10),
+        hand_point(centre, angle, -r, leaf / 8),
+        hand_point(centre, angle, -r * 6 / 10, leaf / 2),
+        hand_point(centre, angle, -(width / 2), leaf),
+        hand_point(centre, angle, width / 2, leaf),
+        hand_point(centre, angle, r * 6 / 10, leaf / 2),
+        hand_point(centre, angle, r, leaf / 8),
+        hand_point(centre, angle, r * 7 / 10, -r * 7 / 10),
+      };
+      hand_shape(ctx, points, ARRAY_LENGTH(points), s_palette.leaf, LEAF_OUTLINE, border);
+      break;
+    }
+  }
+}
+
+// Draws a hand in the chosen style. The minute hand, drawn over the hour
+// hand, gets a narrow border in the dial colour, so the two read as separate
+// pieces where they cross.
+static NOINLINE void draw_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t length,
+                      int16_t width, bool minute) {
+  if (minute) {
+    draw_hand_parts(ctx, centre, angle, length, width, minute, true);
+  }
+  draw_hand_parts(ctx, centre, angle, length, width, minute, false);
 }
 
 // A round cap over the centre, where the hands meet.
@@ -1106,19 +1250,33 @@ typedef enum {
   ITEM_COUNT,
 } Item;
 
+// A hand as two stretches, each with how far its shapes reach either side:
+// from the centre to the end of the base, and from there to the tip.
 typedef struct {
   GPoint centre;
   GPoint tip;
   GPoint leaf_end;
-  int16_t width;
+  int16_t inner;
+  int16_t outer;
 } Hand;
 
-static Hand make_hand(GPoint centre, int32_t angle, int16_t length, int16_t width) {
+static Hand make_hand(GPoint centre, int32_t angle, int16_t length, int16_t width, bool minute) {
+  const int16_t bulk = hand_bulk(minute);
+  int16_t inner = LEAF_RADIUS / 2;
+  int16_t outer = width / 2;
+  switch (s_settings.hand_style) {
+    case HANDS_BATON: inner = outer = slim_half_width(minute); break;
+    case HANDS_DAUPHINE: inner = bulk; outer = bulk / 2; break;
+    case HANDS_BREGUET: inner = slim_half_width(minute); outer = bulk; break;
+    case HANDS_SWORD: inner = slim_half_width(minute); outer = bulk; break;
+    default: break;
+  }
   return (Hand) {
     .centre = centre,
     .tip = ray_point(centre, angle, length),
     .leaf_end = ray_point(centre, angle, length * LEAF_PERCENT / 100),
-    .width = width,
+    .inner = inner,
+    .outer = outer,
   };
 }
 
@@ -1211,13 +1369,11 @@ static bool rect_in_dial(GRect rect, GRect bounds, GPoint centre) {
   return true;
 }
 
-// The leaf is widest near the centre and narrows outward; half its widest is
-// a fair allowance along its length.
 static bool hand_crosses(const Hand *hand, GRect rect) {
   return line_crosses_rect(hand->centre, hand->leaf_end,
-                           rect_grow(rect, LEAF_RADIUS / 2 + 1 + AVOID_GAP))
+                           rect_grow(rect, hand->inner + 1 + AVOID_GAP))
     || line_crosses_rect(hand->leaf_end, hand->tip,
-                         rect_grow(rect, hand->width / 2 + 1 + AVOID_GAP));
+                         rect_grow(rect, hand->outer + 1 + AVOID_GAP));
 }
 
 // Everything an item has to keep clear of, worked out once per redraw.
@@ -1370,8 +1526,8 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
       .bounds = bounds,
       .centre = centre,
       .hands = {
-        make_hand(centre, hour_angle, hour_length, HOUR_HAND_WIDTH),
-        make_hand(centre, minute_angle, minute_length, MINUTE_HAND_WIDTH),
+        make_hand(centre, hour_angle, hour_length, HOUR_HAND_WIDTH, false),
+        make_hand(centre, minute_angle, minute_length, MINUTE_HAND_WIDTH, true),
       },
       .name = name,
     };
@@ -1518,6 +1674,10 @@ static bool read_settings(DictionaryIterator *iterator) {
     // A colour as 0xRRGGBB, or -1 for the same colour as the text.
     const int32_t color = tuple_int(tuple);
     s_settings.second_hand_argb = color < 0 ? 0 : GColorFromHEX(color).argb;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_HAND_STYLE))) {
+    s_settings.hand_style = tuple_int(tuple) % HANDS_COUNT;
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_DIAL_NAME)) && tuple->type == TUPLE_CSTRING) {
