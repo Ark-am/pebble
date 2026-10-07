@@ -14,6 +14,10 @@ from the settings; by default they are:
 The watch vibrates twice if the phone disconnects, except during Quiet Time.
 Aplite has no health data, so its health position shows the month and year.
 
+Below the 12 o'clock marker the dial shows a name, "PEBBLE" by default. Set
+any text under **Name on the dial** in the settings, or leave it empty to show
+no name. Long names are cut off with "…".
+
 On rectangular watches the minute track follows the edge of the screen; on
 round watches it follows the circle. When a Timeline Quick View covers part of
 the screen, the dial shrinks to fit the remaining area.

@@ -44,7 +44,8 @@
       "TEMPERATURE_UNIT",
       "ROTATION",
       "NUMBER_FONT",
-      "INFO_FONT"
+      "INFO_FONT",
+      "DIAL_NAME"
     ],
     "resources": {
       "media": [

@@ -15,6 +15,7 @@
 #define WEATHER_REFRESH_MINUTES 30
 #define LOW_BATTERY_PERCENT 20
 #define NO_TEMPERATURE INT32_MIN
+#define DEFAULT_DIAL_NAME "PEBBLE"
 
 #if PBL_DISPLAY_WIDTH >= 200
   #define VALUE_FONT FONT_KEY_GOTHIC_24_BOLD
@@ -63,7 +64,7 @@ typedef enum {
 enum { POSITION_TOP, POSITION_RIGHT, POSITION_BOTTOM, POSITION_LEFT, POSITION_COUNT };
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 3
+#define SETTINGS_VERSION 4
 typedef struct {
   uint8_t version;
   bool light_theme;
@@ -78,6 +79,8 @@ typedef struct {
   // information (see font_styles.h).
   uint8_t number_font;
   uint8_t info_font;
+  // Added in version 4: the name shown below 12 o'clock; empty shows none.
+  char dial_name[32];
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -86,6 +89,7 @@ static int settings_size(uint8_t version) {
   switch (version) {
     case 1: return offsetof(Settings, rotation);
     case 2: return offsetof(Settings, number_font);
+    case 3: return offsetof(Settings, dial_name);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -257,6 +261,7 @@ static void settings_set_defaults(Settings *settings) {
     .second_hand = false,
     .disconnect_vibe = true,
     .slots = { SLOT_WEATHER, SLOT_DATE, SLOT_HEALTH, SLOT_BATTERY },
+    .dial_name = DEFAULT_DIAL_NAME,
   };
 }
 
@@ -528,23 +533,29 @@ static void draw_complication(GContext *ctx, GPoint centre, int16_t width,
   }
 }
 
+#define BATTERY_OUTLINE 2
+
 static void draw_battery_icon(GContext *ctx, GPoint centre) {
-  const GRect body = GRect(centre.x - 9, centre.y - 4, 16, 9);
+  const GRect body = GRect(centre.x - 10, centre.y - 5, 18, 11);
   const GColor fill = s_battery.is_charging
     ? COLOR_CHARGING
     : s_battery.charge_percent <= LOW_BATTERY_PERCENT ? COLOR_WARNING : s_palette.foreground;
 
-  graphics_context_set_stroke_color(ctx, s_palette.foreground);
-  graphics_context_set_stroke_width(ctx, 1);
-  graphics_draw_rect(ctx, body);
+  // graphics_draw_rect ignores the stroke width, so the thick outline is a
+  // filled body with its inside cleared.
   graphics_context_set_fill_color(ctx, s_palette.foreground);
+  graphics_fill_rect(ctx, body, 0, GCornerNone);
   graphics_fill_rect(ctx, GRect(body.origin.x + body.size.w, centre.y - 2, 2, 5), 0, GCornerNone);
+  const GRect inside = grect_inset(body, GEdgeInsets(BATTERY_OUTLINE));
+  graphics_context_set_fill_color(ctx, s_palette.background);
+  graphics_fill_rect(ctx, inside, 0, GCornerNone);
 
-  const int16_t inner_w = body.size.w - 4;
-  const int16_t level = inner_w * s_battery.charge_percent / 100;
+  // The level sits a pixel in from the outline.
+  const GRect gauge = grect_inset(inside, GEdgeInsets(1));
+  const int16_t level = gauge.size.w * s_battery.charge_percent / 100;
   graphics_context_set_fill_color(ctx, fill);
-  graphics_fill_rect(ctx, GRect(body.origin.x + 2, body.origin.y + 2,
-                                level > 0 ? level : 1, body.size.h - 4), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(gauge.origin.x, gauge.origin.y,
+                                level > 0 ? level : 1, gauge.size.h), 0, GCornerNone);
 }
 
 // Bluetooth rune, struck through, shown only while the phone is disconnected.
@@ -650,6 +661,44 @@ static void draw_hour_numbers(GContext *ctx, GRect bounds, GPoint centre) {
   }
 }
 
+// The name chosen in the settings, just inside the 12 o'clock marker (or below
+// the "12" when that number shows instead), above the information at 12
+// o'clock. A name too long for the dial is cut off with an ellipsis.
+static void draw_dial_name(GContext *ctx, GRect bounds, GPoint centre) {
+  const char *name = s_settings.dial_name;
+  if (!name[0]) {
+    return;
+  }
+  const int32_t angle = dial_angle(0);
+  const GSize text = graphics_text_layout_get_content_size(
+    name, s_label_font.font, GRect(0, 0, SLOT_WIDE_WIDTH, LABEL_HEIGHT + s_label_font.pad * 2),
+    GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter);
+  int32_t distance = edge_distance(bounds, angle) - HOUR_TICK_LENGTH - 3;
+  if (s_settings.hour_numbers && s_settings.slots[POSITION_TOP] == SLOT_NONE) {
+    distance -= NUMERAL_RADIUS + VALUE_HEIGHT / 2;
+  }
+  // Keep the whole name clear of the marker: on round watches it turns with
+  // the dial, and on rectangular ones it stays upright, so it reaches further
+  // along the ray when the dial is turned to the side.
+#if defined(PBL_ROUND)
+  const int32_t reach = LABEL_HEIGHT / 2;
+#else
+  const int32_t reach = (abs(sin_lookup(angle)) * text.w / 2
+    + abs(cos_lookup(angle)) * LABEL_HEIGHT / 2) / TRIG_MAX_RATIO;
+#endif
+  distance -= 3 + reach;
+
+  const int16_t width = text.w + 8;
+  const GPoint at = piece_begin(ray_point(centre, angle, distance),
+                                GSize(width, LABEL_HEIGHT + 8));
+  const int16_t top = at.y - LABEL_HEIGHT / 2 - s_label_font.pad;
+  graphics_context_set_text_color(ctx, s_palette.label);
+  graphics_draw_text(ctx, name, s_label_font.font,
+                     GRect(at.x - width / 2, top, width, LABEL_HEIGHT + s_label_font.pad * 2),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+  piece_end(ctx);
+}
+
 static void draw_weather(GContext *ctx, GPoint at, int16_t width) {
   char temperature[16];
   if (s_temperature == NO_TEMPERATURE) {
@@ -735,6 +784,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   if (s_settings.hour_numbers) {
     draw_hour_numbers(ctx, bounds, centre);
   }
+  draw_dial_name(ctx, bounds, centre);
 
   const int32_t reach_x = edge_distance(bounds, TRIG_MAX_ANGLE / 4);
   const int32_t reach_y = edge_distance(bounds, 0);
@@ -887,6 +937,11 @@ static bool read_settings(DictionaryIterator *iterator) {
   if ((tuple = dict_find(iterator, MESSAGE_KEY_ROTATION))) {
     const int32_t degrees = tuple_int(tuple) % 360;
     s_settings.rotation = degrees > 180 ? degrees - 360 : degrees < -180 ? degrees + 360 : degrees;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_DIAL_NAME)) && tuple->type == TUPLE_CSTRING) {
+    strncpy(s_settings.dial_name, tuple->value->cstring, sizeof(s_settings.dial_name) - 1);
+    s_settings.dial_name[sizeof(s_settings.dial_name) - 1] = '\0';
     changed = true;
   }
   for (int i = 0; i < POSITION_COUNT; i++) {

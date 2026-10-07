@@ -89,6 +89,16 @@ module.exports = [
         defaultValue: false
       },
       {
+        type: 'input',
+        messageKey: 'DIAL_NAME',
+        label: 'Name on the dial',
+        description: 'Shown below the 12 o\'clock marker. Leave empty to show no name.',
+        defaultValue: 'PEBBLE',
+        attributes: {
+          maxlength: 20
+        }
+      },
+      {
         type: 'slider',
         messageKey: 'ROTATION',
         label: 'Rotate the dial',
