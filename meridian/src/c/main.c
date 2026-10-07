@@ -369,9 +369,21 @@ static void piece_end(GContext *ctx) {
   const uint16_t stride = gbitmap_get_bytes_per_row(s_piece_image);
   const uint8_t background = s_palette.background.argb;
   GBitmap *screen = graphics_capture_frame_buffer(ctx);
+  if (!screen) {
+    // The piece stays drawn upright in the middle; leave it rather than lose it.
+    gbitmap_destroy(s_piece_image);
+    s_piece_image = NULL;
+    return;
+  }
+  const int16_t screen_h = gbitmap_get_bounds(screen).size.h;
   for (int16_t y = 0; y < size.h; y++) {
     uint8_t *out = copy + y * stride;
-    const GBitmapDataRowInfo row = gbitmap_get_data_row_info(screen, origin.y + y);
+    const int16_t sy = origin.y + y;
+    if (sy < 0 || sy >= screen_h) {
+      memset(out, background, size.w);
+      continue;
+    }
+    const GBitmapDataRowInfo row = gbitmap_get_data_row_info(screen, sy);
     for (int16_t x = 0; x < size.w; x++) {
       const int16_t sx = origin.x + x;
       out[x] = sx >= row.min_x && sx <= row.max_x ? row.data[sx] : background;
@@ -387,8 +399,11 @@ static void piece_end(GContext *ctx) {
   s_piece_image = NULL;
 }
 
-// Colour channels run from 0 to 3, two bits each in a GColor.
+// Colour channels run from 0 to 3, two bits each in a GColor. The top two
+// bits are alpha, which a screen may not keep, so colours are compared
+// without them.
 #define CHANNEL(argb, shift) (((argb) >> (shift)) & 3)
+#define SAME_COLOUR(a, b) ((((a) ^ (b)) & 0x3F) == 0)
 
 // Draws a piece turned about its centre, which lands on a point. Each screen
 // pixel takes a blend of the four nearest pixels of the piece, weighted by
@@ -402,8 +417,14 @@ static void blend_piece(GBitmap *screen, const Piece *piece, int32_t angle, uint
   const int32_t cos = cos_lookup(angle);
   // Far enough from the centre to cover the turned piece.
   const int16_t reach = (size.w + size.h) / 2 + 1;
+  const int16_t screen_h = gbitmap_get_bounds(screen).size.h;
   for (int16_t dy = -reach; dy <= reach; dy++) {
-    const GBitmapDataRowInfo row = gbitmap_get_data_row_info(screen, piece->at.y + dy);
+    // A piece near the edge can reach past the screen; there are no rows there.
+    const int16_t y = piece->at.y + dy;
+    if (y < 0 || y >= screen_h) {
+      continue;
+    }
+    const GBitmapDataRowInfo row = gbitmap_get_data_row_info(screen, y);
     for (int16_t dx = -reach; dx <= reach; dx++) {
       const int16_t x = piece->at.x + dx;
       if (x < row.min_x || x > row.max_x) {
@@ -432,7 +453,7 @@ static void blend_piece(GBitmap *screen, const Piece *piece, int32_t angle, uint
         if (sx >= 0 && sy >= 0 && sx < size.w && sy < size.h) {
           colour = data[sy * stride + sx];
         }
-        if (colour == background) {
+        if (SAME_COLOUR(colour, background)) {
           colour = under;
         } else if (weights[i]) {
           any = true;
@@ -773,6 +794,14 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
 #if defined(PBL_ROUND)
   // With the dial turned, the text is collected first (see "Turned text").
   s_collecting = s_settings.rotation != 0;
+  if (s_collecting) {
+    // Turning the text needs the screen's pixels; without them it stays upright.
+    GBitmap *frame = graphics_capture_frame_buffer(ctx);
+    s_collecting = frame != NULL;
+    if (frame) {
+      graphics_release_frame_buffer(ctx, frame);
+    }
+  }
   const GRect screen = layer_get_bounds(layer);
   s_scratch = grect_center_point(&screen);
   if (!s_collecting) {
