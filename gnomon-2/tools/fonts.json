@@ -1,10 +1,5 @@
 {
   "roles": {
-    "MODERN": {
-      "kind": "numbers", "bold": true, "characters": "[0-9]",
-      "large": { "height": 20, "like": "GOTHIC_28_BOLD" },
-      "small": { "height": 17, "like": "GOTHIC_24_BOLD" }
-    },
     "DATE": {
       "kind": "info", "bold": true, "characters": "[ -~°]",
       "large": { "height": 17, "like": "GOTHIC_24_BOLD" },

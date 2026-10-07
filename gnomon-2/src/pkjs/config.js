@@ -43,16 +43,8 @@ module.exports = [
       },
       {
         type: 'select',
-        messageKey: 'NUMBER_FONT',
-        label: 'Number font',
-        description: 'For the modern hour numbers; the classic ones keep their own style.',
-        defaultValue: '0',
-        options: FONT_OPTIONS
-      },
-      {
-        type: 'select',
         messageKey: 'INFO_FONT',
-        label: 'Information font',
+        label: 'Information/widget font',
         description: 'For the date, weather, health information and the name on the dial.',
         defaultValue: '0',
         options: FONT_OPTIONS
@@ -139,7 +131,8 @@ module.exports = [
         messageKey: 'AVOID_HANDS',
         label: 'Move information clear of the hands',
         description: 'Each item slides around the centre when a hand would cover it. ' +
-          'When there is no room, it stays where it is.',
+          'With fewer than four items shown, they can go all the way round into ' +
+          'the free space. When there is no room, an item stays where it is.',
         defaultValue: false
       }
     ]

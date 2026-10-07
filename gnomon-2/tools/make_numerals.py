@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Renders the classic hour numbers as smooth, pre-turned images.
+"""Renders the hour numbers as smooth, pre-turned images.
 
 Pebble's fonts cannot be rotated and are drawn without smoothing, so on colour
-watches the classic numbers are drawn from these images instead. Each number is
-rendered large from Noto Serif Display Bold, narrowed to a condensed shape,
+watches the hour numbers, classic and modern, are drawn from these images
+instead. Each number is rendered large from Noto Serif Display Bold, narrowed to a condensed shape,
 turned to follow the dial and scaled down, which leaves soft edges. Black and
 white versions cover the light and dark backgrounds.
 
@@ -35,8 +35,9 @@ SIZES = {
 COLOURS = {'black': (0, 0, 0), 'white': (255, 255, 255)}
 
 # Clockwise turn for each number: tops face outward, except on the lower half
-# of the dial, where that would turn them upside down.
-TURNS = {12: 0, 2: 60, 4: -60, 6: 0, 8: 60, 10: -60}
+# of the dial, where that would turn them upside down. The 3 and 9 are for the
+# modern numbers, which stay upright.
+TURNS = {12: 0, 2: 60, 3: 0, 4: -60, 6: 0, 8: 60, 9: 0, 10: -60}
 
 OUT_DIR = 'resources/images/numerals'
 

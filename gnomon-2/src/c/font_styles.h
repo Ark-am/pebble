@@ -47,11 +47,6 @@ static inline void styled_font_unload(StyledFont *styled) {
 }
 
 #if PBL_DISPLAY_WIDTH >= 200
-static const CustomFont FONTS_MODERN[CUSTOM_FONT_COUNT] = {
-  { RESOURCE_ID_FONT_SERIF_MODERN_LARGE_21, 4 },  // Serif 21px
-  { RESOURCE_ID_FONT_ROUNDED_MODERN_LARGE_20, 3 },  // Rounded 20px
-  { RESOURCE_ID_FONT_MONO_MODERN_LARGE_21, 4 },  // Mono 21px
-};
 static const CustomFont FONTS_DATE[CUSTOM_FONT_COUNT] = {
   { RESOURCE_ID_FONT_SERIF_DATE_LARGE_18, 3 },  // Serif 18px
   { RESOURCE_ID_FONT_ROUNDED_DATE_LARGE_19, 4 },  // Rounded 19px
@@ -63,11 +58,6 @@ static const CustomFont FONTS_LABEL[CUSTOM_FONT_COUNT] = {
   { RESOURCE_ID_FONT_MONO_LABEL_LARGE_15, 3 },  // Mono 15px
 };
 #else
-static const CustomFont FONTS_MODERN[CUSTOM_FONT_COUNT] = {
-  { RESOURCE_ID_FONT_SERIF_MODERN_SMALL_19, 4 },  // Serif 19px
-  { RESOURCE_ID_FONT_ROUNDED_MODERN_SMALL_18, 4 },  // Rounded 18px
-  { RESOURCE_ID_FONT_MONO_MODERN_SMALL_19, 4 },  // Mono 19px
-};
 static const CustomFont FONTS_DATE[CUSTOM_FONT_COUNT] = {
   { RESOURCE_ID_FONT_SERIF_DATE_SMALL_16, 4 },  // Serif 16px
   { RESOURCE_ID_FONT_ROUNDED_DATE_SMALL_17, 5 },  // Rounded 17px

@@ -23,12 +23,12 @@ Open the watchface's settings in the Pebble phone app:
 | Setting | Options |
 | --- | --- |
 | Background | Light (default) or Dark |
-| Hour numbers | Classic: 12, 2, 4, 6, 8 and 10, turned to follow the dial (default). Modern: 12, 3, 6 and 9, upright. |
+| Hour numbers | Classic: 12, 2, 4, 6, 8 and 10, turned to follow the dial (default). Modern: 12, 3, 6 and 9, upright. Both use the same condensed serif numbers. |
 | Second hand | Off (default) or on. It updates every second, which uses more battery. |
 | Second hand colour | Red (default), Orange, Amber, Green, Teal, Blue, Violet, Rose, or the same black or white as the text. Colour watches only. |
 | Name on the dial | Any text, shown below the 12 (default "Pebble"). Leave it empty to show no name. Long names are cut off with "…". |
 | Weather, Health, Date, Battery and connection | Each can be turned off to hide that item; all are on by default |
-| Move information clear of the hands | Off (default) or on. Each item slides around the centre, and outward if needed, when a hand would cover it. When there is no room it stays where it is, partly covered. |
+| Move information clear of the hands | Off (default) or on. Each item slides around the centre, and outward if needed, when a hand would cover it. When fewer than four items are shown, the others can go all the way round the dial into the free space. When there is no room it stays where it is, partly covered. |
 | Temperature | Celsius (default) or Fahrenheit |
 | Vibrate when the phone disconnects | On (default) or off |
 
@@ -36,12 +36,12 @@ Hours without a number get a long index line instead. Any hour number or index
 line that would run into the information or the name is left out.
 
 Pebble's fonts cannot be rotated and are drawn without smoothing, so on colour
-watches the classic numbers are images with soft edges, already turned to
-follow the dial. `tools/make_numerals.py` renders them from Noto Serif Display
+watches the hour numbers, classic and modern, are images with soft edges,
+already turned to follow the dial (the modern ones stay upright). `tools/make_numerals.py` renders them from Noto Serif Display
 Bold, narrowed to a condensed shape, into `resources/images/numerals/`; run it
 again after changing the font, sizes or angles. Black-and-white watches cannot
 show soft edges, so they draw the numbers as line strokes from glyph outlines
-in `src/c/main.c`, where only the digits 0, 1, 2, 4, 6 and 8 are defined.
+in `src/c/main.c`, where only the digits 0, 1, 2, 3, 4, 6, 8 and 9 are defined.
 
 ## Weather
 
@@ -53,8 +53,9 @@ reading arrives, the temperature shows `--°`.
 
 ## Font styles
 
-Two settings choose the fonts: **Number font** (the modern hour numbers; the classic ones keep their own drawn style) and
-**Information font** (the date, weather, health information and the name on the dial). Each offers:
+**Information font** chooses the font for the date, weather, health
+information and the name on the dial. The hour numbers always keep their own
+style. It offers:
 
 | Style | Font |
 | --- | --- |

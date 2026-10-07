@@ -45,7 +45,6 @@
       "SHOW_BATTERY",
       "AVOID_HANDS",
       "SECOND_HAND_COLOR",
-      "NUMBER_FONT",
       "INFO_FONT"
     ],
     "resources": {
@@ -69,6 +68,15 @@
           "type": "png",
           "name": "NUMERAL_LARGE_BLACK_2",
           "file": "images/numerals/numeral_large_black_2.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_3",
+          "file": "images/numerals/numeral_large_black_3.png",
           "targetPlatforms": [
             "emery",
             "gabbro"
@@ -103,6 +111,15 @@
         },
         {
           "type": "png",
+          "name": "NUMERAL_LARGE_BLACK_9",
+          "file": "images/numerals/numeral_large_black_9.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
           "name": "NUMERAL_LARGE_BLACK_10",
           "file": "images/numerals/numeral_large_black_10.png",
           "targetPlatforms": [
@@ -123,6 +140,15 @@
           "type": "png",
           "name": "NUMERAL_LARGE_WHITE_2",
           "file": "images/numerals/numeral_large_white_2.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_3",
+          "file": "images/numerals/numeral_large_white_3.png",
           "targetPlatforms": [
             "emery",
             "gabbro"
@@ -157,6 +183,15 @@
         },
         {
           "type": "png",
+          "name": "NUMERAL_LARGE_WHITE_9",
+          "file": "images/numerals/numeral_large_white_9.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
           "name": "NUMERAL_LARGE_WHITE_10",
           "file": "images/numerals/numeral_large_white_10.png",
           "targetPlatforms": [
@@ -177,6 +212,15 @@
           "type": "png",
           "name": "NUMERAL_SMALL_BLACK_2",
           "file": "images/numerals/numeral_small_black_2.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_3",
+          "file": "images/numerals/numeral_small_black_3.png",
           "targetPlatforms": [
             "basalt",
             "chalk"
@@ -211,6 +255,15 @@
         },
         {
           "type": "png",
+          "name": "NUMERAL_SMALL_BLACK_9",
+          "file": "images/numerals/numeral_small_black_9.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
           "name": "NUMERAL_SMALL_BLACK_10",
           "file": "images/numerals/numeral_small_black_10.png",
           "targetPlatforms": [
@@ -231,6 +284,15 @@
           "type": "png",
           "name": "NUMERAL_SMALL_WHITE_2",
           "file": "images/numerals/numeral_small_white_2.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_3",
+          "file": "images/numerals/numeral_small_white_3.png",
           "targetPlatforms": [
             "basalt",
             "chalk"
@@ -265,80 +327,20 @@
         },
         {
           "type": "png",
-          "name": "NUMERAL_SMALL_WHITE_10",
-          "file": "images/numerals/numeral_small_white_10.png",
+          "name": "NUMERAL_SMALL_WHITE_9",
+          "file": "images/numerals/numeral_small_white_9.png",
           "targetPlatforms": [
             "basalt",
             "chalk"
           ]
         },
         {
-          "type": "font",
-          "name": "FONT_SERIF_MODERN_LARGE_21",
-          "file": "fonts/IBMPlexSerif-SemiBold.ttf",
-          "characterRegex": "[0-9]",
+          "type": "png",
+          "name": "NUMERAL_SMALL_WHITE_10",
+          "file": "images/numerals/numeral_small_white_10.png",
           "targetPlatforms": [
-            "emery",
-            "gabbro"
-          ]
-        },
-        {
-          "type": "font",
-          "name": "FONT_ROUNDED_MODERN_LARGE_20",
-          "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[0-9]",
-          "targetPlatforms": [
-            "emery",
-            "gabbro"
-          ]
-        },
-        {
-          "type": "font",
-          "name": "FONT_MONO_MODERN_LARGE_21",
-          "file": "fonts/DMMono-Medium.ttf",
-          "characterRegex": "[0-9]",
-          "targetPlatforms": [
-            "emery",
-            "gabbro"
-          ]
-        },
-        {
-          "type": "font",
-          "name": "FONT_SERIF_MODERN_SMALL_19",
-          "file": "fonts/IBMPlexSerif-SemiBold.ttf",
-          "characterRegex": "[0-9]",
-          "targetPlatforms": [
-            "aplite",
             "basalt",
-            "chalk",
-            "diorite",
-            "flint"
-          ]
-        },
-        {
-          "type": "font",
-          "name": "FONT_ROUNDED_MODERN_SMALL_18",
-          "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[0-9]",
-          "targetPlatforms": [
-            "aplite",
-            "basalt",
-            "chalk",
-            "diorite",
-            "flint"
-          ]
-        },
-        {
-          "type": "font",
-          "name": "FONT_MONO_MODERN_SMALL_19",
-          "file": "fonts/DMMono-Medium.ttf",
-          "characterRegex": "[0-9]",
-          "targetPlatforms": [
-            "aplite",
-            "basalt",
-            "chalk",
-            "diorite",
-            "flint"
+            "chalk"
           ]
         },
         {
