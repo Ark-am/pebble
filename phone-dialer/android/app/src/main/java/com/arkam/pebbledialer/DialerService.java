@@ -60,6 +60,8 @@ public final class DialerService extends BaseJavaPebbleListenerService {
     private static final int KEY_AUDIO_ROUTES = 27;
     private static final int KEY_AUDIO_ASKED = 28;
     private static final int KEY_AUDIO_MUTED = 29;
+    private static final int KEY_CALL_STATUS = 30;
+    private static final int KEY_CALL_SECONDS = 31;
 
     private static final int REQUEST_LIST = 1;
     private static final int REQUEST_CALL = 2;
@@ -79,6 +81,12 @@ public final class DialerService extends BaseJavaPebbleListenerService {
 
     // Sent to the watch, unprompted, when a call it started has ended.
     private static final int CALL_STATE_ENDED = 0;
+    // Sent unprompted as that call progresses (CALL_STATUS), with how long it
+    // has been connected (CALL_SECONDS). A separate key from CALL_STATE, which
+    // watch apps from before this treat as "ended" whatever its value.
+    private static final int CALL_STATUS_CALLING = 1;
+    private static final int CALL_STATUS_CONNECTED = 2;
+    private static final int CALL_STATUS_ON_HOLD = 3;
     // How often, and for how long, to check whether a call is still going.
     private static final long CALL_POLL_MS = 1000;
     private static final long CALL_START_TIMEOUT_MS = 60_000;
@@ -119,6 +127,7 @@ public final class DialerService extends BaseJavaPebbleListenerService {
     private String callWatch;
     // The number of the call the watch placed, to end that call on hang-up.
     private String callNumber;
+    private int callStatus;
     private boolean callSeen;
     private long callStartedAt;
     private final Runnable callPoll = this::pollCall;
@@ -414,9 +423,22 @@ public final class DialerService extends BaseJavaPebbleListenerService {
     private void watchCall(String watch, String number) {
         callWatch = watch;
         callNumber = number;
-        // Keep the watch's audio button up to date for this call.
+        callStatus = 0;
+        // Keep the watch's audio button and call status up to date for this call.
         CallControlService.setListener(state -> sendAudio(watch, state.getRoute(),
                 state.getSupportedRouteMask(), state.isMuted(), 0));
+        CallControlService.setCallListener(number, new CallControlService.CallListener() {
+            @Override
+            public void onCallState(int state, long connectedAtMillis) {
+                sendCallStatus(watch, state, connectedAtMillis);
+            }
+
+            @Override
+            public void onCallEnded() {
+                stopWatchingCall();
+                sendCallEnded(watch);
+            }
+        });
         callSeen = false;
         callStartedAt = SystemClock.elapsedRealtime();
         mainHandler.removeCallbacks(callPoll);
@@ -427,6 +449,7 @@ public final class DialerService extends BaseJavaPebbleListenerService {
         callWatch = null;
         callNumber = null;
         CallControlService.setListener(null);
+        CallControlService.setCallListener(null, null);
         mainHandler.removeCallbacks(callPoll);
     }
 
@@ -443,10 +466,7 @@ public final class DialerService extends BaseJavaPebbleListenerService {
         } else if (callSeen) {
             String watch = callWatch;
             stopWatchingCall();
-            Map<Integer, PebbleDictionaryItem> message = new HashMap<>();
-            message.put(KEY_CALL_STATE, new PebbleDictionaryItem.Int32(CALL_STATE_ENDED));
-            sender.sendDataToPebble(WATCHAPP_UUID, message, results -> { },
-                    Collections.singletonList(new WatchIdentifier(watch)));
+            sendCallEnded(watch);
             return;
         } else if (SystemClock.elapsedRealtime() - callStartedAt > CALL_START_TIMEOUT_MS) {
             stopWatchingCall();
@@ -458,6 +478,48 @@ public final class DialerService extends BaseJavaPebbleListenerService {
     // Why the watch was told there are no audio outputs (AUDIO_ASKED).
     private static final int AUDIO_NOT_LINKED = 1;
     private static final int AUDIO_NEEDS_ANDROID_12 = 2;
+
+    private void sendCallEnded(String watch) {
+        Map<Integer, PebbleDictionaryItem> message = new HashMap<>();
+        message.put(KEY_CALL_STATE, new PebbleDictionaryItem.Int32(CALL_STATE_ENDED));
+        sender.sendDataToPebble(WATCHAPP_UUID, message, results -> { },
+                Collections.singletonList(new WatchIdentifier(watch)));
+    }
+
+    /**
+     * Tells the watch how its call is going, when that changes: calling,
+     * connected or on hold, with the seconds since it connected. Android does
+     * not say when the other phone starts ringing, so that is still calling.
+     */
+    private void sendCallStatus(String watch, int state, long connectedAtMillis) {
+        int status;
+        switch (state) {
+            case android.telecom.Call.STATE_ACTIVE:
+                status = CALL_STATUS_CONNECTED;
+                break;
+            case android.telecom.Call.STATE_HOLDING:
+                status = CALL_STATUS_ON_HOLD;
+                break;
+            case android.telecom.Call.STATE_DISCONNECTING:
+            case android.telecom.Call.STATE_DISCONNECTED:
+                // The end is reported when Android removes the call.
+                return;
+            default:
+                status = CALL_STATUS_CALLING;
+                break;
+        }
+        if (status == callStatus) {
+            return;
+        }
+        callStatus = status;
+        long seconds = connectedAtMillis > 0
+                ? Math.max(0, (System.currentTimeMillis() - connectedAtMillis) / 1000) : 0;
+        Map<Integer, PebbleDictionaryItem> message = new HashMap<>();
+        message.put(KEY_CALL_STATUS, new PebbleDictionaryItem.Int32(status));
+        message.put(KEY_CALL_SECONDS, new PebbleDictionaryItem.Int32((int) seconds));
+        sender.sendDataToPebble(WATCHAPP_UUID, message, results -> { },
+                Collections.singletonList(new WatchIdentifier(watch)));
+    }
 
     /** Moves the call to the route the watch asked for; main thread. */
     private void switchAudio(String watch, int route) {

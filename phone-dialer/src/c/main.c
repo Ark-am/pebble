@@ -237,6 +237,13 @@ static int32_t s_call_companion_version;
 static int32_t s_audio_route;
 static int32_t s_audio_routes;
 static bool s_audio_muted;
+// How the call is going, from the phone (when the Pebble is linked there):
+// when it connected (0 until then), whether it is on hold, and until when an
+// error message keeps the status line instead of the timer.
+static time_t s_call_connected_at;
+static bool s_call_on_hold;
+static time_t s_call_status_until;
+static bool s_call_ticking;
 static Layer *s_call_audio_layer;
 static Layer *s_call_mute_layer;
 
@@ -1002,8 +1009,45 @@ static void call_show_status(const char *status) {
   call_set_status(status, s_theme.hint);
 }
 
+// How long an error stays in the status line before the call status returns.
+#define CALL_ERROR_SECONDS 3
+
 static void call_show_error(const char *status) {
   call_set_status(status, s_theme.warning);
+  s_call_status_until = time(NULL) + CALL_ERROR_SECONDS;
+}
+
+// During a call: "Calling", or "Connected 1:23" / "On hold 1:23" once the
+// other side answers (the phone reports this when the Pebble is linked).
+static void call_refresh_status(void) {
+  if (s_call_state != CALL_ACTIVE || time(NULL) < s_call_status_until) {
+    return;
+  }
+  if (!s_call_connected_at) {
+    call_set_status("Calling", s_theme.call);
+    return;
+  }
+  static char text[32];
+  const int seconds = MAX(0, (int)(time(NULL) - s_call_connected_at));
+  const char *label = s_call_on_hold ? "On hold" : "Connected";
+  if (seconds >= 3600) {
+    snprintf(text, sizeof(text), "%s %d:%02d:%02d", label,
+             seconds / 3600, seconds / 60 % 60, seconds % 60);
+  } else {
+    snprintf(text, sizeof(text), "%s %d:%02d", label, seconds / 60, seconds % 60);
+  }
+  call_set_status(text, s_call_on_hold ? s_theme.warning : s_theme.call);
+}
+
+static void call_tick(struct tm *tick_time, TimeUnits units_changed) {
+  call_refresh_status();
+}
+
+static void call_stop_ticking(void) {
+  if (s_call_ticking) {
+    tick_timer_service_unsubscribe();
+    s_call_ticking = false;
+  }
 }
 
 // What the call screen is showing. It starts as a confirmation, and once the
@@ -1077,6 +1121,7 @@ static void call_layout(void) {
 }
 
 static void call_ended(void) {
+  call_stop_ticking();
   s_call_state = CALL_ENDED;
   call_show_status("Call ended");
   call_layout();
@@ -1120,13 +1165,41 @@ static void call_handle_reply(int32_t result, DictionaryIterator *iterator) {
   const Tuple *version = dict_find(iterator, MESSAGE_KEY_COMPANION_VERSION);
   s_call_companion_version = version ? version->value->int32 : 0;
   s_call_state = CALL_ACTIVE;
-  call_set_status("Calling", s_theme.call);
+  call_refresh_status();
   call_layout();
   vibes_short_pulse();
 }
 
 // The phone reports that the call has ended (the other side hung up, or it
 // was ended on the phone).
+// Call progress from the phone: calling, connected or on hold, and how long
+// it has been connected. Counting from now minus those seconds keeps the
+// timer right even if the watch's and phone's clocks differ.
+enum {
+  CALL_STATUS_CALLING = 1,
+  CALL_STATUS_CONNECTED = 2,
+  CALL_STATUS_ON_HOLD = 3,
+};
+
+static void call_status_changed(int32_t status, int32_t seconds) {
+  if (!s_call_window || !call_in_progress()) {
+    return;
+  }
+  if (status == CALL_STATUS_CONNECTED || status == CALL_STATUS_ON_HOLD) {
+    s_call_connected_at = time(NULL) - MAX(0, seconds);
+    s_call_on_hold = status == CALL_STATUS_ON_HOLD;
+    if (!s_call_ticking) {
+      tick_timer_service_subscribe(SECOND_UNIT, call_tick);
+      s_call_ticking = true;
+    }
+  } else {
+    s_call_connected_at = 0;
+    s_call_on_hold = false;
+    call_stop_ticking();
+  }
+  call_refresh_status();
+}
+
 static void call_phone_ended(void) {
   if (!s_call_window || (s_call_state != CALL_ACTIVE && s_call_state != CALL_ENDING)) {
     return;
@@ -1355,6 +1428,7 @@ static void call_window_unload(Window *window) {
     abandon_request();
   }
   cancel_exit_timer();
+  call_stop_ticking();
   text_layer_destroy(s_call_status_layer);
   text_layer_destroy(s_call_name_layer);
   text_layer_destroy(s_call_number_layer);
@@ -1514,7 +1588,7 @@ static void call_audio_changed(int32_t route, int32_t routes, bool muted, int32_
     call_layout();
     vibes_short_pulse();
   } else if (s_call_state == CALL_ACTIVE) {
-    call_set_status("Calling", s_theme.call);
+    call_refresh_status();
     call_layout();
   }
   layer_mark_dirty(s_call_audio_layer);
@@ -1544,6 +1618,9 @@ static void call_window_push(const Entry *entry, int32_t source) {
   s_audio_route = 0;
   s_audio_routes = 0;
   s_audio_muted = false;
+  s_call_connected_at = 0;
+  s_call_on_hold = false;
+  s_call_status_until = 0;
   s_call_number[0] = '\0';
   strncpy(s_call_name, entry->title, sizeof(s_call_name) - 1);
   s_call_name[sizeof(s_call_name) - 1] = '\0';
@@ -1923,9 +2000,16 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
   if (apply_settings(iterator)) {
     return;
   }
-  // So can the phone's notice that the call we placed has ended.
+  // So can the phone's notice that the call we placed has ended, and how it
+  // is going until then.
   if (dict_find(iterator, MESSAGE_KEY_CALL_STATE)) {
     call_phone_ended();
+    return;
+  }
+  const Tuple *call_status = dict_find(iterator, MESSAGE_KEY_CALL_STATUS);
+  if (call_status) {
+    const Tuple *seconds = dict_find(iterator, MESSAGE_KEY_CALL_SECONDS);
+    call_status_changed(call_status->value->int32, seconds ? seconds->value->int32 : 0);
     return;
   }
   // And audio output updates during that call.

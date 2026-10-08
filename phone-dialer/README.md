@@ -90,8 +90,11 @@ from the phone's current contact or call-log record. No number is derived from
 truncated display text.
 
 Once Android accepts the call, the watch vibrates and shows the call screen:
-a microphone button and an audio button along the top, **Calling**, the name,
-the number, and a red **End** button at the bottom. Press Select (or tap the
+a microphone button and an audio button along the top, the call status, the
+name, the number, and a red **End** button at the bottom. With the Pebble
+linked, the status follows the call: **Calling** until the other person
+answers, then **Connected** with a timer (0:42), or **On hold** while held.
+Without the link it stays **Calling**. Press Select (or tap the
 microphone) to mute or unmute; while muted it turns red-orange and is crossed
 out. The audio button shows where the call is heard (**Phone**,
 **Speaker**, **Headset** or **Bluetooth**); press Up (or tap it) to move the
@@ -169,6 +172,15 @@ a second (`MODE_IN_CALL` needs no extra permission) and, when the call ends,
 sends `CALL_STATE` (0, ended) to the watch unprompted. If the phone never
 reports a call, the watch is not told anything, rather than being told a live
 call has ended.
+
+With the Pebble linked, `CallControlService` also follows the call itself:
+the companion sends `CALL_STATUS` (1 calling, 2 connected, 3 on hold) with
+`CALL_SECONDS` (seconds since it connected) whenever the status changes, and
+`CALL_STATE` 0 when Android removes the call. The watch counts the timer from
+its own clock minus `CALL_SECONDS`, so the two clocks need not agree. Android
+does not report when the other phone starts ringing, so that is still
+"calling". The status uses its own key because watch apps from before it
+treat any `CALL_STATE` as the end of the call.
 
 Audio updates (`AUDIO_ROUTE`, `AUDIO_ROUTES`, the routes available as a bit
 mask, and `AUDIO_MUTED`) are sent unprompted during that call: when it starts,
