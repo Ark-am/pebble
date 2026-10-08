@@ -144,6 +144,7 @@ typedef struct {
   GColor foreground;
   GColor leaf;
   GColor ring;
+  GColor ring_empty;
   GColor connected;
   GColor disconnected;
   GColor sun;
@@ -357,6 +358,7 @@ static void apply_palette(void) {
 #if defined(PBL_COLOR)
   s_palette.leaf = dark ? GColorDarkGray : GColorLightGray;
   s_palette.ring = GColorMintGreen;
+  s_palette.ring_empty = GColorBlack;
   s_palette.connected = GColorPictonBlue;
   s_palette.disconnected = GColorRed;
   s_palette.sun = GColorChromeYellow;
@@ -366,6 +368,7 @@ static void apply_palette(void) {
 #else
   s_palette.leaf = s_palette.background;
   s_palette.ring = s_palette.foreground;
+  s_palette.ring_empty = s_palette.background;
   s_palette.connected = s_palette.foreground;
   s_palette.disconnected = s_palette.background;
   s_palette.sun = s_palette.foreground;
@@ -981,9 +984,11 @@ static NOINLINE void draw_date(GContext *ctx, GPoint at, const struct tm *t) {
   draw_text_line(ctx, date, s_date_font.font, at, top + DATE_HEIGHT + LINE_GAP, s_date_font.pad, DATE_HEIGHT);
 }
 
-// A ring of ten segments shows the battery level. The dot inside it is blue
-// while the phone is connected and red when it is not (filled and empty on
-// black-and-white watches), and shows a crescent moon during Quiet Time.
+// A ring of ten segments shows the battery level, full segments green and
+// empty ones black (filled and empty on black-and-white watches). The dot
+// inside it is light blue while the phone is connected and red with a white
+// bar across it when it is not (filled, and empty with a bar, on black-and-
+// white watches), and shows a crescent moon during Quiet Time.
 static NOINLINE void draw_battery_ring(GContext *ctx, GPoint at) {
   const int16_t inner = RING_RADIUS * 65 / 100;
   const int filled = (s_battery.charge_percent + 5) / 10;
@@ -1005,7 +1010,7 @@ static NOINLINE void draw_battery_ring(GContext *ctx, GPoint at) {
     }
     GPathInfo info = { .num_points = ARRAY_LENGTH(points), .points = points };
     GPath *segment = gpath_create(&info);
-    graphics_context_set_fill_color(ctx, i < filled ? s_palette.ring : s_palette.background);
+    graphics_context_set_fill_color(ctx, i < filled ? s_palette.ring : s_palette.ring_empty);
     gpath_draw_filled(ctx, segment);
     gpath_draw_outline(ctx, segment);
     gpath_destroy(segment);
@@ -1019,7 +1024,16 @@ static NOINLINE void draw_battery_ring(GContext *ctx, GPoint at) {
   graphics_fill_circle(ctx, at, inner - 1);
   graphics_draw_circle(ctx, at, inner - 1);
 
-  if (quiet_time_is_active()) {
+  if (!s_bluetooth_connected) {
+    // A bar across the dot, like a no-entry sign, so a lost connection
+    // stands out. It takes the place of the Quiet Time moon.
+    const int16_t radius = inner - 1;
+    const int16_t half_width = radius - 2;
+    const int16_t height = radius * 4 / 10 > 2 ? radius * 4 / 10 : 2;
+    graphics_context_set_fill_color(ctx, PBL_IF_COLOR_ELSE(GColorWhite, s_palette.foreground));
+    graphics_fill_rect(ctx, GRect(at.x - half_width, at.y - height / 2, half_width * 2 + 1, height),
+                       1, GCornersAll);
+  } else if (quiet_time_is_active()) {
     // On black-and-white watches an empty dot needs a filled moon.
     const bool empty = gcolor_equal(dot, s_palette.background);
     const int16_t moon = inner - 3;

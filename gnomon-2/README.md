@@ -9,7 +9,7 @@ sit around the centre:
 | Upper left | Current temperature for the phone's location, with an icon for the conditions: sun (or moon at night), sun or moon behind a cloud, cloud, fog, drizzle, rain, snow, or a storm. Conditions without an icon are written out. |
 | Upper right | Today's health data: steps, distance, active calories, active minutes, sleep, and heart rate (on watches with a sensor). **Tap the watch** to cycle through them. Not shown on Aplite, which has no health data. |
 | Lower left | Day of the week and day of the month |
-| Lower right | Battery level as a ring of ten segments. The dot in the middle is blue while the phone is connected and red when it is not (filled or empty on black-and-white watches), and shows a crescent moon during Quiet Time. |
+| Lower right | Battery level as a ring of ten segments, green when full and black when empty. The dot in the middle is light blue while the phone is connected and red with a white bar across it when it is not (filled, or empty with a bar, on black-and-white watches). During Quiet Time it shows a crescent moon, unless the phone is disconnected. |
 
 The watch vibrates twice if the phone disconnects, except during Quiet Time.
 
