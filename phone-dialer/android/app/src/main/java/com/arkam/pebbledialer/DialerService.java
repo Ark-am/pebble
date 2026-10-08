@@ -59,6 +59,7 @@ public final class DialerService extends BaseJavaPebbleListenerService {
     private static final int KEY_AUDIO_ROUTE = 26;
     private static final int KEY_AUDIO_ROUTES = 27;
     private static final int KEY_AUDIO_ASKED = 28;
+    private static final int KEY_AUDIO_MUTED = 29;
 
     private static final int REQUEST_LIST = 1;
     private static final int REQUEST_CALL = 2;
@@ -68,11 +69,13 @@ public final class DialerService extends BaseJavaPebbleListenerService {
     // Not reply-driven: the watch asks for an audio output (AUDIO_ROUTE) and
     // gets the result as an ordinary audio update.
     private static final int REQUEST_AUDIO = 6;
+    // Not reply-driven either: mutes or unmutes the call (AUDIO_MUTED).
+    private static final int REQUEST_MUTE = 7;
 
     // Sent with every call reply, so the watch knows what this app can do.
     // 2: can end calls (REQUEST_HANGUP). 3: can switch audio (REQUEST_AUDIO).
-    // Older companions sent nothing.
-    private static final int COMPANION_VERSION = 3;
+    // 4: can mute (REQUEST_MUTE). Older companions sent nothing.
+    private static final int COMPANION_VERSION = 4;
 
     // Sent to the watch, unprompted, when a call it started has ended.
     private static final int CALL_STATE_ENDED = 0;
@@ -160,6 +163,12 @@ public final class DialerService extends BaseJavaPebbleListenerService {
             responder.accept(ReceiveResult.Ack.INSTANCE);
             int route = intValue(data.get(KEY_AUDIO_ROUTE), CallAudioState.ROUTE_SPEAKER);
             mainHandler.post(() -> switchAudio(watch, route));
+            return;
+        }
+        if (request == REQUEST_MUTE) {
+            responder.accept(ReceiveResult.Ack.INSTANCE);
+            boolean muted = intValue(data.get(KEY_AUDIO_MUTED), 0) != 0;
+            mainHandler.post(() -> setMuted(watch, muted));
             return;
         }
         int token = intValue(data.get(KEY_TOKEN), 0);
@@ -387,7 +396,7 @@ public final class DialerService extends BaseJavaPebbleListenerService {
         callWatch = watch;
         // Keep the watch's audio button up to date for this call.
         CallControlService.setListener(state -> sendAudio(watch, state.getRoute(),
-                state.getSupportedRouteMask(), false));
+                state.getSupportedRouteMask(), state.isMuted(), 0));
         callSeen = false;
         callStartedAt = SystemClock.elapsedRealtime();
         mainHandler.removeCallbacks(callPoll);
@@ -425,21 +434,39 @@ public final class DialerService extends BaseJavaPebbleListenerService {
         mainHandler.postDelayed(callPoll, CALL_POLL_MS);
     }
 
+    // Why the watch was told there are no audio outputs (AUDIO_ASKED).
+    private static final int AUDIO_NOT_LINKED = 1;
+    private static final int AUDIO_NEEDS_ANDROID_12 = 2;
+
     /** Moves the call to the route the watch asked for; main thread. */
     private void switchAudio(String watch, int route) {
         if (!CallControlService.setRoute(route)) {
-            // Android only lets companion apps switch call audio: tell the
-            // watch there are no outputs, so it asks for the Pebble to be linked.
-            sendAudio(watch, 0, 0, true);
+            sendAudioUnavailable(watch);
         }
     }
 
-    private void sendAudio(String watch, int route, int routes, boolean asked) {
+    /** Mutes or unmutes the call as the watch asked; main thread. */
+    private void setMuted(String watch, boolean muted) {
+        if (!CallControlService.setMuted(muted)) {
+            sendAudioUnavailable(watch);
+        }
+    }
+
+    // Android only lets companion watch apps control call audio, from Android
+    // 12: tell the watch there are no outputs, and why.
+    private void sendAudioUnavailable(String watch) {
+        sendAudio(watch, 0, 0, false, Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                ? AUDIO_NOT_LINKED : AUDIO_NEEDS_ANDROID_12);
+    }
+
+    /** Sends the call's audio state; asked is 0, or why there are no outputs. */
+    private void sendAudio(String watch, int route, int routes, boolean muted, int asked) {
         Map<Integer, PebbleDictionaryItem> message = new HashMap<>();
         message.put(KEY_AUDIO_ROUTE, new PebbleDictionaryItem.Int32(route));
         message.put(KEY_AUDIO_ROUTES, new PebbleDictionaryItem.Int32(routes));
-        if (asked) {
-            message.put(KEY_AUDIO_ASKED, new PebbleDictionaryItem.Int32(1));
+        message.put(KEY_AUDIO_MUTED, new PebbleDictionaryItem.Int32(muted ? 1 : 0));
+        if (asked != 0) {
+            message.put(KEY_AUDIO_ASKED, new PebbleDictionaryItem.Int32(asked));
         }
         sender.sendDataToPebble(WATCHAPP_UUID, message, results -> { },
                 Collections.singletonList(new WatchIdentifier(watch)));

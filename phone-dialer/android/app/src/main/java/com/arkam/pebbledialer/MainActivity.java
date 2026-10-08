@@ -81,8 +81,9 @@ public final class MainActivity extends Activity {
             layout.addView(button, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
-        // Switching a call's audio needs Android 10's companion call API.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        // Switching a call's audio needs the watch companion profile, which
+        // Android 12 added; it is what grants the call-management permission.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             TextView linkTitle = new TextView(this);
             linkTitle.setText(R.string.link_title);
             linkTitle.setTextSize(20);
@@ -184,25 +185,25 @@ public final class MainActivity extends Activity {
     }
 
     /**
-     * Asks Android to link the Pebble to this app. Android shows its own list
-     * of Pebble watches; once one is chosen, Android binds CallControlService
-     * to calls, which lets the watch switch the call's audio. On Android 12
-     * and newer, the watch profile also grants the call-management permission.
+     * Asks Android to link the Pebble to this app with the watch profile.
+     * Android shows its own list of Pebble watches; once one is chosen, the
+     * watch profile grants MANAGE_ONGOING_CALLS, and Android then binds
+     * CallControlService to calls, which lets the watch switch their audio.
+     * The watch role is not exclusive, so the Pebble phone app keeps its own.
      */
     private void linkWatch() {
         CompanionDeviceManager manager = getSystemService(CompanionDeviceManager.class);
         if (manager == null) {
             return;
         }
-        AssociationRequest.Builder request = new AssociationRequest.Builder()
+        AssociationRequest request = new AssociationRequest.Builder()
                 .addDeviceFilter(new BluetoothDeviceFilter.Builder()
                         .setNamePattern(PEBBLE_NAME).build())
                 .addDeviceFilter(new BluetoothLeDeviceFilter.Builder()
-                        .setNamePattern(PEBBLE_NAME).build());
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            request.setDeviceProfile(AssociationRequest.DEVICE_PROFILE_WATCH);
-        }
-        manager.associate(request.build(), new CompanionDeviceManager.Callback() {
+                        .setNamePattern(PEBBLE_NAME).build())
+                .setDeviceProfile(AssociationRequest.DEVICE_PROFILE_WATCH)
+                .build();
+        manager.associate(request, new CompanionDeviceManager.Callback() {
             // Android 13 and newer.
             @Override
             public void onAssociationPending(IntentSender chooser) {

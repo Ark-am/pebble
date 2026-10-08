@@ -13,12 +13,16 @@ enum {
   // Not reply-driven: asks for an audio output; the phone reports the result
   // with an audio update, like any other change.
   REQUEST_AUDIO = 6,
+  // Not reply-driven either: mutes or unmutes the call (AUDIO_MUTED); the
+  // phone reports the result with an audio update.
+  REQUEST_MUTE = 7,
 };
 
 // The phone app's COMPANION_VERSION from which it can end calls, and from
 // which it can switch the call's audio output.
 #define COMPANION_CAN_HANG_UP 2
 #define COMPANION_CAN_SWITCH_AUDIO 3
+#define COMPANION_CAN_MUTE 4
 
 // Audio outputs, as Android's CallAudioState routes (also used as a bit mask).
 enum {
@@ -232,7 +236,9 @@ static int32_t s_call_companion_version;
 // is 0 until the phone reports it (it needs the watch linked on the phone).
 static int32_t s_audio_route;
 static int32_t s_audio_routes;
+static bool s_audio_muted;
 static Layer *s_call_audio_layer;
+static Layer *s_call_mute_layer;
 
 typedef enum {
   CALL_CONFIRM,   // Waiting for Select (or a tap on Call) to place the call.
@@ -1027,11 +1033,23 @@ static void call_layout(void) {
   Layer *name = text_layer_get_layer(s_call_name_layer);
   Layer *number_line = text_layer_get_layer(s_call_number_layer);
 
+  // The single button along the bottom: Call on the confirmation, End during
+  // the call.
+  layer_set_frame(s_call_button_layer,
+                  PBL_IF_ROUND_ELSE(GRect(w * 26 / 100, h * 71 / 100, w * 48 / 100, 38),
+                                    GRect(w / 5, h - 46, w * 3 / 5, 38)));
+
   if (call_in_progress()) {
-    // Audio at the top (Up), End at the bottom (Down), and the call in
-    // between: the status, the name and the number, centred in the gap.
-    const GRect audio = PBL_IF_ROUND_ELSE(GRect(w * 28 / 100, h * 8 / 100, w * 44 / 100, 26),
-                                          GRect(w * 15 / 100, 6, w * 70 / 100, 26));
+    // Mute and Audio along the top, End (Down) at the bottom, and the call in
+    // between: the status, the name and the number, centred. Round screens
+    // place the top row a little lower, where the circle is wide enough.
+    const int16_t row_h = 26;
+    const int16_t row_w = PBL_IF_ROUND_ELSE(w * 70 / 100, w * 90 / 100);
+    const int16_t row_x = (w - row_w) / 2;
+    const int16_t row_y = PBL_IF_ROUND_ELSE(h * 14 / 100, 6);
+    const int16_t gap = 6;
+    const GRect audio = GRect(row_x + row_h + gap, row_y, row_w - row_h - gap, row_h);
+    layer_set_frame(s_call_mute_layer, GRect(row_x, row_y, row_h, row_h));
     layer_set_frame(s_call_audio_layer, audio);
     layer_set_frame(status, GRect(inset, 0, width, 44));
     const int16_t status_h = MIN(44, text_layer_get_content_size(s_call_status_layer).h + 4);
@@ -1052,8 +1070,10 @@ static void call_layout(void) {
   layer_set_hidden(number_line, !number);
   layer_set_hidden(s_call_button_layer, !button);
   layer_set_hidden(s_call_audio_layer, !call_in_progress());
+  layer_set_hidden(s_call_mute_layer, !call_in_progress());
   layer_mark_dirty(s_call_button_layer);
   layer_mark_dirty(s_call_audio_layer);
+  layer_mark_dirty(s_call_mute_layer);
 }
 
 static void call_ended(void) {
@@ -1167,6 +1187,44 @@ static void call_audio_draw(Layer *layer, GContext *ctx) {
   draw_button_hint(ctx, bounds, true, s_theme.key_text);
 }
 
+// The mute button: a microphone, crossed out and red-orange while muted.
+static void call_mute_draw(Layer *layer, GContext *ctx) {
+  const GRect bounds = layer_get_bounds(layer);
+  const GColor fill = s_audio_muted ? PBL_IF_COLOR_ELSE(s_theme.delete_key, s_theme.text)
+                                    : s_theme.key;
+  const GColor ink = s_audio_muted ? PBL_IF_COLOR_ELSE(s_theme.function_key_text, s_theme.background)
+                                   : s_theme.key_text;
+  const GPoint c = grect_center_point(&bounds);
+  graphics_context_set_fill_color(ctx, fill);
+  graphics_fill_circle(ctx, c, bounds.size.w / 2 - 1);
+  if (PBL_IF_BW_ELSE(!s_audio_muted, false)) {
+    graphics_context_set_stroke_color(ctx, s_theme.text);
+    graphics_draw_circle(ctx, c, bounds.size.w / 2 - 1);
+  }
+
+  // Microphone: a capsule in a cradle, on a stand.
+  const int16_t u = bounds.size.w / 12;
+  graphics_context_set_fill_color(ctx, ink);
+  graphics_context_set_stroke_color(ctx, ink);
+  graphics_context_set_stroke_width(ctx, 2);
+  graphics_fill_rect(ctx, GRect(c.x - u - 1, c.y - 4 * u, 2 * u + 3, 5 * u), u + 1, GCornersAll);
+  graphics_draw_arc(ctx, GRect(c.x - 2 * u - 2, c.y - 3 * u, 4 * u + 5, 5 * u),
+                    GOvalScaleModeFitCircle, DEG_TO_TRIGANGLE(90), DEG_TO_TRIGANGLE(270));
+  graphics_draw_line(ctx, GPoint(c.x, c.y + 2 * u), GPoint(c.x, c.y + 3 * u + 1));
+  if (s_audio_muted) {
+    // The slash gets an outline in the button's colour so it stays clear of
+    // the microphone it crosses.
+    const GPoint from = GPoint(c.x - 3 * u, c.y - 4 * u);
+    const GPoint to = GPoint(c.x + 3 * u, c.y + 3 * u);
+    graphics_context_set_stroke_color(ctx, fill);
+    graphics_context_set_stroke_width(ctx, 5);
+    graphics_draw_line(ctx, from, to);
+    graphics_context_set_stroke_color(ctx, ink);
+    graphics_context_set_stroke_width(ctx, 2);
+    graphics_draw_line(ctx, from, to);
+  }
+}
+
 static void call_button_draw(Layer *layer, GContext *ctx) {
   const bool end = s_call_state != CALL_CONFIRM;
   const GRect bounds = layer_get_bounds(layer);
@@ -1175,12 +1233,18 @@ static void call_button_draw(Layer *layer, GContext *ctx) {
   graphics_fill_rect(ctx, bounds, bounds.size.h / 2, GCornersAll);
 
   const char *label = end ? "End" : "Call";
-  const GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
-  const GSize text = graphics_text_layout_get_content_size(
-    label, font, bounds, GTextOverflowModeFill, GTextAlignmentLeft);
   const int16_t icon = 18;
   const int16_t gap = 6;
   const int16_t hint = end && !touch_available() ? BUTTON_HINT_WIDTH : 0;
+  // Next to Mute the button is narrower; use the smaller font if needed.
+  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
+  GSize text = graphics_text_layout_get_content_size(
+    label, font, bounds, GTextOverflowModeFill, GTextAlignmentLeft);
+  if (icon + gap + text.w + hint + 8 > bounds.size.w) {
+    font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
+    text = graphics_text_layout_get_content_size(
+      label, font, bounds, GTextOverflowModeFill, GTextAlignmentLeft);
+  }
   const int16_t left = (bounds.size.w - hint - icon - gap - text.w) / 2;
   const int16_t middle = bounds.size.h / 2;
   GPath *path = end ? s_hangup_icon_path : s_call_icon_path;
@@ -1188,7 +1252,8 @@ static void call_button_draw(Layer *layer, GContext *ctx) {
   gpath_move_to(path, GPoint(left + icon / 2, middle));
   gpath_draw_filled(ctx, path);
   graphics_context_set_text_color(ctx, s_theme.function_key_text);
-  graphics_draw_text(ctx, label, font, GRect(left + icon + gap, middle - 16, text.w + 4, 30),
+  graphics_draw_text(ctx, label, font,
+                     GRect(left + icon + gap, middle - text.h / 2 - text.h / 5, text.w + 4, 30),
                      GTextOverflowModeFill, GTextAlignmentLeft, NULL);
   if (end) {
     draw_button_hint(ctx, bounds, false, s_theme.function_key_text);
@@ -1198,6 +1263,7 @@ static void call_button_draw(Layer *layer, GContext *ctx) {
 static void call_submit(ClickRecognizerRef recognizer, void *context);
 static void call_hang_up(ClickRecognizerRef recognizer, void *context);
 static void call_switch_audio(ClickRecognizerRef recognizer, void *context);
+static void call_toggle_mute(ClickRecognizerRef recognizer, void *context);
 
 static void call_tap(GPoint point) {
   if (call_in_progress()) {
@@ -1205,6 +1271,12 @@ static void call_tap(GPoint point) {
     if (grect_contains_point(&audio, &point)) {
       touch_feedback();
       call_switch_audio(NULL, NULL);
+      return;
+    }
+    const GRect mute = grect_inset(layer_get_frame(s_call_mute_layer), GEdgeInsets(-4));
+    if (grect_contains_point(&mute, &point)) {
+      touch_feedback();
+      call_toggle_mute(NULL, NULL);
       return;
     }
   }
@@ -1261,6 +1333,9 @@ static void call_window_load(Window *window) {
   s_call_audio_layer = layer_create(GRect(0, 0, 0, 0));
   layer_set_update_proc(s_call_audio_layer, call_audio_draw);
   layer_add_child(root, s_call_audio_layer);
+  s_call_mute_layer = layer_create(GRect(0, 0, 0, 0));
+  layer_set_update_proc(s_call_mute_layer, call_mute_draw);
+  layer_add_child(root, s_call_mute_layer);
 
   call_layout();
 }
@@ -1285,7 +1360,9 @@ static void call_window_unload(Window *window) {
   text_layer_destroy(s_call_number_layer);
   layer_destroy(s_call_button_layer);
   layer_destroy(s_call_audio_layer);
+  layer_destroy(s_call_mute_layer);
   s_call_audio_layer = NULL;
+  s_call_mute_layer = NULL;
   gpath_destroy(s_call_icon_path);
   gpath_destroy(s_hangup_icon_path);
   s_call_status_layer = NULL;
@@ -1392,17 +1469,48 @@ static void call_switch_audio(ClickRecognizerRef recognizer, void *context) {
   app_message_outbox_send();
 }
 
+// Select, or a tap on the microphone at the top: mutes or unmutes the call. The phone
+// reports the new state back, which updates the button.
+static void call_toggle_mute(ClickRecognizerRef recognizer, void *context) {
+  if (s_call_state != CALL_ACTIVE) {
+    return;
+  }
+  if (s_call_companion_version < COMPANION_CAN_MUTE) {
+    call_show_error("Update Phone Dialer on your phone");
+    call_layout();
+    vibes_short_pulse();
+    return;
+  }
+  DictionaryIterator *iterator;
+  if (app_message_outbox_begin(&iterator) != APP_MSG_OK) {
+    vibes_short_pulse();
+    return;
+  }
+  dict_write_int32(iterator, MESSAGE_KEY_REQUEST, REQUEST_MUTE);
+  dict_write_int32(iterator, MESSAGE_KEY_AUDIO_MUTED, !s_audio_muted);
+  app_message_outbox_send();
+}
+
+// Why the phone has no audio outputs to offer, in answer to Up or Select.
+enum {
+  AUDIO_NOT_LINKED = 1,
+  AUDIO_NEEDS_ANDROID_12 = 2,
+};
+
 // The phone reports the call's audio output, when the call starts, when it
-// changes, and in answer to Up. No outputs means the watch is not linked as
-// a companion on the phone, which Android needs before apps can switch them.
-static void call_audio_changed(int32_t route, int32_t routes, bool asked) {
+// changes, and in answer to Up. No outputs means Android does not let the
+// phone app switch them: the watch is not linked to it as a companion watch,
+// or the phone is older than Android 12.
+static void call_audio_changed(int32_t route, int32_t routes, bool muted, int32_t asked) {
   if (!s_call_window || !call_in_progress()) {
     return;
   }
   s_audio_route = route;
   s_audio_routes = routes;
+  s_audio_muted = routes && muted;
   if (!routes && asked) {
-    call_show_error("Link Pebble in phone app");
+    call_show_error(asked == AUDIO_NEEDS_ANDROID_12 ? "Needs Android 12 on phone"
+                                                    : "Link Pebble in phone app");
     call_layout();
     vibes_short_pulse();
   } else if (s_call_state == CALL_ACTIVE) {
@@ -1410,11 +1518,21 @@ static void call_audio_changed(int32_t route, int32_t routes, bool asked) {
     call_layout();
   }
   layer_mark_dirty(s_call_audio_layer);
+  layer_mark_dirty(s_call_mute_layer);
+}
+
+// Select places the call on the confirmation, and mutes during the call.
+static void call_select(ClickRecognizerRef recognizer, void *context) {
+  if (call_in_progress()) {
+    call_toggle_mute(recognizer, context);
+  } else {
+    call_submit(recognizer, context);
+  }
 }
 
 static void call_click_config(void *context) {
   window_single_click_subscribe(BUTTON_ID_UP, call_switch_audio);
-  window_single_click_subscribe(BUTTON_ID_SELECT, call_submit);
+  window_single_click_subscribe(BUTTON_ID_SELECT, call_select);
   window_single_click_subscribe(BUTTON_ID_DOWN, call_hang_up);
 }
 
@@ -1425,6 +1543,7 @@ static void call_window_push(const Entry *entry, int32_t source) {
   s_call_companion_version = 0;
   s_audio_route = 0;
   s_audio_routes = 0;
+  s_audio_muted = false;
   s_call_number[0] = '\0';
   strncpy(s_call_name, entry->title, sizeof(s_call_name) - 1);
   s_call_name[sizeof(s_call_name) - 1] = '\0';
@@ -1814,7 +1933,9 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
   if (routes) {
     const Tuple *route = dict_find(iterator, MESSAGE_KEY_AUDIO_ROUTE);
     const Tuple *asked = dict_find(iterator, MESSAGE_KEY_AUDIO_ASKED);
-    call_audio_changed(route ? route->value->int32 : 0, routes->value->int32, asked != NULL);
+    const Tuple *muted = dict_find(iterator, MESSAGE_KEY_AUDIO_MUTED);
+    call_audio_changed(route ? route->value->int32 : 0, routes->value->int32,
+                       muted && muted->value->int32, asked ? asked->value->int32 : 0);
     return;
   }
 

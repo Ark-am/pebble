@@ -51,7 +51,8 @@
       "COMPANION_VERSION": 25,
       "AUDIO_ROUTE": 26,
       "AUDIO_ROUTES": 27,
-      "AUDIO_ASKED": 28
+      "AUDIO_ASKED": 28,
+      "AUDIO_MUTED": 29
     },
     "resources": {
       "media": [

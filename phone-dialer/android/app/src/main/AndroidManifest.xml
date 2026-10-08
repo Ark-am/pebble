@@ -7,10 +7,10 @@
     <!-- Lets the watch end the call it started (Android 9 and newer). -->
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
-    <!-- Switching a call's audio from the watch: linking the Pebble as a
-         companion watch lets Android bind CallControlService to calls. -->
+    <!-- Switching a call's audio from the watch (Android 12 and newer):
+         linking the Pebble with the watch profile grants MANAGE_ONGOING_CALLS,
+         and Android binds CallControlService to calls for apps that have it. -->
     <uses-permission android:name="android.permission.REQUEST_COMPANION_PROFILE_WATCH" />
-    <uses-permission android:name="android.permission.CALL_COMPANION_APP" />
     <uses-permission
         android:name="android.permission.MANAGE_ONGOING_CALLS"
         tools:ignore="ProtectedPermissions" />
