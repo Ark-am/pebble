@@ -248,7 +248,7 @@ static Layer *s_call_audio_layer;
 static Layer *s_call_mute_layer;
 
 typedef enum {
-  CALL_CONFIRM,   // Waiting for Select (or a tap on Call) to place the call.
+  CALL_CONFIRM,   // Placing the call failed to start; Select (or Call) retries.
   CALL_SENDING,   // Asked the phone to place the call.
   CALL_ACTIVE,    // The call is going; Down (or a tap on End) hangs up.
   CALL_ENDING,    // Asked the phone to end the call.
@@ -1050,7 +1050,7 @@ static void call_stop_ticking(void) {
   }
 }
 
-// What the call screen is showing. It starts as a confirmation, and once the
+// What the call screen is showing. It places the call as it opens, and once the
 // phone has placed the call it becomes the in-call screen with an End button.
 static bool call_button_shown(void) {
   return s_call_state == CALL_ACTIVE || s_call_state == CALL_ENDING ||
@@ -1648,9 +1648,13 @@ static void call_window_push(const Entry *entry, int32_t source) {
     s_call_state = CALL_BLOCKED;
     call_show_error("Number unavailable");
     call_layout();
-  } else {
-    call_show_status(touch_available() ? "Tap Call or press Select" : "Select to call");
+    return;
   }
+  // Choosing a contact, a recent call or the keypad's Call key places the call
+  // straight away. The confirmation only stays if the phone cannot be reached
+  // right now, so Select (or the Call button) can try again.
+  call_show_status(touch_available() ? "Tap Call or press Select" : "Select to call");
+  call_submit(NULL, NULL);
 }
 
 // ---------------------------------------------------------------------------

@@ -66,23 +66,22 @@ See [Android's permission documentation](https://developer.android.com/reference
 - **Touch** (Pebble Time 2, Pebble Round 2): menus and lists scroll with a
   swipe; tap a row to highlight it and tap it again to open it, as in the
   watch's own menus. Swipe right to go back. On the keypad, tap a key to press
-  it. On the call screen, tap the green **Call** button.
+  it. On the call screen, tap the buttons: microphone, audio and **End**.
 - **Dialer**: a phone keypad with Delete (backspace icon), `+` and a green
   Call key along the bottom. Tap keys on touch watches. With the buttons,
   Up/Down move the highlight and Select presses the highlighted key; hold
   Up/Down to move faster. After using touch, the first button press only
   brings the highlight back. `+` is available at the beginning only. Press
-  **Call**, review the number, and confirm with Select or the **Call** button.
-  Back cancels. Up from the first key wraps directly to Call. Numbers can
-  contain up to 31 characters.
+  **Call** to place the call. Up from the first key wraps directly to Call.
+  Numbers can contain up to 31 characters.
 - **Recent calls**: the latest 100 system call-log entries, newest first, with
-  incoming/outgoing/missed/declined/blocked type and date/time. Select an entry,
-  then Select again to call back. Private and unknown numbers are displayed
-  but cannot be called.
+  incoming/outgoing/missed/declined/blocked type and date/time. Select an entry
+  to call back. Private and unknown numbers are displayed but cannot be
+  called.
 - **Favorites**: phone numbers of starred contacts.
 - **Contacts**: grouped by A–Z and `#`, then listed by name and number type.
-  Contacts with multiple numbers appear once per number. Select a number,
-  then confirm with Select.
+  Contacts with multiple numbers appear once per number. Select a number to
+  call it.
 
 Lists contain 20 rows per page, with **More** and **Previous** for navigation.
 Contact names are shortened to fit the watch; dialing resolves the full number
@@ -115,9 +114,12 @@ retry. **Allow call history** means enable Call history in the companion;
 **Allow access on phone** means enable Phone or Contacts as appropriate.
 Permission buttons open app settings after Android stops showing the prompt.
 
-A call is never automatically retried after a timeout: it might already have
-reached the phone. Check the phone before going back and trying again. Repeated
-Select presses on the same confirmation cannot create another request.
+Selecting a contact, a recent call or the keypad's **Call** key places the
+call straight away. If the phone cannot be reached at that moment, the screen
+stays open with a **Call** button and Select to try again. A call is never
+automatically retried after a timeout: it might already have reached the
+phone. Check the phone before going back and trying again. Repeated presses
+cannot create a second request for the same call.
 
 ## Build and validate
 
