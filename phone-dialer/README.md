@@ -20,7 +20,10 @@ Chalk, Diorite, Emery, Flint and Gabbro.
    (and, on Android 9 and newer, ending calls from the watch),
    **Allow Contacts** for Favorites/Contacts, and **Allow Call history** for
    Recent calls. These permissions are independent; denying call history does
-   not disable the keypad or contacts.
+   not disable the keypad or contacts. On Android 10 and newer, also tap
+   **Link your Pebble** under **Call controls** and choose your watch from
+   Android's list; this lets the watch switch a call between the phone, the
+   speaker and Bluetooth.
 3. Open the PBW with your Pebble/Core phone app and install it on your paired
    watch. The phone app must support PebbleKit Android 2 (as used by Phone
    Sound Mode). Install **both** updated packages.
@@ -87,8 +90,12 @@ from the phone's current contact or call-log record. No number is derived from
 truncated display text.
 
 Once Android accepts the call, the watch vibrates and shows the call screen:
-**Calling**, the name, the number, and a red **End** button. Press Down (or tap
-**End** on touch watches) to hang up; Back leaves the screen and the call
+an audio button at the top, **Calling**, the name, the number, and a red
+**End** button. The audio button shows where the call is heard (**Phone**,
+**Speaker**, **Headset** or **Bluetooth**); press Up (or tap it) to move the
+call to the next one available. This needs the Pebble linked under **Call
+controls** in the phone app; without it, the watch says **Link Pebble in phone
+app**. Press Down (or tap **End** on touch watches) to hang up; Back leaves the screen and the call
 continues on the phone. When the call ends, whether from the watch, the phone
 or the other person, the watch shows **Call ended** and returns to its
 watchface. Calling means Android placed the call; it does not show whether the
@@ -147,16 +154,26 @@ Android package: com.arkam.pebbledialer
 | Call record (`REQUEST=2`) | `ITEM_ID` (decimal string), `LIST` (3 for call log, otherwise contacts) | `RESULT` |
 | Dial number (`REQUEST=3`) | `NUMBER` (validated keypad text) | `RESULT` |
 | Hang up (`REQUEST=5`) | nothing else | `RESULT` |
+| Audio output (`REQUEST=6`) | `AUDIO_ROUTE` (1 phone, 2 Bluetooth, 4 headset, 8 speaker) | An audio update (below) |
 
 A successful call reply also carries `NUMBER`, the number dialled, for the call
-screen, and every call reply carries `COMPANION_VERSION` (2: can hang up).
+screen, and every call reply carries `COMPANION_VERSION` (2: can hang up;
+3: can also switch audio).
 Companions from before hang-up send no version; the watch then says
 **Update Phone Dialer on your phone** when End is pressed, instead of waiting
 for a reply that never comes. While that call lasts, the companion checks Android's audio mode once
 a second (`MODE_IN_CALL` needs no extra permission) and, when the call ends,
 sends `CALL_STATE` (0, ended) to the watch unprompted. If the phone never
 reports a call, the watch is not told anything, rather than being told a live
-call has ended. Hanging up uses `TelecomManager.endCall()`, which needs
+call has ended.
+
+Audio updates (`AUDIO_ROUTE`, `AUDIO_ROUTES`, the routes available as a bit
+mask) are sent unprompted during that call: when it starts, when the output
+changes, and after `REQUEST=6`. They come from `CallControlService`, an
+`InCallService` that Android binds to calls only once the Pebble is linked to
+the app through `CompanionDeviceManager` (the watch profile on Android 12 and
+newer, which also grants `MANAGE_ONGOING_CALLS`). `AUDIO_ROUTES` of 0 with
+`AUDIO_ASKED` means the watch is not linked. Hanging up uses `TelecomManager.endCall()`, which needs
 `ANSWER_PHONE_CALLS` and Android 9 or newer; `REQUEST=4` is unused, as it was
 the old settings sync.
 

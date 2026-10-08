@@ -9,6 +9,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.telecom.CallAudioState;
 import android.telecom.TelecomManager;
 import android.util.Log;
 
@@ -55,16 +56,23 @@ public final class DialerService extends BaseJavaPebbleListenerService {
     private static final int KEY_NUMBER = 13;
     private static final int KEY_CALL_STATE = 24;
     private static final int KEY_COMPANION_VERSION = 25;
+    private static final int KEY_AUDIO_ROUTE = 26;
+    private static final int KEY_AUDIO_ROUTES = 27;
+    private static final int KEY_AUDIO_ASKED = 28;
 
     private static final int REQUEST_LIST = 1;
     private static final int REQUEST_CALL = 2;
     private static final int REQUEST_DIAL = 3;
     // 4 was the old settings sync; keep it unused so an old watch app is not misread.
     private static final int REQUEST_HANGUP = 5;
+    // Not reply-driven: the watch asks for an audio output (AUDIO_ROUTE) and
+    // gets the result as an ordinary audio update.
+    private static final int REQUEST_AUDIO = 6;
 
     // Sent with every call reply, so the watch knows what this app can do.
-    // 2: can end calls (REQUEST_HANGUP). Older companions sent nothing.
-    private static final int COMPANION_VERSION = 2;
+    // 2: can end calls (REQUEST_HANGUP). 3: can switch audio (REQUEST_AUDIO).
+    // Older companions sent nothing.
+    private static final int COMPANION_VERSION = 3;
 
     // Sent to the watch, unprompted, when a call it started has ended.
     private static final int CALL_STATE_ENDED = 0;
@@ -147,6 +155,13 @@ public final class DialerService extends BaseJavaPebbleListenerService {
         }
 
         int request = intValue(data.get(KEY_REQUEST), -1);
+        if (request == REQUEST_AUDIO) {
+            // Outside the token-ordered requests, so it never cancels anything.
+            responder.accept(ReceiveResult.Ack.INSTANCE);
+            int route = intValue(data.get(KEY_AUDIO_ROUTE), CallAudioState.ROUTE_SPEAKER);
+            mainHandler.post(() -> switchAudio(watch, route));
+            return;
+        }
         int token = intValue(data.get(KEY_TOKEN), 0);
         if (request != REQUEST_LIST && request != REQUEST_CALL && request != REQUEST_DIAL
                 && request != REQUEST_HANGUP) {
@@ -370,6 +385,9 @@ public final class DialerService extends BaseJavaPebbleListenerService {
      */
     private void watchCall(String watch) {
         callWatch = watch;
+        // Keep the watch's audio button up to date for this call.
+        CallControlService.setListener(state -> sendAudio(watch, state.getRoute(),
+                state.getSupportedRouteMask(), false));
         callSeen = false;
         callStartedAt = SystemClock.elapsedRealtime();
         mainHandler.removeCallbacks(callPoll);
@@ -378,6 +396,7 @@ public final class DialerService extends BaseJavaPebbleListenerService {
 
     private void stopWatchingCall() {
         callWatch = null;
+        CallControlService.setListener(null);
         mainHandler.removeCallbacks(callPoll);
     }
 
@@ -404,6 +423,26 @@ public final class DialerService extends BaseJavaPebbleListenerService {
             return;
         }
         mainHandler.postDelayed(callPoll, CALL_POLL_MS);
+    }
+
+    /** Moves the call to the route the watch asked for; main thread. */
+    private void switchAudio(String watch, int route) {
+        if (!CallControlService.setRoute(route)) {
+            // Android only lets companion apps switch call audio: tell the
+            // watch there are no outputs, so it asks for the Pebble to be linked.
+            sendAudio(watch, 0, 0, true);
+        }
+    }
+
+    private void sendAudio(String watch, int route, int routes, boolean asked) {
+        Map<Integer, PebbleDictionaryItem> message = new HashMap<>();
+        message.put(KEY_AUDIO_ROUTE, new PebbleDictionaryItem.Int32(route));
+        message.put(KEY_AUDIO_ROUTES, new PebbleDictionaryItem.Int32(routes));
+        if (asked) {
+            message.put(KEY_AUDIO_ASKED, new PebbleDictionaryItem.Int32(1));
+        }
+        sender.sendDataToPebble(WATCHAPP_UUID, message, results -> { },
+                Collections.singletonList(new WatchIdentifier(watch)));
     }
 
     private static long idValue(PebbleDictionaryItem item) {

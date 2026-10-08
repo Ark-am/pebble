@@ -10,10 +10,23 @@ enum {
   REQUEST_DIAL = 3,
   // 4 was the old settings sync; keep it unused so an old companion is not misread.
   REQUEST_HANGUP = 5,
+  // Not reply-driven: asks for an audio output; the phone reports the result
+  // with an audio update, like any other change.
+  REQUEST_AUDIO = 6,
 };
 
-// The phone app's COMPANION_VERSION from which it can end calls.
+// The phone app's COMPANION_VERSION from which it can end calls, and from
+// which it can switch the call's audio output.
 #define COMPANION_CAN_HANG_UP 2
+#define COMPANION_CAN_SWITCH_AUDIO 3
+
+// Audio outputs, as Android's CallAudioState routes (also used as a bit mask).
+enum {
+  AUDIO_EARPIECE = 1,
+  AUDIO_BLUETOOTH = 2,
+  AUDIO_HEADSET = 4,
+  AUDIO_SPEAKER = 8,
+};
 
 enum {
   LIST_FAVORITES = 0,
@@ -212,9 +225,14 @@ static GPathInfo s_hangup_icon_info;
 static GPoint s_hangup_icon_points[24];
 static Entry s_call_entry;
 static int32_t s_call_source;
-// Whether the phone app that placed the call can also end it. Phone apps from
-// before hang-up was added do not say, and would never answer a hang-up.
-static bool s_call_can_hang_up;
+// The COMPANION_VERSION of the phone app that placed the call, or 0 if it is
+// from before versions were sent; older apps never answer what they lack.
+static int32_t s_call_companion_version;
+// The call's audio output and the outputs available, from the phone. The mask
+// is 0 until the phone reports it (it needs the watch linked on the phone).
+static int32_t s_audio_route;
+static int32_t s_audio_routes;
+static Layer *s_call_audio_layer;
 
 typedef enum {
   CALL_CONFIRM,   // Waiting for Select (or a tap on Call) to place the call.
@@ -989,28 +1007,53 @@ static bool call_button_shown(void) {
          (s_call_state == CALL_CONFIRM && touch_available());
 }
 
-// Places the text and the button for the current state.
+static bool call_in_progress(void) {
+  return s_call_state == CALL_ACTIVE || s_call_state == CALL_ENDING;
+}
+
+// Places the text and the buttons for the current state.
 static void call_layout(void) {
   if (!s_call_window) {
     return;
   }
   const GRect bounds = layer_get_bounds(window_get_root_layer(s_call_window));
+  const int16_t w = bounds.size.w;
+  const int16_t h = bounds.size.h;
   const int16_t inset = PBL_IF_ROUND_ELSE(18, 6);
-  const int16_t width = bounds.size.w - 2 * inset;
+  const int16_t width = w - 2 * inset;
   const bool button = call_button_shown();
   const bool number = s_call_number[0] != '\0';
-  // Leave room for the button below the name.
-  const int16_t middle = bounds.size.h / 2 - (button ? 22 : 0);
+  Layer *status = text_layer_get_layer(s_call_status_layer);
+  Layer *name = text_layer_get_layer(s_call_name_layer);
+  Layer *number_line = text_layer_get_layer(s_call_number_layer);
 
-  layer_set_frame(text_layer_get_layer(s_call_status_layer),
-                  GRect(inset, middle - 50, width, 44));
-  layer_set_frame(text_layer_get_layer(s_call_name_layer),
-                  GRect(inset, middle - 4, width, number ? 30 : button ? 56 : 72));
-  layer_set_frame(text_layer_get_layer(s_call_number_layer),
-                  GRect(inset, middle + 26, width, 24));
-  layer_set_hidden(text_layer_get_layer(s_call_number_layer), !number);
+  if (call_in_progress()) {
+    // Audio at the top (Up), End at the bottom (Down), and the call in
+    // between: the status, the name and the number, centred in the gap.
+    const GRect audio = PBL_IF_ROUND_ELSE(GRect(w * 28 / 100, h * 8 / 100, w * 44 / 100, 26),
+                                          GRect(w * 15 / 100, 6, w * 70 / 100, 26));
+    layer_set_frame(s_call_audio_layer, audio);
+    layer_set_frame(status, GRect(inset, 0, width, 44));
+    const int16_t status_h = MIN(44, text_layer_get_content_size(s_call_status_layer).h + 4);
+    const int16_t top = audio.origin.y + audio.size.h + 2;
+    const int16_t bottom = layer_get_frame(s_call_button_layer).origin.y;
+    const int16_t block = status_h + 30 + (number ? 24 : 0);
+    const int16_t y = top + MAX(0, (bottom - top - block) / 2);
+    layer_set_frame(status, GRect(inset, y, width, status_h));
+    layer_set_frame(name, GRect(inset, y + status_h, width, 30));
+    layer_set_frame(number_line, GRect(inset, y + status_h + 28, width, 24));
+  } else {
+    // Leave room for the button below the name.
+    const int16_t middle = h / 2 - (button ? 22 : 0);
+    layer_set_frame(status, GRect(inset, middle - 50, width, 44));
+    layer_set_frame(name, GRect(inset, middle - 4, width, number ? 30 : button ? 56 : 72));
+    layer_set_frame(number_line, GRect(inset, middle + 26, width, 24));
+  }
+  layer_set_hidden(number_line, !number);
   layer_set_hidden(s_call_button_layer, !button);
+  layer_set_hidden(s_call_audio_layer, !call_in_progress());
   layer_mark_dirty(s_call_button_layer);
+  layer_mark_dirty(s_call_audio_layer);
 }
 
 static void call_ended(void) {
@@ -1055,10 +1098,9 @@ static void call_handle_reply(int32_t result, DictionaryIterator *iterator) {
     s_call_number[sizeof(s_call_number) - 1] = '\0';
   }
   const Tuple *version = dict_find(iterator, MESSAGE_KEY_COMPANION_VERSION);
-  s_call_can_hang_up = version && version->value->int32 >= COMPANION_CAN_HANG_UP;
+  s_call_companion_version = version ? version->value->int32 : 0;
   s_call_state = CALL_ACTIVE;
-  call_set_status(touch_available() ? "Calling\nTap End or press Down" : "Calling\nPress Down to end",
-                  s_theme.call);
+  call_set_status("Calling", s_theme.call);
   call_layout();
   vibes_short_pulse();
 }
@@ -1078,6 +1120,53 @@ static void call_phone_ended(void) {
 
 // The button below the name: green Call on the confirmation (touch watches),
 // red End during a call.
+// Room kept at the right of a button for its hint, so text never runs into it.
+#define BUTTON_HINT_WIDTH 20
+
+// A small triangle at the right of a button, pointing at the watch button
+// (Up or Down) that presses it. Touch watches do not need the hint.
+static void draw_button_hint(GContext *ctx, GRect bounds, bool up, GColor color) {
+  if (touch_available()) {
+    return;
+  }
+  const int16_t x = bounds.size.w - 12;
+  const int16_t middle = bounds.size.h / 2;
+  graphics_context_set_fill_color(ctx, color);
+  for (int i = 0; i < 5; i++) {
+    const int16_t y = up ? middle - 2 + i : middle + 2 - i;
+    graphics_fill_rect(ctx, GRect(x - i, y, 2 * i + 1, 1), 0, GCornerNone);
+  }
+}
+
+static const char *audio_route_name(int32_t route) {
+  switch (route) {
+    case AUDIO_SPEAKER: return "Speaker";
+    case AUDIO_BLUETOOTH: return "Bluetooth";
+    case AUDIO_HEADSET: return "Headset";
+    case AUDIO_EARPIECE: return "Phone";
+    default: return "Audio";
+  }
+}
+
+// The audio button at the top of the call screen: the current output.
+static void call_audio_draw(Layer *layer, GContext *ctx) {
+  const GRect bounds = layer_get_bounds(layer);
+  graphics_context_set_fill_color(ctx, s_theme.key);
+  graphics_fill_rect(ctx, bounds, bounds.size.h / 2, GCornersAll);
+  if (PBL_IF_BW_ELSE(true, false)) {
+    graphics_context_set_stroke_color(ctx, s_theme.text);
+    graphics_draw_round_rect(ctx, bounds, bounds.size.h / 2);
+  }
+  // Centre the label in the space left of the hint.
+  const int16_t hint = touch_available() ? 0 : BUTTON_HINT_WIDTH;
+  graphics_context_set_text_color(ctx, s_theme.key_text);
+  graphics_draw_text(ctx, audio_route_name(s_audio_routes ? s_audio_route : 0),
+                     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                     GRect(0, bounds.size.h / 2 - 13, bounds.size.w - hint, 22),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+  draw_button_hint(ctx, bounds, true, s_theme.key_text);
+}
+
 static void call_button_draw(Layer *layer, GContext *ctx) {
   const bool end = s_call_state != CALL_CONFIRM;
   const GRect bounds = layer_get_bounds(layer);
@@ -1091,7 +1180,8 @@ static void call_button_draw(Layer *layer, GContext *ctx) {
     label, font, bounds, GTextOverflowModeFill, GTextAlignmentLeft);
   const int16_t icon = 18;
   const int16_t gap = 6;
-  const int16_t left = (bounds.size.w - icon - gap - text.w) / 2;
+  const int16_t hint = end && !touch_available() ? BUTTON_HINT_WIDTH : 0;
+  const int16_t left = (bounds.size.w - hint - icon - gap - text.w) / 2;
   const int16_t middle = bounds.size.h / 2;
   GPath *path = end ? s_hangup_icon_path : s_call_icon_path;
   graphics_context_set_fill_color(ctx, s_theme.function_key_text);
@@ -1100,12 +1190,24 @@ static void call_button_draw(Layer *layer, GContext *ctx) {
   graphics_context_set_text_color(ctx, s_theme.function_key_text);
   graphics_draw_text(ctx, label, font, GRect(left + icon + gap, middle - 16, text.w + 4, 30),
                      GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+  if (end) {
+    draw_button_hint(ctx, bounds, false, s_theme.function_key_text);
+  }
 }
 
 static void call_submit(ClickRecognizerRef recognizer, void *context);
 static void call_hang_up(ClickRecognizerRef recognizer, void *context);
+static void call_switch_audio(ClickRecognizerRef recognizer, void *context);
 
 static void call_tap(GPoint point) {
+  if (call_in_progress()) {
+    const GRect audio = grect_inset(layer_get_frame(s_call_audio_layer), GEdgeInsets(-6));
+    if (grect_contains_point(&audio, &point)) {
+      touch_feedback();
+      call_switch_audio(NULL, NULL);
+      return;
+    }
+  }
   if (!call_button_shown()) {
     return;
   }
@@ -1156,6 +1258,9 @@ static void call_window_load(Window *window) {
   s_call_button_layer = layer_create(button);
   layer_set_update_proc(s_call_button_layer, call_button_draw);
   layer_add_child(root, s_call_button_layer);
+  s_call_audio_layer = layer_create(GRect(0, 0, 0, 0));
+  layer_set_update_proc(s_call_audio_layer, call_audio_draw);
+  layer_add_child(root, s_call_audio_layer);
 
   call_layout();
 }
@@ -1179,6 +1284,8 @@ static void call_window_unload(Window *window) {
   text_layer_destroy(s_call_name_layer);
   text_layer_destroy(s_call_number_layer);
   layer_destroy(s_call_button_layer);
+  layer_destroy(s_call_audio_layer);
+  s_call_audio_layer = NULL;
   gpath_destroy(s_call_icon_path);
   gpath_destroy(s_hangup_icon_path);
   s_call_status_layer = NULL;
@@ -1222,7 +1329,7 @@ static void call_hang_up(ClickRecognizerRef recognizer, void *context) {
   if (s_call_state != CALL_ACTIVE) {
     return;
   }
-  if (!s_call_can_hang_up) {
+  if (s_call_companion_version < COMPANION_CAN_HANG_UP) {
     // An older phone app would never answer; say so now instead of timing out.
     call_show_error("Update Phone Dialer on your phone");
     vibes_short_pulse();
@@ -1240,7 +1347,73 @@ static void call_hang_up(ClickRecognizerRef recognizer, void *context) {
   layer_mark_dirty(s_call_button_layer);
 }
 
+// The next output in the order Phone (or Headset), Speaker, Bluetooth,
+// skipping any the phone does not have right now.
+static int32_t next_audio_route(void) {
+  const int32_t handset = (s_audio_routes & AUDIO_HEADSET) ? AUDIO_HEADSET : AUDIO_EARPIECE;
+  const int32_t order[] = { handset, AUDIO_SPEAKER, AUDIO_BLUETOOTH };
+  const int count = ARRAY_LENGTH(order);
+  int current = 0;
+  for (int i = 0; i < count; i++) {
+    if (order[i] == s_audio_route ||
+        (order[i] == handset && (s_audio_route == AUDIO_EARPIECE || s_audio_route == AUDIO_HEADSET))) {
+      current = i;
+    }
+  }
+  for (int step = 1; step <= count; step++) {
+    const int32_t route = order[(current + step) % count];
+    if (s_audio_routes & route) {
+      return route;
+    }
+  }
+  return AUDIO_SPEAKER;
+}
+
+// Up, or a tap on the audio button: moves the call to the next output. The
+// phone reports the new output back, which updates the button.
+static void call_switch_audio(ClickRecognizerRef recognizer, void *context) {
+  if (s_call_state != CALL_ACTIVE) {
+    return;
+  }
+  if (s_call_companion_version < COMPANION_CAN_SWITCH_AUDIO) {
+    call_show_error("Update Phone Dialer on your phone");
+    call_layout();
+    vibes_short_pulse();
+    return;
+  }
+  DictionaryIterator *iterator;
+  if (app_message_outbox_begin(&iterator) != APP_MSG_OK) {
+    vibes_short_pulse();
+    return;
+  }
+  dict_write_int32(iterator, MESSAGE_KEY_REQUEST, REQUEST_AUDIO);
+  dict_write_int32(iterator, MESSAGE_KEY_AUDIO_ROUTE,
+                   s_audio_routes ? next_audio_route() : AUDIO_SPEAKER);
+  app_message_outbox_send();
+}
+
+// The phone reports the call's audio output, when the call starts, when it
+// changes, and in answer to Up. No outputs means the watch is not linked as
+// a companion on the phone, which Android needs before apps can switch them.
+static void call_audio_changed(int32_t route, int32_t routes, bool asked) {
+  if (!s_call_window || !call_in_progress()) {
+    return;
+  }
+  s_audio_route = route;
+  s_audio_routes = routes;
+  if (!routes && asked) {
+    call_show_error("Link Pebble in phone app");
+    call_layout();
+    vibes_short_pulse();
+  } else if (s_call_state == CALL_ACTIVE) {
+    call_set_status("Calling", s_theme.call);
+    call_layout();
+  }
+  layer_mark_dirty(s_call_audio_layer);
+}
+
 static void call_click_config(void *context) {
+  window_single_click_subscribe(BUTTON_ID_UP, call_switch_audio);
   window_single_click_subscribe(BUTTON_ID_SELECT, call_submit);
   window_single_click_subscribe(BUTTON_ID_DOWN, call_hang_up);
 }
@@ -1249,7 +1422,9 @@ static void call_window_push(const Entry *entry, int32_t source) {
   s_call_entry = *entry;
   s_call_source = source;
   s_call_state = CALL_CONFIRM;
-  s_call_can_hang_up = false;
+  s_call_companion_version = 0;
+  s_audio_route = 0;
+  s_audio_routes = 0;
   s_call_number[0] = '\0';
   strncpy(s_call_name, entry->title, sizeof(s_call_name) - 1);
   s_call_name[sizeof(s_call_name) - 1] = '\0';
@@ -1632,6 +1807,14 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
   // So can the phone's notice that the call we placed has ended.
   if (dict_find(iterator, MESSAGE_KEY_CALL_STATE)) {
     call_phone_ended();
+    return;
+  }
+  // And audio output updates during that call.
+  const Tuple *routes = dict_find(iterator, MESSAGE_KEY_AUDIO_ROUTES);
+  if (routes) {
+    const Tuple *route = dict_find(iterator, MESSAGE_KEY_AUDIO_ROUTE);
+    const Tuple *asked = dict_find(iterator, MESSAGE_KEY_AUDIO_ASKED);
+    call_audio_changed(route ? route->value->int32 : 0, routes->value->int32, asked != NULL);
     return;
   }
 
