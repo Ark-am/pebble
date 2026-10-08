@@ -54,7 +54,8 @@
       "AUDIO_ASKED": 28,
       "AUDIO_MUTED": 29,
       "CALL_STATUS": 30,
-      "CALL_SECONDS": 31
+      "CALL_SECONDS": 31,
+      "CALL_NAME": 32
     },
     "resources": {
       "media": [

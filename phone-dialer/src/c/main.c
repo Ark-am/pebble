@@ -1157,8 +1157,18 @@ static void call_handle_reply(int32_t result, DictionaryIterator *iterator) {
   }
 
   // The phone has placed the call: show who is being called and offer End.
+  // A number typed on the keypad may belong to a contact: show their name in
+  // large text, like a call from the lists, with the number beneath it.
+  const Tuple *contact = dict_find(iterator, MESSAGE_KEY_CALL_NAME);
+  const bool named = s_call_source == -1 && contact && contact->type == TUPLE_CSTRING;
+  if (named) {
+    strncpy(s_call_name, contact->value->cstring, sizeof(s_call_name) - 1);
+    s_call_name[sizeof(s_call_name) - 1] = '\0';
+    text_layer_set_font(s_call_name_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+    text_layer_set_text(s_call_name_layer, s_call_name);
+  }
   const Tuple *number = dict_find(iterator, MESSAGE_KEY_NUMBER);
-  if (number && number->type == TUPLE_CSTRING && s_call_source != -1) {
+  if (number && number->type == TUPLE_CSTRING && (s_call_source != -1 || named)) {
     strncpy(s_call_number, number->value->cstring, sizeof(s_call_number) - 1);
     s_call_number[sizeof(s_call_number) - 1] = '\0';
   }

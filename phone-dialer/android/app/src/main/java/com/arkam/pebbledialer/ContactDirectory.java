@@ -4,8 +4,10 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Resources;
 import android.database.Cursor;
+import android.net.Uri;
 import android.os.SystemClock;
 import android.provider.ContactsContract.CommonDataKinds.Phone;
+import android.provider.ContactsContract.PhoneLookup;
 import android.telephony.PhoneNumberUtils;
 
 import java.text.Collator;
@@ -116,6 +118,22 @@ final class ContactDirectory {
             if (cursor != null && cursor.moveToFirst()) {
                 String number = cursor.getString(0);
                 return number == null || number.trim().isEmpty() ? null : number.trim();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The name of the contact with this number, matched the way Android's own
+     * phone app matches it (formatting and country code aside), or null.
+     */
+    static String nameFor(Context context, String number) {
+        Uri lookup = Uri.withAppendedPath(PhoneLookup.CONTENT_FILTER_URI, Uri.encode(number));
+        try (Cursor cursor = context.getContentResolver().query(
+                lookup, new String[] { PhoneLookup.DISPLAY_NAME }, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                String name = cursor.getString(0);
+                return name == null || name.trim().isEmpty() ? null : name.trim();
             }
         }
         return null;

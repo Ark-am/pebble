@@ -94,7 +94,8 @@ a microphone button and an audio button along the top, the call status, the
 name, the number, and a red **End** button at the bottom. With the Pebble
 linked, the status follows the call: **Calling** until the other person
 answers, then **Connected** with a timer (0:42), or **On hold** while held.
-Without the link it stays **Calling**. Press Select (or tap the
+Without the link it stays **Calling**. A number typed on the keypad that
+belongs to a contact shows the contact's name, with the number beneath it. Press Select (or tap the
 microphone) to mute or unmute; while muted it turns red-orange and is crossed
 out. The audio button shows where the call is heard (**Phone**,
 **Speaker**, **Headset** or **Bluetooth**); press Up (or tap it) to move the
@@ -163,8 +164,12 @@ Android package: com.arkam.pebbledialer
 | Mute (`REQUEST=7`) | `AUDIO_MUTED` (1 mute, 0 unmute) | An audio update (below) |
 
 A successful call reply also carries `NUMBER`, the number dialled, for the call
-screen, and every call reply carries `COMPANION_VERSION` (2: can hang up;
-3: can also switch audio; 4: can also mute).
+screen; for a keypad call (`REQUEST=3`) to a number in Contacts, it also
+carries `CALL_NAME`, found with `ContactsContract.PhoneLookup` (the same
+matching Android's phone app uses, so formatting and country code do not
+matter; it needs the Contacts permission). Every call reply carries
+`COMPANION_VERSION` (2: can hang up; 3: can also switch audio; 4: can also
+mute).
 Companions from before hang-up send no version; the watch then says
 **Update Phone Dialer on your phone** when End is pressed, instead of waiting
 for a reply that never comes. While that call lasts, the companion checks Android's audio mode once

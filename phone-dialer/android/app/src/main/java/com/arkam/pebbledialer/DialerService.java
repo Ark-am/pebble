@@ -62,6 +62,7 @@ public final class DialerService extends BaseJavaPebbleListenerService {
     private static final int KEY_AUDIO_MUTED = 29;
     private static final int KEY_CALL_STATUS = 30;
     private static final int KEY_CALL_SECONDS = 31;
+    private static final int KEY_CALL_NAME = 32;
 
     private static final int REQUEST_LIST = 1;
     private static final int REQUEST_CALL = 2;
@@ -213,6 +214,13 @@ public final class DialerService extends BaseJavaPebbleListenerService {
                     if (result == RESULT_OK && lastDialedNumber != null) {
                         // The watch shows the number on its call screen.
                         reply.put(KEY_NUMBER, new PebbleDictionaryItem.Text(field(lastDialedNumber)));
+                        if (request == REQUEST_DIAL) {
+                            // A number typed on the keypad may be a contact's.
+                            String name = contactName(lastDialedNumber);
+                            if (name != null) {
+                                reply.put(KEY_CALL_NAME, new PebbleDictionaryItem.Text(field(name)));
+                            }
+                        }
                         String number = lastDialedNumber;
                         mainHandler.post(() -> watchCall(watch, number));
                     }
@@ -365,6 +373,21 @@ public final class DialerService extends BaseJavaPebbleListenerService {
         catch (RuntimeException error) {
             Log.e(TAG, "Could not place the call", error);
             return RESULT_FAILED;
+        }
+    }
+
+    /** The contact name for a dialled number, or null without a match or permission. */
+    private String contactName(String number) {
+        if (checkSelfPermission(Manifest.permission.READ_CONTACTS)
+                != PackageManager.PERMISSION_GRANTED) {
+            return null;
+        }
+        try {
+            return ContactDirectory.nameFor(this, number);
+        }
+        catch (RuntimeException error) {
+            Log.w(TAG, "Could not look up the dialled number", error);
+            return null;
         }
     }
 
