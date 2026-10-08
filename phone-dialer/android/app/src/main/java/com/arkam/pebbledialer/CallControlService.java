@@ -1,16 +1,20 @@
 package com.arkam.pebbledialer;
 
+import android.telecom.Call;
 import android.telecom.CallAudioState;
 import android.telecom.InCallService;
+import android.telephony.PhoneNumberUtils;
+
+import java.util.List;
 
 /**
  * Android binds this service to every call once the Pebble is linked to this
  * app as a companion watch (see MainActivity; Android 12 and newer). The watch
  * profile grants MANAGE_ONGOING_CALLS, which is what Android checks before it
  * binds a non-UI InCallService like this one. It gives the watch control of
- * the call's audio: the output (phone earpiece, speaker, wired headset or
- * Bluetooth) and mute. It shows no UI; Android's own phone app still owns the
- * call.
+ * the call's audio, the output (phone earpiece, speaker, wired headset or
+ * Bluetooth) and mute, and lets it end the call. It shows no UI; Android's
+ * own phone app still owns the call.
  *
  * Android calls it on the main thread, as does DialerService, so the static
  * state below is only touched from there.
@@ -67,6 +71,46 @@ public final class CallControlService extends InCallService {
         // supported, and it works on every version this service runs on.
         running.setAudioRoute(route);
         return true;
+    }
+
+    /**
+     * Ends the call the watch placed: the one to this number if there is one,
+     * otherwise the newest call that is not ringing. A ringing call is left
+     * alone, so a call waiting on top is never rejected by mistake. Returns
+     * false when there is no such call, or the watch is not linked.
+     */
+    static boolean disconnect(String number) {
+        if (running == null) {
+            return false;
+        }
+        List<Call> calls = running.getCalls();
+        Call fallback = null;
+        for (Call call : calls) {
+            int state = call.getDetails().getState();
+            if (state == Call.STATE_RINGING || state == Call.STATE_DISCONNECTING
+                    || state == Call.STATE_DISCONNECTED) {
+                continue;
+            }
+            if (number != null && sameNumber(call, number)) {
+                call.disconnect();
+                return true;
+            }
+            fallback = call;
+        }
+        if (fallback == null) {
+            return false;
+        }
+        fallback.disconnect();
+        return true;
+    }
+
+    private static boolean sameNumber(Call call, String number) {
+        if (call.getDetails().getHandle() == null) {
+            return false;
+        }
+        String handle = call.getDetails().getHandle().getSchemeSpecificPart();
+        return handle != null && PhoneNumberUtils.normalizeNumber(handle)
+                .equals(PhoneNumberUtils.normalizeNumber(number));
     }
 
     /** Mutes or unmutes the current call; false when the watch is not linked. */

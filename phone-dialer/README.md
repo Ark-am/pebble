@@ -180,9 +180,14 @@ allowed `MANAGE_ONGOING_CALLS`, which linking the Pebble through
 That role is not exclusive, so the Pebble phone app keeps its own call
 handling. `AUDIO_ROUTES` of 0 with `AUDIO_ASKED` set means the phone cannot
 switch audio: 1, the Pebble is not linked; 2, the phone is older than
-Android 12. Hanging up uses `TelecomManager.endCall()`, which needs
-`ANSWER_PHONE_CALLS` and Android 9 or newer; `REQUEST=4` is unused, as it was
-the old settings sync.
+Android 12.
+
+Hanging up goes through `CallControlService` when the Pebble is linked: it
+disconnects the call to the number the watch dialled, or else the newest call
+that is not ringing, so a call waiting on top is never rejected by mistake.
+This needs no extra permission. Without the link, or if no such call is found,
+it falls back to `TelecomManager.endCall()`, which needs `ANSWER_PHONE_CALLS`
+and Android 9 or newer. `REQUEST=4` is unused, as it was the old settings sync.
 
 The Settings page sends `THEME` (0 dark, 1 light), `MENU_1` to `MENU_4`
 (0 Dialer, 1 Recent calls, 2 Favorites, 3 Contacts), `TOUCH_ENABLED` and

@@ -117,6 +117,8 @@ public final class DialerService extends BaseJavaPebbleListenerService {
     // Watching the call this app placed, to tell the watch when it ends. Main thread only.
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private String callWatch;
+    // The number of the call the watch placed, to end that call on hang-up.
+    private String callNumber;
     private boolean callSeen;
     private long callStartedAt;
     private final Runnable callPoll = this::pollCall;
@@ -187,7 +189,9 @@ public final class DialerService extends BaseJavaPebbleListenerService {
             if (request == REQUEST_LIST) {
                 sendList(watch, token, requestData);
             } else if (request == REQUEST_HANGUP) {
-                send(watch, token, Collections.singletonList(resultMessage(token, endCall())), 0);
+                // CallControlService lives on the main thread.
+                mainHandler.post(() -> send(watch, token,
+                        Collections.singletonList(resultMessage(token, hangUp())), 0));
             } else {
                 String callKey = watch + ":" + token;
                 Integer result = callResults.get(callKey);
@@ -200,7 +204,8 @@ public final class DialerService extends BaseJavaPebbleListenerService {
                     if (result == RESULT_OK && lastDialedNumber != null) {
                         // The watch shows the number on its call screen.
                         reply.put(KEY_NUMBER, new PebbleDictionaryItem.Text(field(lastDialedNumber)));
-                        mainHandler.post(() -> watchCall(watch));
+                        String number = lastDialedNumber;
+                        mainHandler.post(() -> watchCall(watch, number));
                     }
                 } else {
                     reply = resultMessage(token, result);
@@ -354,11 +359,25 @@ public final class DialerService extends BaseJavaPebbleListenerService {
         }
     }
 
-    /** Ends the current call for the watch's End button. */
+    /**
+     * Ends the call for the watch's End button; main thread. With the Pebble
+     * linked, CallControlService ends the call the watch placed, which needs no
+     * extra permission. Otherwise, or if it finds no call, TelecomManager ends
+     * the foreground call.
+     */
+    private int hangUp() {
+        if (CallControlService.disconnect(callNumber)) {
+            stopWatchingCall();
+            return RESULT_OK;
+        }
+        return endCall();
+    }
+
+    /** Ends the foreground call through TelecomManager; the fallback for hangUp(). */
     @SuppressWarnings("deprecation")
     private int endCall() {
-        // TelecomManager.endCall() exists from Android 9. It is deprecated in favour
-        // of InCallService, which only the default phone app can use.
+        // TelecomManager.endCall() exists from Android 9. It is deprecated in
+        // favour of InCallService, which hangUp() uses when the Pebble is linked.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
             return RESULT_HANGUP_UNSUPPORTED;
         }
@@ -373,7 +392,7 @@ public final class DialerService extends BaseJavaPebbleListenerService {
             }
             // False means there was no call left to end, which is just as good.
             telecom.endCall();
-            mainHandler.post(this::stopWatchingCall);
+            stopWatchingCall();
             return RESULT_OK;
         }
         catch (SecurityException error) {
@@ -392,8 +411,9 @@ public final class DialerService extends BaseJavaPebbleListenerService {
      * needs no extra permission. If the phone never reports a call, the watch
      * is not told anything, rather than being told a live call has ended.
      */
-    private void watchCall(String watch) {
+    private void watchCall(String watch, String number) {
         callWatch = watch;
+        callNumber = number;
         // Keep the watch's audio button up to date for this call.
         CallControlService.setListener(state -> sendAudio(watch, state.getRoute(),
                 state.getSupportedRouteMask(), state.isMuted(), 0));
@@ -405,6 +425,7 @@ public final class DialerService extends BaseJavaPebbleListenerService {
 
     private void stopWatchingCall() {
         callWatch = null;
+        callNumber = null;
         CallControlService.setListener(null);
         mainHandler.removeCallbacks(callPoll);
     }
