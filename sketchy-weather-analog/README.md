@@ -70,6 +70,12 @@ battery, choose it as one of the centre screen items.
 - **Background:** Paper (light) or Chalkboard (dark)
 - **Centre circle:** the four screens and whether they change every minute (see above)
 - **Dial style:** Elegant or Sketchy
+- **Elegant hands** (with the Elegant dial): Dauphine (default), Sword (a
+  narrow shaded blade that widens two thirds of the way out, then sweeps to a
+  point) or Breguet (a fine needle through an open ring)
+- **Sketchy hands** (with the Sketchy dial): Pencil stroke (default), Sketched
+  spear (a pencil outline with a line down the middle) or Sketched arrow (a
+  pencil shaft with an open arrowhead and fletching)
 - **Number font** and **Information font:** see Font styles below
 - **Show hour numbers:** off by default; when on, 1 to 12 sit just inside the hour ticks
 - **Temperature:** Celsius or Fahrenheit

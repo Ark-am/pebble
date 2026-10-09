@@ -76,6 +76,30 @@ module.exports = [
         ]
       },
       {
+        type: 'select',
+        messageKey: 'ELEGANT_HANDS',
+        label: 'Elegant hands',
+        description: 'Used with the Elegant dial style.',
+        defaultValue: '0',
+        options: [
+          { label: 'Dauphine: slim and faceted', value: '0' },
+          { label: 'Sword: a narrow shaded blade', value: '1' },
+          { label: 'Breguet: a fine needle through an open ring', value: '2' }
+        ]
+      },
+      {
+        type: 'select',
+        messageKey: 'SKETCHY_HANDS',
+        label: 'Sketchy hands',
+        description: 'Used with the Sketchy dial style.',
+        defaultValue: '0',
+        options: [
+          { label: 'Pencil stroke', value: '0' },
+          { label: 'Sketched spear', value: '1' },
+          { label: 'Sketched arrow', value: '2' }
+        ]
+      },
+      {
         type: 'toggle',
         messageKey: 'HOUR_NUMBERS',
         label: 'Show hour numbers',

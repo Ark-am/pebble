@@ -100,7 +100,7 @@ typedef enum {
 } Item;
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 5
+#define SETTINGS_VERSION 6
 typedef struct {
   uint8_t version;
   bool dark_theme;
@@ -121,6 +121,9 @@ typedef struct {
   // widget's text (see font_styles.h).
   uint8_t number_font;
   uint8_t info_font;
+  // Added in version 6: the hands for each dial style (see HandVariation).
+  uint8_t elegant_hands;
+  uint8_t sketchy_hands;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -131,6 +134,7 @@ static int settings_size(uint8_t version) {
     case 2: return offsetof(Settings, screens);
     case 3: return offsetof(Settings, sketchy_dial);
     case 4: return offsetof(Settings, number_font);
+    case 5: return offsetof(Settings, elegant_hands);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -873,14 +877,135 @@ static NOINLINE void draw_hand(GContext *ctx, GPoint centre, int32_t angle, int1
   fill_and_outline(ctx, lit, ARRAY_LENGTH(lit), s_palette.ink);
 }
 
-// ---------------------------------------------------------------------------
-// Other widget pictures, on the same 100 x 100 unit grid as the weather icons
-
 static void sketch_polygon(GContext *ctx, const GPoint *points, size_t count, GColor color) {
   for (size_t i = 0; i < count; i++) {
     sketch_line(ctx, points[i], points[(i + 1) % count], color);
   }
 }
+
+// Each dial style offers its usual hands and two variations. Values match
+// the options in src/pkjs/config.js.
+typedef enum {
+  HAND_VARIATION_USUAL,  // Dauphine, or a pencil stroke.
+  HAND_VARIATION_FIRST,  // Sword, or a sketched spear.
+  HAND_VARIATION_SECOND, // Breguet, or a sketched arrow.
+  HAND_VARIATION_COUNT,
+} HandVariation;
+
+// A point on a hand pointing at an angle: across to the right and along
+// from the centre, rounded to the nearest pixel, so a hand's parts line up.
+static GPoint hand_point(GPoint centre, int32_t angle, int32_t across, int32_t along) {
+  const int32_t sin = sin_lookup(angle);
+  const int32_t cos = cos_lookup(angle);
+  const int32_t x = across * cos + along * sin;
+  const int32_t y = across * sin - along * cos;
+  const int32_t half = TRIG_MAX_RATIO / 2;
+  return GPoint(centre.x + (x >= 0 ? x + half : x - half) / TRIG_MAX_RATIO,
+                centre.y + (y >= 0 ? y + half : y - half) / TRIG_MAX_RATIO);
+}
+
+// An elegant sword hand: a narrow shaded blade that widens to its broadest
+// about two thirds of the way out, then sweeps to a point, with a fine ridge
+// down the middle.
+static NOINLINE void draw_sword_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t from,
+                            int16_t to, int16_t half_width) {
+  const int16_t base = half_width * 4 / 10 > 1 ? half_width * 4 / 10 : 1;
+  const int16_t shoulder = from + (to - from) * 66 / 100;
+  GPoint points[] = {
+    hand_point(centre, angle, -base, from),
+    hand_point(centre, angle, -half_width, shoulder),
+    hand_point(centre, angle, 0, to),
+    hand_point(centre, angle, half_width, shoulder),
+    hand_point(centre, angle, base, from),
+  };
+  fill_and_outline(ctx, points, ARRAY_LENGTH(points), s_palette.hand_shade);
+  graphics_context_set_stroke_color(ctx, s_palette.ink);
+  graphics_context_set_stroke_width(ctx, 1);
+  graphics_draw_line(ctx, hand_point(centre, angle, 0, from),
+                     hand_point(centre, angle, 0, shoulder));
+}
+
+// An elegant Breguet hand: a solid needle tapering to a fine point, through an
+// open ring most of the way out that shows the dial through its middle.
+static NOINLINE void draw_breguet_hand(GContext *ctx, GPoint centre, int32_t angle,
+                              int16_t from, int16_t to, int16_t half_width) {
+  const int16_t base = half_width * 6 / 10 > 2 ? half_width * 6 / 10 : 2;
+  GPoint needle[] = {
+    hand_point(centre, angle, -base, from),
+    hand_point(centre, angle, 0, to),
+    hand_point(centre, angle, base, from),
+  };
+  fill_and_outline(ctx, needle, ARRAY_LENGTH(needle), s_palette.ink);
+  const GPoint ring = hand_point(centre, angle, 0, from + (to - from) * 72 / 100);
+  graphics_context_set_fill_color(ctx, s_palette.background);
+  graphics_fill_circle(ctx, ring, half_width);
+  graphics_context_set_stroke_color(ctx, s_palette.ink);
+  graphics_context_set_stroke_width(ctx, PBL_DISPLAY_WIDTH >= 200 ? 2 : 1);
+  graphics_draw_circle(ctx, ring, half_width);
+}
+
+// A sketched spear: a pencil outline, widest a little way out and tapering to
+// a point, with a pencil line down the middle.
+static NOINLINE void draw_spear_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t from,
+                            int16_t to, int16_t half_width) {
+  const int16_t widest = from + (to - from) * 25 / 100;
+  const GPoint points[] = {
+    hand_point(centre, angle, 0, from),
+    hand_point(centre, angle, -half_width, widest),
+    hand_point(centre, angle, 0, to),
+    hand_point(centre, angle, half_width, widest),
+  };
+  graphics_context_set_fill_color(ctx, s_palette.background);
+  GPathInfo info = { .num_points = ARRAY_LENGTH(points), .points = (GPoint *)points };
+  GPath *path = gpath_create(&info);
+  gpath_draw_filled(ctx, path);
+  gpath_destroy(path);
+  sketch_polygon(ctx, points, ARRAY_LENGTH(points), s_palette.ink);
+  sketch_line(ctx, points[0], hand_point(centre, angle, 0, to - half_width * 2), s_palette.ink);
+}
+
+// A sketched arrow: a doubled pencil shaft with an open arrowhead at the tip
+// and two short fletching strokes at the base.
+static NOINLINE void draw_arrow_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t from,
+                            int16_t to, int16_t half_width) {
+  const int16_t head = half_width * 2 + 2;
+  const GPoint tip = hand_point(centre, angle, 0, to);
+  sketch_line(ctx, hand_point(centre, angle, -1, from), hand_point(centre, angle, -1, to - 1),
+              s_palette.ink);
+  sketch_line(ctx, hand_point(centre, angle, 1, from), hand_point(centre, angle, 1, to - 1),
+              s_palette.ink);
+  sketch_line(ctx, tip, hand_point(centre, angle, -half_width, to - head), s_palette.ink);
+  sketch_line(ctx, tip, hand_point(centre, angle, half_width, to - head), s_palette.ink);
+  for (int i = 0; i < 2; i++) {
+    const int16_t along = from + i * 3;
+    sketch_line(ctx, hand_point(centre, angle, 0, along + half_width),
+                hand_point(centre, angle, -half_width, along), s_palette.ink);
+    sketch_line(ctx, hand_point(centre, angle, 0, along + half_width),
+                hand_point(centre, angle, half_width, along), s_palette.ink);
+  }
+}
+
+// Draws a hand in the variation chosen for the dial's style.
+static void draw_dial_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t from,
+                           int16_t to, int16_t half_width, bool minute) {
+  if (s_settings.sketchy_dial) {
+    switch (s_settings.sketchy_hands) {
+      case HAND_VARIATION_FIRST: draw_spear_hand(ctx, centre, angle, from, to, half_width); break;
+      case HAND_VARIATION_SECOND: draw_arrow_hand(ctx, centre, angle, from, to, half_width); break;
+      // The pencil hour hand is a little heavier.
+      default: draw_sketch_hand(ctx, centre, angle, from, to, half_width + (minute ? 0 : 1)); break;
+    }
+  } else {
+    switch (s_settings.elegant_hands) {
+      case HAND_VARIATION_FIRST: draw_sword_hand(ctx, centre, angle, from, to, half_width); break;
+      case HAND_VARIATION_SECOND: draw_breguet_hand(ctx, centre, angle, from, to, half_width); break;
+      default: draw_hand(ctx, centre, angle, from, to, half_width); break;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Other widget pictures, on the same 100 x 100 unit grid as the weather icons
 
 static void draw_text_centred(GContext *ctx, const char *text, GFont font, GPoint centre,
                               int16_t width, int16_t height, int16_t pad) {
@@ -1294,13 +1419,8 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   const int16_t minute_end = edge_distance(bounds, minute_angle) - HOUR_TICK_LENGTH - 3;
   const int16_t hour_end = start
     + (edge_distance(bounds, hour_angle) - HOUR_TICK_LENGTH - 3 - start) * 58 / 100;
-  if (s_settings.sketchy_dial) {
-    draw_sketch_hand(ctx, centre, hour_angle, start, hour_end, HOUR_HAND_WIDTH + 1);
-    draw_sketch_hand(ctx, centre, minute_angle, start, minute_end, MINUTE_HAND_WIDTH);
-  } else {
-    draw_hand(ctx, centre, hour_angle, start, hour_end, HOUR_HAND_WIDTH);
-    draw_hand(ctx, centre, minute_angle, start, minute_end, MINUTE_HAND_WIDTH);
-  }
+  draw_dial_hand(ctx, centre, hour_angle, start, hour_end, HOUR_HAND_WIDTH, false);
+  draw_dial_hand(ctx, centre, minute_angle, start, minute_end, MINUTE_HAND_WIDTH, true);
 }
 
 // ---------------------------------------------------------------------------
@@ -1390,6 +1510,14 @@ static bool read_settings(DictionaryIterator *iterator) {
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_DIAL_STYLE))) {
     s_settings.sketchy_dial = tuple_int(tuple) == 1;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_ELEGANT_HANDS))) {
+    s_settings.elegant_hands = tuple_int(tuple) % HAND_VARIATION_COUNT;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_SKETCHY_HANDS))) {
+    s_settings.sketchy_hands = tuple_int(tuple) % HAND_VARIATION_COUNT;
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_ROTATE_SCREENS))) {
