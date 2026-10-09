@@ -182,7 +182,7 @@ public final class CallControlService extends InCallService {
     }
 
     /** Mutes or unmutes the current call; false when the watch is not linked. */
-    static boolean setMuted(boolean muted) {
+    static boolean requestMute(boolean muted) {
         if (running == null || running.getCalls().isEmpty()) {
             return false;
         }

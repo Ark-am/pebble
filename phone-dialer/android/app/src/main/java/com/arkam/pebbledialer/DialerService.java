@@ -553,7 +553,7 @@ public final class DialerService extends BaseJavaPebbleListenerService {
 
     /** Mutes or unmutes the call as the watch asked; main thread. */
     private void setMuted(String watch, boolean muted) {
-        if (!CallControlService.setMuted(muted)) {
+        if (!CallControlService.requestMute(muted)) {
             sendAudioUnavailable(watch);
         }
     }
