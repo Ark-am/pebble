@@ -27,13 +27,35 @@ static bool s_waiting;
 
 #define ICON_WIDTH 28
 #define ICON_HEIGHT 32
+// The status bar is at least two lines tall and grows to fit longer replies.
 #define STATUS_HEIGHT PBL_IF_ROUND_ELSE(52, 44)
+#define STATUS_PADDING 8
 
 static char s_transcript[TRANSCRIPT_SIZE + 2];
 static char s_reply[REPLY_SIZE];
+static int16_t s_text_top;
 
 static void set_status(const char *text) {
   text_layer_set_text(s_status_layer, text);
+
+  Layer *root = window_get_root_layer(s_window);
+  const GRect bounds = layer_get_bounds(root);
+  // Round screens narrow towards the bottom, so measure against a narrower box.
+  const int16_t width = bounds.size.w - PBL_IF_ROUND_ELSE(bounds.size.w / 4, 8);
+  const int16_t max_height = bounds.size.h - s_text_top - 24;
+  const GSize size = graphics_text_layout_get_content_size(
+    text, fonts_get_system_font(FONT_KEY_GOTHIC_18),
+    GRect(0, 0, width, max_height),
+    GTextOverflowModeWordWrap, GTextAlignmentCenter);
+  const int16_t height = size.h + STATUS_PADDING > max_height
+    ? max_height
+    : (size.h + STATUS_PADDING < STATUS_HEIGHT ? STATUS_HEIGHT : size.h + STATUS_PADDING);
+
+  layer_set_frame(text_layer_get_layer(s_status_layer),
+                  GRect(0, bounds.size.h - height, bounds.size.w, height));
+  GRect transcript = layer_get_frame(text_layer_get_layer(s_transcript_layer));
+  transcript.size.h = bounds.size.h - height - s_text_top;
+  layer_set_frame(text_layer_get_layer(s_transcript_layer), transcript);
 }
 
 static void set_prompt(void) {
@@ -201,7 +223,7 @@ static void window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   const GRect bounds = layer_get_bounds(root);
   const int16_t icon_top = PBL_IF_ROUND_ELSE(bounds.size.h / 8, 12);
-  const int16_t text_top = icon_top + ICON_HEIGHT + 8;
+  s_text_top = icon_top + ICON_HEIGHT + 8;
   const int16_t inset = PBL_IF_ROUND_ELSE(bounds.size.w / 8, 4);
 
   window_set_background_color(window, GColorBlack);
@@ -212,9 +234,9 @@ static void window_load(Window *window) {
 
   s_transcript_layer = text_layer_create(GRect(
     inset,
-    text_top,
+    s_text_top,
     bounds.size.w - inset * 2,
-    bounds.size.h - text_top - STATUS_HEIGHT
+    bounds.size.h - s_text_top - STATUS_HEIGHT
   ));
   text_layer_set_background_color(s_transcript_layer, GColorClear);
   text_layer_set_text_color(s_transcript_layer, GColorWhite);

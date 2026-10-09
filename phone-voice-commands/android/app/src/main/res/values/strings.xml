@@ -2,6 +2,12 @@
 <resources>
     <string name="app_name">Phone Voice Commands</string>
     <string name="status_ready">Ready. Open Phone Voice Commands on your Pebble and speak a command.</string>
+    <string name="link_title">Timers, alarms and apps</string>
+    <string name="link_help">Android only lets this app open the clock and other apps from the background once your Pebble is linked to it. Android lists nearby Pebble watches; choose yours and allow it.</string>
+    <string name="link_button">Link your Pebble</string>
+    <string name="link_done">Pebble linked</string>
+    <string name="examples_title">Things to say</string>
+    <string name="examples">Flashlight on / off\nSet a timer for 5 minutes\nSet an alarm for 7:30 am\nWake me up in 20 minutes\nVolume up / down / 50 percent\nMute / unmute\nPlay / pause / next song / previous song\nOpen Spotify</string>
     <string name="last_command">Last command</string>
     <string name="no_command_yet">Nothing received from the watch yet.</string>
     <string name="last_command_detail">Heard: “%1$s”\nWatch shows: %2$s</string>

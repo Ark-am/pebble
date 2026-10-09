@@ -31,16 +31,21 @@ public final class VoiceCommandService extends BaseJavaPebbleListenerService {
     // Commands run in order, off the main thread, one at a time.
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private JavaPebbleSender sender;
+    private Flashlight flashlight;
+    private CommandRouter router;
 
     @Override
     public void onCreate() {
         super.onCreate();
         sender = new DefaultJavaPebbleSender(this);
+        flashlight = new Flashlight(this);
+        router = new CommandRouter(this, flashlight);
     }
 
     @Override
     public void onDestroy() {
         executor.shutdownNow();
+        flashlight.close();
         try {
             sender.close();
         }
@@ -72,7 +77,7 @@ public final class VoiceCommandService extends BaseJavaPebbleListenerService {
         executor.execute(() -> {
             CommandResult result;
             try {
-                result = CommandRouter.handle(this, transcript);
+                result = router.handle(transcript);
             }
             catch (RuntimeException error) {
                 Log.e(TAG, "Command failed: " + transcript, error);
