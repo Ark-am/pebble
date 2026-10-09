@@ -37,6 +37,16 @@
           "menuIcon": true
         }
       ]
+    },
+    "companionApp": {
+      "android": {
+        "url": "https://github.com/ark-am/pebble-phone-voice-commands",
+        "apps": [
+          {
+            "package": "com.arkam.pebblevoicecommands"
+          }
+        ]
+      }
     }
   }
 }

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Phone Voice Commands</string>
+    <string name="status_ready">Ready. Open Phone Voice Commands on your Pebble and speak a command.</string>
+    <string name="last_command">Last command</string>
+    <string name="no_command_yet">Nothing received from the watch yet.</string>
+    <string name="last_command_detail">Heard: “%1$s”\nWatch shows: %2$s</string>
+</resources>
