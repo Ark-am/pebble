@@ -1,9 +1,14 @@
-Sketchy Weather Analog adds a little pencil-and-paper character to your Pebble. Hand-drawn weather icons and everyday information sit inside a central ring, while the hour and minute hands stay outside it to keep the centre clear.
+Sketchy Weather Analog was inspired by Sketchy Weather, developed by Igor Traskovetskyi. This watch-face adds a little pencil-and-paper character to your Pebble. Hand-drawn weather icons and everyday information sit inside a central ring, while the hour and minute hands stay outside it to keep the centre clear and easy to read.
 
-Choose the refined Elegant dial or the playful Sketchy style, with a light Paper or dark Chalkboard background. Customize the fonts and show or hide hour numbers to finish the look.
+Choose the refined Elegant dial or the playful Sketchy style, with a light Paper or dark Chalkboard background. Customize the fonts and show or hide hour numbers to finish the layout.
 
-Build up to four centre screens using weather, date, battery, steps, and heart rate. Each screen can pair a main item with a second value. Tap the watch to switch screens, or let them change automatically every minute. Weather artwork changes with the conditions and includes sun and moon variations for day and night.
+Features:
+- Build up to four centre screens using weather, date, battery, steps, and heart rate
+- Each screen can pair a main item with a second value
+- Tap the watch to switch screens, or let them change automatically every minute. 
+- Weather artwork changes with the conditions and includes sun and moon variations for day and night.
 
-Phone connection and Quiet Time indicators keep you informed, with optional disconnect vibrations that respect Quiet Time. Settings are available in the Pebble phone app. Weather supports Celsius and Fahrenheit and needs your paired phone's location and internet access, with no weather account or API key required. Steps require a watch with health support, and heart rate requires a supported sensor.
+Phone connection and Quiet Time indicators keep you informed with optional disconnect vibrations that respect Quiet Time. Settings are available in the Pebble phone app. Weather supports Celsius and Fahrenheit and needs your paired phone's location and internet access, with no weather account or API key required. Steps require a watch with health support, and heart rate requires a supported sensor.
 
-Created by Ark-am. Discover our work and custom software development services at https://ark-am.com/
+Created by Ark-am LLC. Discover our work and custom software development services:
+https://ark-am.com/

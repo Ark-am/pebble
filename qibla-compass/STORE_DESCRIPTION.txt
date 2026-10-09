@@ -1,9 +1,10 @@
-Qibla Compass points you toward the Kaaba in Makkah from wherever you are, right on your wrist. Raise your watch, and an arrow shows which way to turn, with simple directions such as "Turn left 12°".
+Qibla Compass was the first Pebble application Ark-am endeavoured to build. It points you toward the Kaaba in Makkah from wherever you are. Raise your watch and swirl the watch around to calibrate the compass, and an arrow shows which way to turn, with simple directions such as "Turn left 12°". This feature never worked properly and we will revisit the logic after every Pebble OS update until the app is fully functional.
 
-When you face the Qibla, the arrow turns green, the screen reads "Qibla aligned", and your watch gives a short vibration, so you can find the direction without staring at the screen. The exact Qibla bearing for your location is shown too.
+When you face the Qibla, the arrow turns green, the screen reads "Qibla aligned", and your watch gives a short vibration, so you can find the direction without staring at the screen. The exact Qibla bearing for your location is also shown.
 
-For accuracy, the watch corrects its compass from magnetic north to true north using the World Magnetic Model (WMM-2025) for your location and today's date. If the compass needs calibrating, the app asks you to move your watch until it is ready. If your location or compass can't be read, tap the screen or press Select to try again.
+For accuracy, the watch corrects its compass from magnetic north to true north using the World Magnetic Model (WMM-2025) for your location and today's date. If the compass needs calibrating, the app asks you to move your watch until it is ready. If your location or compass cannot be read, tap the screen or press Select to try again.
 
-Designed for Pebble Time 2. Your paired phone provides your location, so allow location access for the Pebble app; no account or internet service is needed for the calculation itself. Like any compass, readings can be affected by nearby metal, magnets, or electronics, so hold your watch flat and away from them.
+Your paired phone provides your location, so allow location access for the Pebble app; no account or internet service is needed for the calculation itself. Like any compass, readings can be affected by nearby metal, magnets, or electronics, so hold your watch flat and away from those objects.
 
-Created by Ark-am. Discover our work and custom software development services at https://ark-am.com/
+Created by Ark-am LLC. Discover our work and custom software development services:
+https://ark-am.com/

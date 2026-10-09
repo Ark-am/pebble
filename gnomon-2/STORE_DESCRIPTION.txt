@@ -1,9 +1,15 @@
-Gnomon 2 pairs a classic analog dial with the everyday details you want at a glance. Tapered leaf hands and a minute track that follows the screen frame your choice of turned classic or upright modern hour numbers.
+Gnomon 2 was originally inspired by Gnomon, developed by JR Mobley, and created to place additional features on the watch face. It pairs a classic analog dial with the everyday details at a glance. Choose from 5 styles of hour/minute hands and the color of the second hand; note, battery usage increases when the second hand is in use.
 
-Four information areas show local weather, health data, the day and date, and a battery ring with phone connection and Quiet Time status. Tap the watch to cycle through steps, distance, active calories, active minutes, sleep, and heart rate where supported. Hide individual information areas for a simpler dial, or enable the option that moves them away from the hands when space allows.
+Four [4] informational areas show local weather, health data, the day and date, and a battery ring with phone connection and Quiet Time status. Tap the watch to cycle through steps, distance, active calories, active minutes, sleep, and if supported, the heart rate. Hide individual information areas for a simpler look, or enable the option that moves them away from the hands when there is space.
 
-Make it yours with a light or dark background, a custom dial name, font choices for modern numbers and information, and an optional second hand with colour choices on colour watches. Optional phone disconnect vibrations respect Quiet Time.
+Features:
+ - A light or dark background
+ - A custom dial name
+ - Font choices for hour numbers and information/widgets
+ - An optional second hand with colour choices
+ - Optional phone disconnect vibrations respect Quiet Time.
 
-Settings are available in the Pebble phone app. Weather supports Celsius and Fahrenheit and needs your paired phone's location and internet access, with no weather account or API key required. Health data is unavailable on the original Pebble, and heart rate requires a supported sensor.
+Settings are available via the Pebble phone app. Weather supports Celsius and Fahrenheit and needs your paired phone's location and internet access, with no weather account or API key required. Health data is unavailable on the original Pebble, and heart rate requires a supported sensor.
 
-Created by Ark-am. Discover our work and custom software development services at https://ark-am.com/
+Created by Ark-am LLC. Discover our work and custom software development services:
+https://ark-am.com/

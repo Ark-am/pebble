@@ -1,9 +1,15 @@
-Phone Sound Mode puts your phone's ringer one press away. Heading into a meeting, a class, or a quiet room? Switch your phone to Vibrate, Normal, or Silent straight from your Pebble, without taking your phone out of your pocket.
+Phone Sound Mode puts your phone's ringer at most 2-clicks-out*. Switch your phone to Normal, Silent, or Vibrate straight from your Pebble watch.
 
-Open the app, choose a mode, and you're done. A short vibration confirms that your phone has changed, and the app returns to your watchface a moment later. If the change can't be made, the app stays open and tells you why, so you can try again.
+Open the app, choose a mode, and you're done; the list can be reordered from the Pebble app. A short vibration confirms that your phone has changed, and the app returns to your watch-face after the confirmation. If the change can't be made, the app stays open and tells you why, so you can try again.
 
-Clear icons for each mode make it easy to pick the right one at a glance, on round and rectangular screens, in colour or black and white.
+Clear icons for each mode make it easy to pick the right one at a glance.
 
-Android only. Phone Sound Mode requires its free Android companion app. Open the companion once and allow Do Not Disturb access, which Android needs to switch into and out of Silent reliably. Nothing is sent to a server; the watch talks only to your phone.
+Android only. Phone Sound Mode requires its free Android companion app, located on our website:
+https://ark-am.com/projects/pebble-apps
 
-Created by Ark-am. Discover our work and custom software development services at https://ark-am.com/
+Once installed, open the companion app and allow Do Not Disturb access, which Android needs to reliably switch into and out of Silent mode. Nothing is sent to a server; the watch talks only to your phone.
+
+Created by Ark-am LLC. Discover our work and custom software development services:
+https://ark-am.com/
+
+*Shout out to the YouTube channel, "Dave Moss Tuning".

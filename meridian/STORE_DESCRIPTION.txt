@@ -1,9 +1,14 @@
-Meridian is a clean analog watchface that keeps your daily essentials within easy view. Arrange weather, date, battery and connection alerts, or health data at four positions around the dial, or leave any position empty for a simpler look.
+Meridian is a clean analog watch-face that keeps daily essentials within a glance. Arrange weather, date, battery and connection alerts, or health data at four positions around the dial, or leave any position empty for a simpler layout.
 
-Check the temperature and conditions, see your battery percentage, and tap the watch to cycle through steps, distance, active calories, active minutes, sleep, and heart rate where supported. Optional phone disconnect vibrations respect Quiet Time.
-
-Choose a light or dark background, accent colours on colour watches, and separate fonts for the hour numbers and information. Show or hide hour numbers, add an optional second hand, and rotate the dial to suit how you wear your watch. The layout adapts to round and rectangular screens and makes room for Timeline Quick View.
+Features: 
+- Check the temperature and conditions
+- See your battery percentage
+- Tap the watch to cycle through steps, distance, active calories, active minutes, sleep, and heart rate where supported
+- Optional phone disconnect vibrations respect Quiet Time.
+- Choose a light or dark background, accent colours on colour watches, and separate fonts for the hour numbers and information/widgets.
+- Show or hide hour numbers, add an optional second hand (uses more battery), and rotate the dial to suit how you wear your watch (only works correctly on Pebble Round 2).
 
 Customize Meridian through the Pebble phone app. Weather supports Celsius and Fahrenheit and needs your paired phone's location and internet access, with no weather account or API key required. Health data depends on your watch; the original Pebble shows the month and year instead. Heart rate requires a supported sensor.
 
-Created by Ark-am. Discover our work and custom software development services at https://ark-am.com/
+Created by Ark-am LLC. Discover our work and custom software development services:
+https://ark-am.com/
