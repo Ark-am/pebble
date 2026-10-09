@@ -1,104 +1,65 @@
 # Pebble Apps
 
-A growing collection of independent apps and experiments for Pebble watches.
-Each project lives in its own directory with its own source code, dependencies,
-build output, and documentation.
+A growing collection of independent apps and watch faces for the Pebble watches. Each project lives in its own directory with its own source code, dependencies, build output, and documentation.
+
+| Code name | Watch | Screen |
+| --- | --- | --- |
+| Aplite | Pebble (original) and Pebble Steel | 144 × 168, black and white |
+| Basalt | Pebble Time and Pebble Time Steel | 144 × 168, colour |
+| Chalk | Pebble Time Round | 180 × 180 round, colour |
+| Diorite | Pebble 2 (SE and HR) | 144 × 168, black and white |
+| Emery | Pebble Time 2 | 200 × 228, colour, touch |
+| Flint | Pebble 2 Duo | 144 × 168, black and white |
+| Gabbro | Pebble Round 2 | 260 × 260 round, colour, touch |
 
 ## Projects
 
 | Project | Description | Platforms |
 | --- | --- | --- |
-| [Qibla Compass](./qibla-compass/) | Points toward the Qibla using the watch compass, the phone's location, and magnetic-declination correction. | Emery (Pebble Time 2) |
-| [Phone Sound Mode](./phone-sound-mode/) | Changes a paired Android phone's sound mode from the watch using a native Android companion app. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
-| [Phone Dialer](./phone-dialer/) | Dials numbers, returns recent calls, and calls favorites or contacts on a paired Android phone using a native companion app. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
-| [Meridian](./meridian/) | Analog watchface with weather, date, battery, connection and Quiet Time alerts, and health data. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
-| [Gnomon 2](./epoch/) | Classic analog watchface with turned hour numbers and tapered hands, plus weather, health data, the date, a battery ring, and connection and Quiet Time alerts. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
+| [Phone Dialer](./phone-dialer/) | Dial numbers, returns Recent Calls, and calls from Favorites and/or Contacts on a paired Android phone using the native companion app. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
+| [Phone Sound Mode](./phone-sound-mode/) | Changes the Android phone's sound mode (Vibrate, Normal, Silent) using the native Android companion app. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
+| [Qibla Compass](./qibla-compass/) | Points toward the Qibla using the watch compass, the phone's location, and magnetic-declination correction. | Emery and Flint, but currently not fully operational |
+| [Phone Voice Commands](./phone-voice-commands/) | Sends dictated commands from the watch to a paired Android phone through the native companion app. | Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Baltic](./baltic/) | Dress-watch face with Breguet-style numbers, a minute scale, a small seconds dial, and five dial colours. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
-| [Sketchy Weather Analog](./sketchy-weather-analog/) | Pencil-sketch analog watchface with a hand-drawn weather widget in the centre that the hands stay clear of. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
-| [World Clock](./world-clock/) | Digital face with your time large at the top beside the date, and the time in two other cities below. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
+| [Gnomon 2](./epoch/) | Classic analog watch-face with turned hour numbers and tapered hands, plus weather, health data, the date, a battery ring, and connection and Quiet Time alerts. Heavily inspired by the Gnomon watch-face. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
+| [Meridian](./meridian/) | Analog watch-face with weather, date, battery, connection and Quiet Time alerts, and health data. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
+| [Sketchy Weather Analog](./sketchy-weather-analog/) | Pencil-sketch analog watch-face with a hand-drawn weather widget in the centre where the hands stay clear. Inspired by the Sketchy Weather watch-face. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
+| [World Clock](./world-clock/) | Digital face with the current local time being large and at the top. Beside is the date, and below are the times of two other cities. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 
-Follow a project's link for its requirements, build instructions, testing
-steps, and platform-specific notes.
+Follow a project's link for its requirements, build instructions, testing steps, and platform-specific notes, but please try not to follow because we are still new to Python and C languages. 
 
-## Pebble store descriptions
+## Apps' & Watch-faces' descriptions
 
-Copy the entire contents of the relevant plain-text file into the watchface's
-Pebble store description:
+| Watch faces | Apps |
+| --- | --- |
+| [Baltic](./baltic/STORE_DESCRIPTION.txt) | [Phone Dialer](./phone-dialer/STORE_DESCRIPTION.txt) |
+| [Gnomon 2](./gnomon-2/STORE_DESCRIPTION.txt) | [Phone Sound Mode](./phone-sound-mode/STORE_DESCRIPTION.txt) |
+| [Meridian](./meridian/STORE_DESCRIPTION.txt) | [Qibla Compass](./qibla-compass/STORE_DESCRIPTION.txt) |
+| [Sketchy Weather Analog](./sketchy-weather-analog/STORE_DESCRIPTION.txt) |
+| [World Clock](./world-clock/STORE_DESCRIPTION.txt) |
 
-- [Baltic](./baltic/STORE_DESCRIPTION.txt)
-- [Gnomon 2](./gnomon-2/STORE_DESCRIPTION.txt)
-- [Meridian](./meridian/STORE_DESCRIPTION.txt)
-- [Sketchy Weather Analog](./sketchy-weather-analog/STORE_DESCRIPTION.txt)
-- [World Clock](./world-clock/STORE_DESCRIPTION.txt)
-
-Keep these descriptions in sync with watchface features. Every watchface
-description must include the shared creator credit and website promotion:
-
-> Created by Ark-am. Discover our work and custom software development services at https://ark-am.com/
-
-For future watchfaces, add a `STORE_DESCRIPTION.txt` with this credit and link
-it here. Phone Sound Mode, Phone Dialer, and compass apps are excluded from
-this description collection.
+> Created by Ark-am LLC. Discover our work and custom software development services:\
+> https://ark-am.com/projects/pebble-apps
 
 ## Repository layout
 
 ```text
 .
-├── .gitignore           # Shared ignore rules for every project
-├── qibla-compass/       # Qibla direction app
-├── phone-sound-mode/    # Watch app and Android companion
-├── phone-dialer/        # Watch dialer and Android companion
-├── meridian/            # Analog watchface
-├── epoch/               # Classic analog watchface
-├── baltic/              # Dress-watch face
-├── sketchy-weather-analog/  # Pencil-sketch weather watchface
-├── world-clock/         # Digital world clock
-└── README.md            # Repository overview
+├── .gitignore               # Shared ignore rules for every project
+├── qibla-compass/           # Qibla direction app
+├── phone-sound-mode/        # Watch app and Android companion
+├── phone-dialer/            # Watch dialer and Android companion
+├── phone-voice-commands/    # Watch dictation app and Android companion
+├── meridian/                # Analog watch-face
+├── epoch/                   # Classic analog watch-face
+├── baltic/                  # Dress-watch face
+├── sketchy-weather-analog/  # Pencil-sketch weather watch-face
+├── world-clock/             # Digital world clock
+└── README.md                # Repository overview
 ```
 
-Projects are intentionally self-contained. There is no root-level build
-command, and commands should be run from the directory of the app being
-developed.
-
-## Getting started
-
-Install the [Pebble SDK](https://developer.repebble.com/) and confirm that the
-Pebble CLI is available:
-
-```sh
-pebble --version
-```
-
-Then choose a project and follow its README. A typical Pebble app workflow is:
-
-```sh
-cd <project-directory>
-npm install      # when the project declares JavaScript dependencies
-pebble build
-```
-
-The resulting `.pbw` file is written to that project's `build/` directory.
-Some projects may require additional tooling or a companion app; those details
-are documented by the project.
-
-## Adding another project
-
-Add each new app in a clearly named top-level directory and keep everything it
-needs inside that directory. At minimum, a project should include:
-
-- a `README.md` describing its purpose, requirements, supported watches, and
-  build and installation steps;
-- its Pebble manifest and build configuration;
-- source code and required resources;
-- additional project-specific `.gitignore` rules when it produces artifacts
-  not covered by the root rules; and
-- license information when it differs from the rest of the collection.
-
-After adding a project, include it in the table above and update the repository
-layout. Do not commit generated build output, dependency directories, local SDK
-state, signing material, or secrets.
+Projects are intentionally self-contained. There is no root-level build command, and commands should be run from the directory of the app being developed.
 
 ## Licenses
 
-Licensing may vary between projects. Check the `LICENSE` file or README inside
-the relevant project before using or redistributing its code.
+All of the code in this repository is open source. Every project is released under the MIT License; see the `LICENSE` file inside each project's directory. You are free to use, modify, and redistribute the code, provided the copyright and license notice are kept with the directory.
