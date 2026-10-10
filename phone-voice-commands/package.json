@@ -6,7 +6,9 @@
     "pebble-app"
   ],
   "private": true,
-  "dependencies": {},
+  "dependencies": {
+    "@rebble/clay": "^1.1.0"
+  },
   "pebble": {
     "displayName": "Phone Voice Commands",
     "uuid": "01430625-332e-46aa-b212-89d36377c0a5",
@@ -26,7 +28,12 @@
     "messageKeys": {
       "TRANSCRIPT": 1,
       "RESULT": 2,
-      "REPLY": 3
+      "REPLY": 3,
+      "THEME": 4,
+      "AUTO_LISTEN": 5,
+      "CONFIRM": 6,
+      "AFTER_SUCCESS": 7,
+      "VIBRATE": 8
     },
     "resources": {
       "media": [
@@ -47,6 +54,9 @@
           }
         ]
       }
-    }
+    },
+    "capabilities": [
+      "configurable"
+    ]
   }
 }

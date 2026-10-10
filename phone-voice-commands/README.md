@@ -21,6 +21,7 @@ does it, and sends a short reply back to the watch.
 From this directory:
 
 ```sh
+npm install      # the settings page library (Clay)
 pebble build
 ```
 
@@ -72,6 +73,23 @@ vibration means the command worked; two mean it did not.
 The companion's screen on the phone shows the last command it received and
 the reply it sent. It updates while open, which helps when testing.
 
+## Settings
+
+In the Pebble phone app, open **Phone Voice Commands** and tap the settings
+(gear) button:
+
+- **Theme**: Dark or Light.
+- **Start listening when opened**: on by default. When off, the app waits for
+  **Select**.
+- **Confirm before sending**: on by default, showing what you said so you can
+  accept or retry it. When off, the words go to the phone as soon as you stop
+  speaking, which includes calls and texts.
+- **When it works**: stay open (default), or return to the watchface two
+  seconds after a successful command. A failed command always stays on screen.
+- **Vibrate**: one pulse for success and two for failure; on by default.
+
+The watch keeps these settings between launches.
+
 ## Commands
 
 Words such as "hey", "please" and "can you" are ignored, and numbers can be
@@ -116,6 +134,7 @@ accepted form.
 | 1 | `TRANSCRIPT` | watch → phone | The dictated text |
 | 2 | `RESULT` | phone → watch | `0` OK, `1` failed, `2` not understood, `3` permission required |
 | 3 | `REPLY` | phone → watch | Optional text to show, up to 127 bytes |
+| 4–8 | `THEME`, `AUTO_LISTEN`, `CONFIRM`, `AFTER_SUCCESS`, `VIBRATE` | settings page → watch | Settings, sent by Clay in PebbleKit JS |
 
 The watch app UUID and Android package name are matched:
 

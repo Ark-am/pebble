@@ -29,6 +29,8 @@ Say "Help" to see a few examples on your watch.
 
 You can speak naturally: "Hey, can you turn on the flashlight please?" works as well as "Flashlight on". Numbers can be spoken as words or digits. Contacts are matched by whole names, so the app never guesses; if two people share a name, it asks which one you meant. Texts keep your words and punctuation exactly as dictated and go out on your phone's default SIM.
 
+In Settings, choose a dark or light theme, start listening as soon as the app opens or wait for the Select button, keep or skip the confirmation screen, return to your watch-face after a command works, and switch vibrations on or off.
+
 Works on Pebble watches with a microphone: Pebble Time, Time Steel, Time Round, Pebble 2 (not the 2 SE), Pebble 2 Duo, Pebble Time 2, and Pebble Round 2.
 
 Android only. Phone Voice Commands requires its free Android companion app, located on our website:
