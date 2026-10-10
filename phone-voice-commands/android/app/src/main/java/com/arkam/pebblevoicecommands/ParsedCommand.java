@@ -23,6 +23,14 @@ final class ParsedCommand {
         MEDIA_PREVIOUS,
         /** {@link #text}: the app name as spoken. */
         OPEN_APP,
+        /** {@link #text}: the contact name; {@link #value}: a Contact.KIND_* number kind. */
+        CALL_CONTACT,
+        /** {@link #text}: the digits to dial, with any leading "+". */
+        CALL_NUMBER,
+        /** {@link #text}: recipient and message as dictated, split once contacts are known. */
+        SEND_TEXT,
+        /** {@link #text}: the destination; {@link #value}: 1 for walking, else 0. */
+        NAVIGATE,
     }
 
     final Action action;

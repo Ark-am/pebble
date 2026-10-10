@@ -1,5 +1,6 @@
 package com.arkam.pebblevoicecommands;
 
+import android.Manifest;
 import android.app.Activity;
 import android.companion.AssociationRequest;
 import android.companion.BluetoothDeviceFilter;
@@ -8,9 +9,13 @@ import android.companion.CompanionDeviceManager;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -23,9 +28,22 @@ public final class MainActivity extends Activity {
     private static final int LINK_REQUEST = 100;
     // Pebble and Core watches advertise names such as "Pebble Time 1A2B".
     private static final Pattern PEBBLE_NAME = Pattern.compile("(?i).*(pebble|core).*");
+    private static final int PERMISSION_REQUEST = 101;
+    // Each is optional: without one, only the commands that need it are refused.
+    private static final String[] PERMISSIONS = {
+            Manifest.permission.READ_CONTACTS,
+            Manifest.permission.CALL_PHONE,
+            Manifest.permission.SEND_SMS,
+    };
+    private static final int[] PERMISSION_LABELS = {
+            R.string.permission_contacts,
+            R.string.permission_phone,
+            R.string.permission_sms,
+    };
 
     private TextView lastCommandView;
     private Button linkButton;
+    private final Button[] permissionButtons = new Button[PERMISSIONS.length];
     private final SharedPreferences.OnSharedPreferenceChangeListener logListener =
             (preferences, key) -> refreshLastCommand();
 
@@ -54,6 +72,21 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams statusParams = matchWidth();
         statusParams.setMargins(0, padding, 0, padding);
         layout.addView(statusView, statusParams);
+
+        layout.addView(heading(R.string.permissions_title), matchWidth());
+        TextView permissionHelp = new TextView(this);
+        permissionHelp.setText(R.string.permissions_help);
+        permissionHelp.setTextSize(14);
+        permissionHelp.setPadding(0, 0, 0, padding / 3);
+        layout.addView(permissionHelp, matchWidth());
+        for (int i = 0; i < PERMISSIONS.length; i++) {
+            final int index = i;
+            permissionButtons[i] = new Button(this);
+            permissionButtons[i].setOnClickListener(view -> requestAccess(index));
+            layout.addView(permissionButtons[i], matchWidth());
+        }
+        View spacer = new View(this);
+        layout.addView(spacer, new LinearLayout.LayoutParams(1, padding));
 
         if (Companion.linkNeeded()) {
             layout.addView(heading(R.string.link_title), matchWidth());
@@ -94,6 +127,7 @@ public final class MainActivity extends Activity {
         CommandLog.preferences(this).registerOnSharedPreferenceChangeListener(logListener);
         refreshLastCommand();
         refreshLinkState();
+        refreshPermissionState();
     }
 
     @Override
@@ -107,6 +141,52 @@ public final class MainActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == LINK_REQUEST) {
             refreshLinkState();
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        // Remember that Android has asked, to tell "not yet asked" from "blocked".
+        SharedPreferences.Editor asked = getPreferences(MODE_PRIVATE).edit();
+        for (int i = 0; i < Math.min(permissions.length, results.length); i++) {
+            asked.putBoolean(permissions[i], true);
+        }
+        asked.apply();
+        refreshPermissionState();
+    }
+
+    private void requestAccess(int index) {
+        String permission = PERMISSIONS[index];
+        if (blocked(permission)) {
+            // Android stops showing the prompt after repeated denials.
+            startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", getPackageName(), null)));
+            return;
+        }
+        requestPermissions(new String[] { permission }, PERMISSION_REQUEST);
+    }
+
+    private boolean granted(String permission) {
+        return checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean blocked(String permission) {
+        return !granted(permission)
+                && getPreferences(MODE_PRIVATE).getBoolean(permission, false)
+                && !shouldShowRequestPermissionRationale(permission);
+    }
+
+    private void refreshPermissionState() {
+        for (int i = 0; i < PERMISSIONS.length; i++) {
+            String label = getString(PERMISSION_LABELS[i]);
+            boolean allowed = granted(PERMISSIONS[i]);
+            permissionButtons[i].setEnabled(!allowed);
+            permissionButtons[i].setText(allowed
+                    ? getString(R.string.permission_allowed, label)
+                    : blocked(PERMISSIONS[i])
+                    ? getString(R.string.permission_settings, label)
+                    : getString(R.string.permission_allow, label));
         }
     }
 

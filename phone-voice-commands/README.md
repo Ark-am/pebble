@@ -6,10 +6,6 @@ The watch turns your speech into text with Pebble dictation and sends the
 text to an Android companion app. The companion works out what you asked for,
 does it, and sends a short reply back to the watch.
 
-> **Work in progress.** Phone actions such as the flashlight, timers, alarms,
-> volume, media and opening apps work. Calling, texting and navigation are
-> still to come.
-
 ## Requirements
 
 - A Pebble with a microphone: Pebble Time, Time Steel, Time Round, Pebble 2
@@ -54,12 +50,15 @@ This is a sideload build signed with the build machine's debug key.
 
 1. Install the Android APK first, then install the PBW through the Pebble
    phone app.
-2. On Android 10 and newer, open **Phone Voice Commands** on the phone and tap
-   **Link your Pebble**. Android lists nearby Pebble watches; choose yours and
-   allow it. Android only lets the companion open the clock app and other apps
-   from the background once a watch is linked. Without the link, timers,
-   alarms and opening apps reply **Link your Pebble in the phone app**; the
-   other commands still work.
+2. Open **Phone Voice Commands** on the phone and tap **Allow Contacts**,
+   **Allow Phone** and **Allow SMS** for calling and texting. Each is
+   optional: without one, only the commands that need it reply with what to
+   allow, such as **Allow SMS in the phone app**.
+3. On Android 10 and newer, tap **Link your Pebble**. Android lists nearby
+   Pebble watches; choose yours and allow it. Android only lets the companion
+   open the clock, maps and other apps from the background once a watch is
+   linked. Without the link, timers, alarms, directions and opening apps reply
+   **Link your Pebble in the phone app**; the other commands still work.
 
 ## Use
 
@@ -88,10 +87,24 @@ spoken or dictated as digits.
 | "Volume 50 percent", "volume 7", "max volume" | Sets the media volume; a number up to 10 means tenths |
 | "Play", "pause", "next song", "previous song" | Controls whichever app is playing, or last played, media |
 | "Open Spotify", "launch the camera" | Opens the installed app with the closest name |
+| "Call Mom", "call Sam on his mobile", "ring Dad at work" | Calls the contact: the number asked for, or else their default |
+| "Call 555 1234", "dial +1 555 123 4567" | Calls the number |
+| "Text Sam I'm running late", "send a message to Mom saying happy birthday" | Sends the message straight away, to the contact's mobile number |
+| "Navigate to the airport", "take me home", "walk to the park" | Starts directions in Google Maps, or searches in another maps app |
 | "Help" | Lists a few examples on the watch |
 
 Cancelling or changing an existing alarm or timer is not supported. Opening an
 app while the phone is locked opens it behind the lock screen.
+
+Contact names must match whole words, so "Al" does not call Alice. When two
+contacts match, such as two people called Sam, the watch asks **Which one?**
+and lists them; say the full name. A favourite contact wins such a tie.
+
+Texts keep the words, capitals and punctuation as dictated, and the watch's
+confirmation screen shows them before anything is sent. They go out on the
+phone's default SIM and appear in the messaging app. The watch replies
+**Text sent** once Android confirms it left the phone, or **Sending** if
+that takes longer than a few seconds.
 
 The phrases are recognised by `CommandParser`; its unit tests list every
 accepted form.

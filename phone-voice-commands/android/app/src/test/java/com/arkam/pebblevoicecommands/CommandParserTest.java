@@ -124,6 +124,94 @@ public class CommandParserTest {
         assertAction(Action.OPEN_APP, "run calculator", "show calendar");
     }
 
+    @Test public void callContacts() {
+        ParsedCommand call = parse("Call Mom.");
+        assertEquals(Action.CALL_CONTACT, call.action);
+        assertEquals("mom", call.text);
+        assertEquals(Contact.KIND_ANY, call.value);
+
+        assertEquals("sam smith", parse("please call Sam Smith").text);
+        assertEquals("one direction", parse("call one direction").text);
+        assertEquals("home", parse("call home").text);
+
+        ParsedCommand mobile = parse("call Sam on his mobile");
+        assertEquals("sam", mobile.text);
+        assertEquals(Contact.KIND_MOBILE, mobile.value);
+        assertEquals(Contact.KIND_MOBILE, parse("call Sam cell phone").value);
+        assertEquals(Contact.KIND_WORK, parse("ring Dad at the office").value);
+        ParsedCommand home = parse("call mom's home number");
+        assertEquals("moms", home.text);
+        assertEquals(Contact.KIND_HOME, home.value);
+    }
+
+    @Test public void callNumbers() {
+        assertValueText(Action.CALL_NUMBER, "5551234", "call 555 1234", "dial 555-1234",
+                "call five five five one two three four");
+        assertValueText(Action.CALL_NUMBER, "+15551234567", "Call +1 555 123 4567");
+        assertNull(parse("call 12"));
+    }
+
+    @Test public void textMessagesKeepTheirWording() {
+        assertValueText(Action.SEND_TEXT, "Sam I'm running late, sorry!",
+                "Text Sam I'm running late, sorry!",
+                "Hey, can you text Sam I'm running late, sorry!",
+                "send a text to Sam I'm running late, sorry!",
+                "Send a text message to Sam I'm running late, sorry!",
+                "message Sam I'm running late, sorry!");
+        assertValueText(Action.SEND_TEXT, "Dad the flashlight is in the drawer",
+                "tell Dad the flashlight is in the drawer");
+        assertValueText(Action.SEND_TEXT, "Mom set a timer for 5 minutes",
+                "text Mom set a timer for 5 minutes");
+    }
+
+    @Test public void navigation() {
+        assertValueText(Action.NAVIGATE, "the airport", "Navigate to the airport",
+                "directions to the airport", "get directions to the airport",
+                "take me to the airport", "how do I get to the airport", "drive to the airport");
+        assertValueText(Action.NAVIGATE, "home", "navigate home", "take me home");
+        assertValueText(Action.NAVIGATE, "221 baker street london",
+                "Navigate to 221 Baker Street, London.");
+        assertEquals(1, parse("walk to the park").value);
+        assertEquals(1, parse("walking directions to the park").value);
+        assertEquals(0, parse("drive to the park").value);
+    }
+
+    private static void assertValueText(Action action, String text, String... phrases) {
+        for (String phrase : phrases) {
+            ParsedCommand command = parse(phrase);
+            assertNotNull(phrase, command);
+            assertEquals(phrase, action, command.action);
+            assertEquals(phrase, text, command.text);
+        }
+    }
+
+    /** Every example in STORE_DESCRIPTION.txt must work as written. */
+    @Test public void storeDescriptionExamples() {
+        assertAction(Action.CALL_CONTACT, "Call Mom", "Call Sam on his mobile", "Ring Dad at work");
+        assertAction(Action.CALL_NUMBER, "Call 555 1234", "Dial +1 555 123 4567");
+        assertAction(Action.SEND_TEXT, "Text Sam I'm running late",
+                "Send a message to Mom saying happy birthday");
+        assertAction(Action.NAVIGATE, "Navigate to the airport", "Take me home",
+                "Directions to 221 Baker Street", "Walk to the park");
+        assertAction(Action.TIMER, "Set a timer for 5 minutes", "Timer for an hour and a half");
+        assertAction(Action.ALARM, "Set an alarm for 7:30 am", "Wake me up at 6", "Alarm at noon",
+                "Wake me up in 20 minutes");
+        assertAction(Action.MEDIA_PLAY, "Play");
+        assertAction(Action.MEDIA_PAUSE, "Pause");
+        assertAction(Action.MEDIA_NEXT, "Next song");
+        assertAction(Action.MEDIA_PREVIOUS, "Previous song");
+        assertAction(Action.VOLUME_UP, "Volume up");
+        assertAction(Action.VOLUME_DOWN, "Volume down");
+        assertAction(Action.VOLUME_SET, "Volume 50 percent", "Max volume");
+        assertAction(Action.VOLUME_MUTE, "Mute");
+        assertAction(Action.VOLUME_UNMUTE, "Unmute");
+        assertAction(Action.FLASHLIGHT_ON, "Flashlight on",
+                "Hey, can you turn on the flashlight please?");
+        assertAction(Action.FLASHLIGHT_OFF, "Turn off the torch");
+        assertAction(Action.OPEN_APP, "Open Spotify", "Launch the camera");
+        assertAction(Action.HELP, "Help");
+    }
+
     @Test public void help() {
         assertAction(Action.HELP, "help", "what can you do", "What can I say?");
     }

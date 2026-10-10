@@ -1,5 +1,6 @@
 package com.arkam.pebblevoicecommands;
 
+import android.Manifest;
 import android.app.KeyguardManager;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
@@ -8,7 +9,10 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.hardware.camera2.CameraAccessException;
 import android.media.AudioManager;
+import android.net.Uri;
+import android.os.Bundle;
 import android.provider.AlarmClock;
+import android.telecom.TelecomManager;
 import android.text.format.DateFormat;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -22,6 +26,7 @@ final class CommandRouter {
     private static final String TAG = "PhoneVoiceCommands";
     // The longest timer Android's AlarmClock contract accepts.
     private static final int MAX_TIMER_SECONDS = 24 * 60 * 60;
+    private static final String GOOGLE_MAPS = "com.google.android.apps.maps";
 
     private final Context context;
     private final Flashlight flashlight;
@@ -43,7 +48,7 @@ final class CommandRouter {
 
         switch (command.action) {
             case HELP:
-                return CommandResult.ok("Try: flashlight on, timer 5 minutes, next song, open Maps");
+                return CommandResult.ok("Try: call Mom, timer 5 minutes, next song, open Maps");
             case FLASHLIGHT_ON:
                 return setFlashlight(true);
             case FLASHLIGHT_OFF:
@@ -74,6 +79,14 @@ final class CommandRouter {
                 return pressMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS, "Previous track");
             case OPEN_APP:
                 return openApp(command.text);
+            case CALL_CONTACT:
+                return callContact(command.text, command.value);
+            case CALL_NUMBER:
+                return placeCall(command.text, command.text);
+            case SEND_TEXT:
+                return sendText(command.text);
+            case NAVIGATE:
+                return navigate(command.text, command.value == 1);
             default:
                 return CommandResult.notUnderstood("Sorry, I can't do that yet");
         }
@@ -184,6 +197,139 @@ final class CommandRouter {
                 ? "Unlock phone to see " + labels.get(index)
                 : "Opened " + labels.get(index);
         return startActivity(intent, reply, "Could not open " + labels.get(index));
+    }
+
+    private CommandResult callContact(String spokenName, int kind) {
+        if (!granted(Manifest.permission.READ_CONTACTS)) {
+            return CommandResult.permissionRequired("Allow Contacts in the phone app");
+        }
+        List<Contact> contacts = Contacts.load(context);
+        Found found = findContact(spokenName, contacts);
+        if (found.problem != null) {
+            return found.problem;
+        }
+        Contact contact = found.contact;
+        Contact.Number number = contact.pick(kind, false);
+        if (number == null) {
+            return CommandResult.failed("No " + Contact.kindName(kind) + " number for " + contact.name);
+        }
+        String who = kind == Contact.KIND_ANY && contact.numbers.size() > 1
+                ? contact.name + " (" + Contact.kindName(number.kind) + ")"
+                : contact.name;
+        return placeCall(number.value, who);
+    }
+
+    /** Telecom owns the call screen, so this needs no background activity start. */
+    private CommandResult placeCall(String number, String who) {
+        if (!granted(Manifest.permission.CALL_PHONE)) {
+            return CommandResult.permissionRequired("Allow Phone in the phone app");
+        }
+        TelecomManager telecom = context.getSystemService(TelecomManager.class);
+        if (telecom == null || !context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEPHONY)) {
+            return CommandResult.failed("This phone cannot make calls");
+        }
+        try {
+            telecom.placeCall(Uri.fromParts("tel", number, null), new Bundle());
+            return CommandResult.ok("Calling " + who);
+        }
+        catch (SecurityException error) {
+            Log.w(TAG, "Android rejected the call", error);
+            return CommandResult.permissionRequired("Allow Phone in the phone app");
+        }
+    }
+
+    private CommandResult sendText(String dictated) {
+        if (!granted(Manifest.permission.SEND_SMS)) {
+            return CommandResult.permissionRequired("Allow SMS in the phone app");
+        }
+        if (!context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEPHONY_MESSAGING)) {
+            return CommandResult.failed("This phone cannot send texts");
+        }
+
+        // Contacts are needed to tell where the name ends, except for a number.
+        boolean canReadContacts = granted(Manifest.permission.READ_CONTACTS);
+        List<Contact> contacts = canReadContacts ? Contacts.load(context) : new ArrayList<>();
+        MessageSplitter.Split split = MessageSplitter.split(
+                dictated, name -> ContactMatcher.matchesAny(name, contacts));
+        if (!split.isNumber && !canReadContacts) {
+            return CommandResult.permissionRequired("Allow Contacts in the phone app");
+        }
+        if (split.body.isEmpty()) {
+            return CommandResult.notUnderstood("What should it say? Say \"text Sam on my way\"");
+        }
+
+        String number;
+        String who;
+        if (split.isNumber) {
+            number = split.recipient;
+            who = split.recipient;
+        } else {
+            Found found = findContact(split.recipient, contacts);
+            if (found.problem != null) {
+                return found.problem;
+            }
+            Contact contact = found.contact;
+            Contact.Number picked = contact.pick(Contact.KIND_ANY, true);
+            if (picked == null) {
+                return CommandResult.failed("No number for " + contact.name);
+            }
+            number = picked.value;
+            who = contact.name;
+        }
+
+        switch (TextMessages.send(context, number, split.body)) {
+            case SENT:
+                return CommandResult.ok("Text sent to " + who);
+            case PENDING:
+                return CommandResult.ok("Sending to " + who);
+            default:
+                return CommandResult.failed("Text to " + who + " not sent");
+        }
+    }
+
+    /** A matched contact, or the reply explaining why there is none. */
+    private static final class Found {
+        final Contact contact;
+        final CommandResult problem;
+
+        Found(Contact contact, CommandResult problem) {
+            this.contact = contact;
+            this.problem = problem;
+        }
+    }
+
+    private static Found findContact(String spokenName, List<Contact> contacts) {
+        ContactMatcher.Match match = ContactMatcher.best(spokenName, contacts);
+        if (match.index >= 0) {
+            return new Found(contacts.get(match.index), null);
+        }
+        if (match.ties.isEmpty()) {
+            return new Found(null, CommandResult.notUnderstood("No contact called " + spokenName));
+        }
+        int shown = Math.min(3, match.ties.size());
+        StringBuilder names = new StringBuilder();
+        for (int i = 0; i < shown; i++) {
+            names.append(i == 0 ? "" : i == shown - 1 ? " or " : ", ")
+                    .append(contacts.get(match.ties.get(i)).name);
+        }
+        return new Found(null, CommandResult.notUnderstood("Which one? " + names));
+    }
+
+    private CommandResult navigate(String destination, boolean walking) {
+        PackageManager packages = context.getPackageManager();
+        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(
+                "google.navigation:q=" + Uri.encode(destination) + (walking ? "&mode=w" : "")))
+                .setPackage(GOOGLE_MAPS);
+        if (intent.resolveActivity(packages) == null) {
+            // Other maps apps understand a geo: search instead of turn-by-turn.
+            intent = new Intent(Intent.ACTION_VIEW,
+                    Uri.parse("geo:0,0?q=" + Uri.encode(destination)));
+        }
+        return startActivity(intent, "Directions to " + destination, "No maps app found");
+    }
+
+    private boolean granted(String permission) {
+        return context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED;
     }
 
     private CommandResult startActivity(Intent intent, String success, String missing) {

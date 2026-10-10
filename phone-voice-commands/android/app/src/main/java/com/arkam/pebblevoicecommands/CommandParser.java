@@ -67,6 +67,32 @@ final class CommandParser {
     private static final Pattern VOLUME_MUTE = Pattern.compile("^mute" + VOLUME_OBJECT + "?$");
     private static final Pattern VOLUME_UNMUTE = Pattern.compile("^unmute" + VOLUME_OBJECT + "?$");
 
+    private static final Pattern CALL = Pattern.compile("^(?:call|phone|dial|ring)\\s+(?:up\\s+)?(.+)$");
+    private static final Pattern CALL_KIND = Pattern.compile(
+            "^(.+?)\\s+(?:(?:on|at)\\s+(?:(?:his|her|their|the)\\s+)?)?"
+                    + "(mobile|cell|cellphone|home|work|office)(?:\\s+(?:phone|number|line))?$");
+    private static final Pattern DIGITS = Pattern.compile("^[\\d ]+$");
+
+    private static final Pattern TEXT = Pattern.compile(
+            "^(?:send\\s+(?:a\\s+)?(?:text|message|sms)(?:\\s+message)?(?:\\s+to)?|text|message|sms|tell(?!\\s+me\\b))\\s+\\S");
+    // The same, on the transcript as dictated, so the message keeps its case and punctuation.
+    private static final Pattern ORIGINAL_FILLER = Pattern.compile(
+            "^[\\s\\p{Punct}]*(?:(?:ok|okay|hey|hi|please|so|can you|could you|would you|will you"
+                    + "|i want to|i'?d like to|i would like to|let'?s|go ahead and)\\b[\\s,.!]*)*",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern ORIGINAL_TEXT = Pattern.compile(
+            "^(?:send\\s+(?:a\\s+)?(?:text|message|sms)(?:\\s+message)?(?:\\s+to)?|text|message|sms|tell(?!\\s+me\\b))"
+                    + "\\s+(.+)$", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+
+    private static final Pattern[] NAVIGATE = {
+            Pattern.compile("^(?:navigate|navigation|directions|drive|walk|head)(?:\\s+me)?(?:\\s+to)?\\s+(.+)$"),
+            Pattern.compile("^(?:(?:get|give me|show me)\\s+)?(?:walking\\s+|driving\\s+)?directions"
+                    + "\\s+(?:to\\s+)?(.+)$"),
+            Pattern.compile("^(?:take|get)\\s+me\\s+(?:to\\s+)?(.+)$"),
+            Pattern.compile("^how do i (?:get|walk|drive)\\s+(?:to\\s+)?(.+)$"),
+    };
+    private static final Pattern WALKING = Pattern.compile("\\bwalk(?:ing)?\\b");
+
     private static final Pattern OPEN_APP = Pattern.compile(
             "^(?:open|launch|start|run|show)\\s+(?:the\\s+|my\\s+)?(.+?)(?:\\s+(?:app|application))?$");
 
@@ -103,6 +129,18 @@ final class CommandParser {
 
         if (HELP.matcher(text).matches()) {
             return new ParsedCommand(Action.HELP);
+        }
+        // Checked first: a message such as "text Sam lights off" may contain any words.
+        if (TEXT.matcher(text).find()) {
+            return message(transcript, plain);
+        }
+        ParsedCommand call = call(transcript, text, plain);
+        if (call != null) {
+            return call;
+        }
+        ParsedCommand navigate = navigate(plain);
+        if (navigate != null) {
+            return navigate;
         }
         if (FLASHLIGHT.matcher(text).find()) {
             return flashlight(text);
@@ -201,6 +239,62 @@ final class CommandParser {
                 .replaceAll("\\b(\\d{1,2}(?::\\d{2})?) in the morning\\b", "$1 am")
                 .replaceAll("\\b(\\d{1,2}(?::\\d{2})?) (?:in the (?:afternoon|evening)|at night|tonight)\\b",
                         "$1 pm");
+    }
+
+    private static ParsedCommand message(String transcript, String plain) {
+        String original = ORIGINAL_FILLER.matcher(transcript.trim()).replaceFirst("");
+        Matcher matcher = ORIGINAL_TEXT.matcher(original);
+        if (matcher.matches()) {
+            return new ParsedCommand(Action.SEND_TEXT, 0, matcher.group(1).trim());
+        }
+        // Unusual punctuation defeated the original-text match; lose the case instead.
+        Matcher fallback = ORIGINAL_TEXT.matcher(plain);
+        return fallback.matches()
+                ? new ParsedCommand(Action.SEND_TEXT, 0, fallback.group(1).trim())
+                : null;
+    }
+
+    private static ParsedCommand call(String transcript, String text, String plain) {
+        Matcher numeric = CALL.matcher(text);
+        Matcher spoken = CALL.matcher(plain);
+        if (!numeric.matches() || !spoken.matches()) {
+            return null;
+        }
+
+        String target = numeric.group(1);
+        if (DIGITS.matcher(target).matches()) {
+            String digits = target.replace(" ", "");
+            if (digits.length() < 3) {
+                return null;
+            }
+            boolean international = transcript.matches("(?s).*\\+\\s*\\d.*");
+            return new ParsedCommand(Action.CALL_NUMBER, 0, (international ? "+" : "") + digits);
+        }
+
+        // Names are kept as spoken, so "call one direction" is not "call 1 direction".
+        String name = spoken.group(1);
+        int kind = Contact.KIND_ANY;
+        Matcher withKind = CALL_KIND.matcher(name);
+        if (withKind.matches()) {
+            name = withKind.group(1);
+            String word = withKind.group(2);
+            kind = word.equals("home") ? Contact.KIND_HOME
+                    : word.equals("work") || word.equals("office") ? Contact.KIND_WORK
+                    : Contact.KIND_MOBILE;
+        }
+        return new ParsedCommand(Action.CALL_CONTACT, kind, name);
+    }
+
+    private static ParsedCommand navigate(String plain) {
+        for (Pattern pattern : NAVIGATE) {
+            Matcher matcher = pattern.matcher(plain);
+            if (matcher.matches()) {
+                String lead = plain.substring(0, matcher.start(1));
+                return new ParsedCommand(Action.NAVIGATE,
+                        WALKING.matcher(lead).find() ? 1 : 0, matcher.group(1));
+            }
+        }
+        return null;
     }
 
     private static ParsedCommand flashlight(String text) {
