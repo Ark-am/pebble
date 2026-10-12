@@ -7,14 +7,14 @@
 | Title | Phone Voice Commands |
 | Type | Watchapp |
 | Author | ark-am |
-| Version | 1.0.0 (Android versionCode 1) |
+| Version | 1.1.0 (Android versionCode 2) |
 | UUID | `01430625-332e-46aa-b212-89d36377c0a5` |
 | Android package | `com.arkam.pebblevoicecommands` |
 
 | File | Purpose |
 | --- | --- |
-| `dist/phone-voice-commands-1.0.0.pbw` | Watch app for Basalt, Chalk, Diorite, Emery, Flint and Gabbro. Aplite has no microphone and is not a target. |
-| `dist/phone-voice-commands-1.0.0-android.apk` | Android companion to share for direct installation. |
+| `dist/phone-voice-commands-1.1.0.pbw` | Watch app for Basalt, Chalk, Diorite, Emery, Flint and Gabbro. Aplite has no microphone and is not a target. |
+| `dist/phone-voice-commands-1.1.0-android.apk` | Android companion to share for direct installation. |
 | `dist/SHA256SUMS.txt` | Checksums of the two files above. |
 | `phone-voice-commands-icon.png` | 1254 × 1254 RGBA store icon with transparency. |
 | `phone-voice-commands-icon.svg` | Source of the icon. |
@@ -34,8 +34,8 @@ cd android
 cd ..
 
 mkdir -p dist
-cp build/phone-voice-commands.pbw dist/phone-voice-commands-1.0.0.pbw
-cp android/app/build/outputs/apk/debug/app-debug.apk dist/phone-voice-commands-1.0.0-android.apk
+cp build/phone-voice-commands.pbw dist/phone-voice-commands-1.1.0.pbw
+cp android/app/build/outputs/apk/debug/app-debug.apk dist/phone-voice-commands-1.1.0-android.apk
 (cd dist && shasum -a 256 *.apk *.pbw > SHA256SUMS.txt)
 ```
 
@@ -70,7 +70,7 @@ Before each new APK, increase `versionCode` and `versionName` in
      --icon-large store/icon-large-144.png \
      --icon-small store/icon-small-80.png \
      --screenshots store/screenshots/basalt.png store/screenshots/chalk.png \
-     --release-notes "First release."
+     --release-notes "Quick commands: run up to six saved commands with Up or Down, set in Settings. Did you mean…?: the watch offers a corrected command when one is not understood."
    ```
 
    `--screenshots` only works with `--non-interactive`, and each file name
@@ -82,8 +82,8 @@ Before each new APK, increase `versionCode` and `versionName` in
 
 - `pebble build` passed with Pebble Tool 5.0.40 and SDK 4.33.1 for all six
   platforms. The PBW passed a ZIP integrity check, and its `appinfo.json`
-  has the UUID, version 1.0.0 and the companion package above.
-- `./gradlew assembleDebug testDebugUnitTest lintDebug` passed: 38 unit
+  has the UUID, version 1.1.0 and the companion package above.
+- `./gradlew assembleDebug testDebugUnitTest lintDebug` passed: 45 unit
   tests, no lint errors, and four warnings about newer dependency and SDK
   versions.
 - `apksigner verify` passed (APK Signature Scheme v2).
