@@ -27,6 +27,8 @@ public final class VoiceCommandService extends BaseJavaPebbleListenerService {
     private static final int KEY_TRANSCRIPT = 1;
     private static final int KEY_RESULT = 2;
     private static final int KEY_REPLY = 3;
+    // Keys 4 to 8 carry the watch's own settings.
+    private static final int KEY_SUGGESTION = 9;
 
     // Commands run in order, off the main thread, one at a time.
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -93,6 +95,9 @@ public final class VoiceCommandService extends BaseJavaPebbleListenerService {
         response.put(KEY_RESULT, new PebbleDictionaryItem.Int32(result.code));
         response.put(KEY_REPLY, new PebbleDictionaryItem.Text(
                 WatchText.fit(result.reply, WatchText.MAX_REPLY_BYTES)));
+        if (result.suggestion != null) {
+            response.put(KEY_SUGGESTION, new PebbleDictionaryItem.Text(result.suggestion));
+        }
 
         sender.sendDataToPebble(
                 WATCHAPP_UUID,

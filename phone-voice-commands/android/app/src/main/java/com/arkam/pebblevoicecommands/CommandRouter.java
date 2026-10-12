@@ -42,6 +42,12 @@ final class CommandRouter {
         int nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
         ParsedCommand command = CommandParser.parse(transcript, nowMinutes);
         if (command == null) {
+            String suggestion = Suggester.suggest(transcript, nowMinutes);
+            // The watch sends the suggestion back as if spoken, so it must fit unchanged.
+            if (suggestion != null
+                    && WatchText.fit(suggestion, WatchText.MAX_TRANSCRIPT_BYTES).equals(suggestion.trim())) {
+                return CommandResult.suggest(suggestion);
+            }
             return CommandResult.notUnderstood("Sorry, I can't do that yet");
         }
         Log.i(TAG, "Running " + command);

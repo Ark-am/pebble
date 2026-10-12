@@ -85,6 +85,20 @@ vibration means the command worked; two mean it did not.
 The companion's screen on the phone shows the last command it received and
 the reply it sent. It updates while open, which helps when testing.
 
+## Did you mean…?
+
+When the phone does not recognise what it heard, it checks whether a small
+change would make it a command: a word close in spelling to a command word
+("time for 5 minutes"), a common sound-alike ("paws the music"), or a word
+split in two ("un mute"). If so, the watch shows the corrected phrase and asks
+**Did you mean this?** Press **Select** to run it, or **Down** to speak again.
+The words that were not changed are kept exactly as dictated, so a corrected
+text message keeps its wording. At most two words are changed, and contact,
+app and place names are never altered.
+
+The sound-alike list is in `Suggester`; add to it from the phrases the
+companion's **Last command** screen shows were misheard.
+
 ## Settings
 
 In the Pebble phone app, open **Phone Voice Commands** and tap the settings
@@ -147,6 +161,7 @@ accepted form.
 | 2 | `RESULT` | phone → watch | `0` OK, `1` failed, `2` not understood, `3` permission required |
 | 3 | `REPLY` | phone → watch | Optional text to show, up to 127 bytes |
 | 4–8 | `THEME`, `AUTO_LISTEN`, `CONFIRM`, `AFTER_SUCCESS`, `VIBRATE` | settings page → watch | Settings, sent by Clay in PebbleKit JS |
+| 9 | `SUGGESTION` | phone → watch | With `RESULT` 2, a corrected phrase to offer as "Did you mean…?"; up to 255 bytes |
 
 The watch app UUID and Android package name are matched:
 

@@ -6,6 +6,8 @@ import java.nio.charset.StandardCharsets;
 final class WatchText {
     // The watch's reply buffer is 128 bytes, including the terminating NUL.
     static final int MAX_REPLY_BYTES = 127;
+    // A suggestion fills the watch's 256-byte transcript buffer.
+    static final int MAX_TRANSCRIPT_BYTES = 255;
 
     private WatchText() {
     }

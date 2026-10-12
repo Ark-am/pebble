@@ -10,10 +10,17 @@ final class CommandResult {
 
     final int code;
     final String reply;
+    /** A corrected phrase for the watch to offer as "Did you mean...?", or null. */
+    final String suggestion;
 
-    private CommandResult(int code, String reply) {
+    private CommandResult(int code, String reply, String suggestion) {
         this.code = code;
         this.reply = reply;
+        this.suggestion = suggestion;
+    }
+
+    private CommandResult(int code, String reply) {
+        this(code, reply, null);
     }
 
     static CommandResult ok(String reply) {
@@ -26,6 +33,10 @@ final class CommandResult {
 
     static CommandResult notUnderstood(String reply) {
         return new CommandResult(NOT_UNDERSTOOD, reply);
+    }
+
+    static CommandResult suggest(String suggestion) {
+        return new CommandResult(NOT_UNDERSTOOD, "Did you mean \u201c" + suggestion + "\u201d?", suggestion);
     }
 
     static CommandResult permissionRequired(String reply) {

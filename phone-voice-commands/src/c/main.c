@@ -60,6 +60,10 @@ static bool s_waiting;
 
 static char s_transcript[TRANSCRIPT_SIZE + 2];
 static char s_reply[REPLY_SIZE];
+// The phone's "Did you mean...?" phrase, sent back as if spoken when the user
+// presses Select.
+static char s_suggestion[TRANSCRIPT_SIZE];
+static bool s_has_suggestion;
 static int16_t s_text_top;
 
 static GColor background_color(void) {
@@ -204,6 +208,7 @@ static void start_dictation(void) {
   cancel_response_timer();
   cancel_exit_timer();
   s_waiting = false;
+  s_has_suggestion = false;
   dictation_session_start(s_dictation);
 }
 
@@ -213,11 +218,23 @@ static void start_timer_fired(void *context) {
 }
 
 static void select_click(ClickRecognizerRef recognizer, void *context) {
+  if (s_has_suggestion) {
+    // Accept "Did you mean...?": send the phrase as if it had been spoken.
+    s_has_suggestion = false;
+    send_transcript(s_suggestion);
+    return;
+  }
+  start_dictation();
+}
+
+static void down_click(ClickRecognizerRef recognizer, void *context) {
+  // Turn down a suggestion and say it again; otherwise the same as Select.
   start_dictation();
 }
 
 static void click_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_SELECT, select_click);
+  window_single_click_subscribe(BUTTON_ID_DOWN, down_click);
 }
 
 static int32_t tuple_int(const Tuple *tuple) {
@@ -312,6 +329,19 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
   }
 
   const int32_t result = result_tuple->value->int32;
+  const Tuple *suggestion_tuple = dict_find(iterator, MESSAGE_KEY_SUGGESTION);
+  if (suggestion_tuple && suggestion_tuple->type == TUPLE_CSTRING) {
+    snprintf(s_suggestion, sizeof(s_suggestion), "%s", suggestion_tuple->value->cstring);
+    s_has_suggestion = true;
+    snprintf(s_transcript, sizeof(s_transcript), "\"%s\"", s_suggestion);
+    text_layer_set_text(s_transcript_layer, s_transcript);
+    set_status("Did you mean this?\nSelect: yes. Down: speak again");
+    if (s_vibrate) {
+      vibes_double_pulse();
+    }
+    return;
+  }
+
   if (reply_tuple && reply_tuple->type == TUPLE_CSTRING) {
     snprintf(s_reply, sizeof(s_reply), "%s", reply_tuple->value->cstring);
   } else if (result == RESULT_OK) {
@@ -446,7 +476,8 @@ static void init(void) {
   app_message_register_inbox_received(inbox_received);
   app_message_register_inbox_dropped(inbox_dropped);
   app_message_register_outbox_failed(outbox_failed);
-  app_message_open(REPLY_SIZE + 64, TRANSCRIPT_SIZE + 64);
+  // A reply can carry both the reply text and a full-length suggestion.
+  app_message_open(REPLY_SIZE + TRANSCRIPT_SIZE + 64, TRANSCRIPT_SIZE + 64);
 
   // Opening the app is the request to speak, so start listening right away
   // unless the Settings page says to wait for Select.

@@ -33,7 +33,8 @@
       "AUTO_LISTEN": 5,
       "CONFIRM": 6,
       "AFTER_SUCCESS": 7,
-      "VIBRATE": 8
+      "VIBRATE": 8,
+      "SUGGESTION": 9
     },
     "resources": {
       "media": [
