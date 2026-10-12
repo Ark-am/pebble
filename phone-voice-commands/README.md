@@ -76,9 +76,14 @@ This is a sideload build signed with the build machine's debug key.
 
 ## Use
 
-Open **Phone Voice Commands** on the watch. It starts listening straight
-away. Speak, check the transcription on the confirmation screen, and accept
-it. Press **Select** to speak again, **Up** or **Down** for quick commands, or
+Open **Phone Voice Commands** on the watch. A **Get ready** screen explains
+what to do, and about 1.5 seconds later the listening screen opens; the pause
+gives the phone's speech recognition a moment to be ready. Speak once the
+microphone appears, press **Select** when you have finished, then check the
+transcription on the confirmation screen and accept it. Pressing **Select**
+on the **Get ready** screen skips the pause.
+
+Press **Select** to speak again, **Up** or **Down** for quick commands, or
 **Back** to leave.
 
 The phone's reply appears in the bar at the bottom of the screen. One short

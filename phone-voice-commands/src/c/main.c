@@ -64,8 +64,9 @@ static bool s_waiting;
 #define TRANSCRIPT_SIZE 256
 #define REPLY_SIZE 128
 #define RESPONSE_TIMEOUT_MS 10000
-// Give the window a moment to appear before dictation covers it.
-#define START_DELAY_MS 100
+// How long the "Get ready" screen shows before the listening screen opens,
+// giving the phone's speech recognition a moment to be ready.
+#define READY_DELAY_MS 1500
 // Long enough to read the reply before returning to the watchface.
 #define EXIT_DELAY_MS 2000
 
@@ -217,6 +218,26 @@ static void dictation_callback(DictationSession *session,
   send_transcript(transcription);
 }
 
+static void cancel_start_timer(void) {
+  if (s_start_timer) {
+    app_timer_cancel(s_start_timer);
+    s_start_timer = NULL;
+  }
+}
+
+// Opens the system's listening screen.
+static void listen_now(void) {
+  cancel_start_timer();
+  dictation_session_start(s_dictation);
+}
+
+static void start_timer_fired(void *context) {
+  s_start_timer = NULL;
+  listen_now();
+}
+
+// The listening screen belongs to the system and cannot show our own hints,
+// so explain it first, then open it after a short pause.
 static void start_dictation(void) {
   if (!s_dictation) {
     return;
@@ -226,12 +247,10 @@ static void start_dictation(void) {
   cancel_exit_timer();
   s_waiting = false;
   s_has_suggestion = false;
-  dictation_session_start(s_dictation);
-}
-
-static void start_timer_fired(void *context) {
-  s_start_timer = NULL;
-  start_dictation();
+  text_layer_set_text(s_transcript_layer, "Get ready...");
+  set_status("Speak when the microphone appears, then press Select when done");
+  cancel_start_timer();
+  s_start_timer = app_timer_register(READY_DELAY_MS, start_timer_fired, NULL);
 }
 
 static void select_click(ClickRecognizerRef recognizer, void *context) {
@@ -239,6 +258,11 @@ static void select_click(ClickRecognizerRef recognizer, void *context) {
     // Accept "Did you mean...?": send the phrase as if it had been spoken.
     s_has_suggestion = false;
     send_transcript(s_suggestion);
+    return;
+  }
+  // Select on the "Get ready" screen skips the pause.
+  if (s_start_timer) {
+    listen_now();
     return;
   }
   start_dictation();
@@ -341,6 +365,12 @@ static void quick_window_unload(Window *window) {
 
 static void show_quick_commands(void) {
   s_has_suggestion = false;
+  // Up or Down on the "Get ready" screen picks a quick command instead.
+  if (s_start_timer) {
+    cancel_start_timer();
+    set_prompt();
+    set_status("www.ark-am.com");
+  }
   window_stack_push(s_quick_window, true);
 }
 
@@ -636,16 +666,14 @@ static void init(void) {
   // Opening the app is the request to speak, so start listening right away
   // unless the Settings page says to wait for Select.
   if (s_dictation && s_auto_listen) {
-    s_start_timer = app_timer_register(START_DELAY_MS, start_timer_fired, NULL);
+    start_dictation();
   }
 }
 
 static void deinit(void) {
   cancel_response_timer();
   cancel_exit_timer();
-  if (s_start_timer) {
-    app_timer_cancel(s_start_timer);
-  }
+  cancel_start_timer();
   if (s_dictation) {
     dictation_session_destroy(s_dictation);
   }
