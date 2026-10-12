@@ -26,6 +26,21 @@ enum {
 #define CONFIRM_STORAGE_KEY 3
 #define AFTER_SUCCESS_STORAGE_KEY 4
 #define VIBRATE_STORAGE_KEY 5
+// Quick commands use storage keys 10 to 15, one per slot.
+#define QUICK_STORAGE_KEY_FIRST 10
+
+// Phrases saved on the Settings page that run without speaking. They are sent
+// to the phone exactly as if dictated; an empty slot is hidden.
+#define QUICK_COUNT 6
+#define QUICK_SIZE 64
+static char s_quick[QUICK_COUNT][QUICK_SIZE] = {
+  "Flashlight on",
+  "Flashlight off",
+  "Set a timer for 5 minutes",
+  "Pause",
+  "Next song",
+  "",
+};
 
 static int32_t s_theme = THEME_DARK;
 static bool s_auto_listen = true;
@@ -34,6 +49,8 @@ static int32_t s_after_success = AFTER_SUCCESS_STAY;
 static bool s_vibrate = true;
 
 static Window *s_window;
+static Window *s_quick_window;
+static MenuLayer *s_quick_menu;
 static Layer *s_icon_layer;
 static TextLayer *s_transcript_layer;
 static TextLayer *s_status_layer;
@@ -113,8 +130,8 @@ static void set_status(const char *text) {
 
 static void set_prompt(void) {
   text_layer_set_text(s_transcript_layer, s_dictation
-    ? "Press Select to speak"
-    : "This watch has no microphone");
+    ? "Select: speak\nUp: quick commands"
+    : "No microphone\nUp: quick commands");
 }
 
 static void cancel_response_timer(void) {
@@ -227,13 +244,122 @@ static void select_click(ClickRecognizerRef recognizer, void *context) {
   start_dictation();
 }
 
+static uint16_t quick_count(void) {
+  uint16_t count = 0;
+  for (int i = 0; i < QUICK_COUNT; i++) {
+    if (s_quick[i][0]) {
+      count++;
+    }
+  }
+  return count;
+}
+
+// The phrase shown in a row: the row-th filled slot, skipping empty ones.
+static const char *quick_at(uint16_t row) {
+  for (int i = 0; i < QUICK_COUNT; i++) {
+    if (s_quick[i][0] && row-- == 0) {
+      return s_quick[i];
+    }
+  }
+  return NULL;
+}
+
+static uint16_t quick_get_num_rows(MenuLayer *menu_layer,
+                                   uint16_t section_index,
+                                   void *context) {
+  const uint16_t count = quick_count();
+  // With nothing saved, one row explains where to add them.
+  return count ? count : 1;
+}
+
+static int16_t quick_get_cell_height(MenuLayer *menu_layer,
+                                     MenuIndex *cell_index,
+                                     void *context) {
+  return PBL_IF_ROUND_ELSE(52, 48);
+}
+
+static void quick_draw_row(GContext *ctx,
+                           const Layer *cell_layer,
+                           MenuIndex *cell_index,
+                           void *context) {
+  const char *text = quick_count()
+    ? quick_at(cell_index->row)
+    : "Add quick commands in the Pebble app's settings";
+  const GRect bounds = layer_get_bounds(cell_layer);
+  const int16_t inset = PBL_IF_ROUND_ELSE(bounds.size.w / 8, 6);
+  const GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
+  const GTextAlignment alignment = PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft);
+  // Two lines fit, so most phrases show in full; centre one or two lines.
+  GRect box = GRect(inset, 0, bounds.size.w - inset * 2, bounds.size.h - 4);
+  const GSize size = graphics_text_layout_get_content_size(
+    text, font, box, GTextOverflowModeTrailingEllipsis, alignment);
+  // Gothic glyphs sit low in their line box, so lift the text a little.
+  box.origin.y = (bounds.size.h - size.h) / 2 - 3;
+  box.size.h = size.h + 4;
+  graphics_draw_text(ctx, text, font, box, GTextOverflowModeTrailingEllipsis, alignment, NULL);
+}
+
+static void quick_select(MenuLayer *menu_layer,
+                         MenuIndex *cell_index,
+                         void *context) {
+  const char *phrase = quick_at(cell_index->row);
+  window_stack_remove(s_quick_window, true);
+  if (!phrase) {
+    return;
+  }
+  // Runs straight away: choosing it from the list is the confirmation.
+  cancel_exit_timer();
+  s_has_suggestion = false;
+  snprintf(s_transcript, sizeof(s_transcript), "\"%s\"", phrase);
+  text_layer_set_text(s_transcript_layer, s_transcript);
+  send_transcript(phrase);
+}
+
+static void quick_window_load(Window *window) {
+  Layer *root = window_get_root_layer(window);
+  window_set_background_color(window, background_color());
+
+  s_quick_menu = menu_layer_create(layer_get_bounds(root));
+  menu_layer_set_callbacks(s_quick_menu, NULL, (MenuLayerCallbacks) {
+    .get_num_rows = quick_get_num_rows,
+    .get_cell_height = quick_get_cell_height,
+    .draw_row = quick_draw_row,
+    .select_click = quick_select,
+  });
+  menu_layer_set_normal_colors(s_quick_menu, background_color(), text_color());
+  menu_layer_set_highlight_colors(s_quick_menu,
+                                  PBL_IF_COLOR_ELSE(accent_color(), text_color()),
+                                  PBL_IF_COLOR_ELSE(GColorBlack, background_color()));
+  menu_layer_set_click_config_onto_window(s_quick_menu, window);
+  layer_add_child(root, menu_layer_get_layer(s_quick_menu));
+}
+
+static void quick_window_unload(Window *window) {
+  menu_layer_destroy(s_quick_menu);
+  s_quick_menu = NULL;
+}
+
+static void show_quick_commands(void) {
+  s_has_suggestion = false;
+  window_stack_push(s_quick_window, true);
+}
+
+static void up_click(ClickRecognizerRef recognizer, void *context) {
+  show_quick_commands();
+}
+
 static void down_click(ClickRecognizerRef recognizer, void *context) {
-  // Turn down a suggestion and say it again; otherwise the same as Select.
-  start_dictation();
+  // While "Did you mean...?" is showing, Down turns it down and listens again.
+  if (s_has_suggestion) {
+    start_dictation();
+    return;
+  }
+  show_quick_commands();
 }
 
 static void click_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_SELECT, select_click);
+  window_single_click_subscribe(BUTTON_ID_UP, up_click);
   window_single_click_subscribe(BUTTON_ID_DOWN, down_click);
 }
 
@@ -269,6 +395,11 @@ static void load_settings(void) {
   }
   if (persist_exists(VIBRATE_STORAGE_KEY)) {
     s_vibrate = persist_read_bool(VIBRATE_STORAGE_KEY);
+  }
+  for (int i = 0; i < QUICK_COUNT; i++) {
+    if (persist_exists(QUICK_STORAGE_KEY_FIRST + i)) {
+      persist_read_string(QUICK_STORAGE_KEY_FIRST + i, s_quick[i], QUICK_SIZE);
+    }
   }
 }
 
@@ -308,6 +439,22 @@ static bool apply_settings(DictionaryIterator *iterator) {
     found = true;
     s_vibrate = tuple_int(tuple) != 0;
     persist_write_bool(VIBRATE_STORAGE_KEY, s_vibrate);
+  }
+
+  const uint32_t quick_keys[QUICK_COUNT] = {
+    MESSAGE_KEY_QUICK_1, MESSAGE_KEY_QUICK_2, MESSAGE_KEY_QUICK_3,
+    MESSAGE_KEY_QUICK_4, MESSAGE_KEY_QUICK_5, MESSAGE_KEY_QUICK_6,
+  };
+  for (int i = 0; i < QUICK_COUNT; i++) {
+    tuple = dict_find(iterator, quick_keys[i]);
+    if (tuple && tuple->type == TUPLE_CSTRING) {
+      found = true;
+      snprintf(s_quick[i], QUICK_SIZE, "%s", tuple->value->cstring);
+      persist_write_string(QUICK_STORAGE_KEY_FIRST + i, s_quick[i]);
+    }
+  }
+  if (s_quick_menu) {
+    menu_layer_reload_data(s_quick_menu);
   }
   return found;
 }
@@ -473,11 +620,18 @@ static void init(void) {
   });
   window_stack_push(s_window, true);
 
+  s_quick_window = window_create();
+  window_set_window_handlers(s_quick_window, (WindowHandlers) {
+    .load = quick_window_load,
+    .unload = quick_window_unload,
+  });
+
   app_message_register_inbox_received(inbox_received);
   app_message_register_inbox_dropped(inbox_dropped);
   app_message_register_outbox_failed(outbox_failed);
-  // A reply can carry both the reply text and a full-length suggestion.
-  app_message_open(REPLY_SIZE + TRANSCRIPT_SIZE + 64, TRANSCRIPT_SIZE + 64);
+  // A reply can carry the reply text and a full-length suggestion, and the
+  // Settings page sends every setting, quick commands included, at once.
+  app_message_open(REPLY_SIZE + TRANSCRIPT_SIZE + 128, TRANSCRIPT_SIZE + 64);
 
   // Opening the app is the request to speak, so start listening right away
   // unless the Settings page says to wait for Select.
@@ -495,6 +649,7 @@ static void deinit(void) {
   if (s_dictation) {
     dictation_session_destroy(s_dictation);
   }
+  window_destroy(s_quick_window);
   window_destroy(s_window);
 }
 

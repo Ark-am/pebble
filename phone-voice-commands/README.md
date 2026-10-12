@@ -21,8 +21,9 @@ Release files and store submission steps are in [PUBLISHING.md](PUBLISHING.md).
 ## Requirements
 
 - A Pebble with a microphone: Pebble Time, Time Steel, Time Round, Pebble 2
-  (not the 2 SE), Pebble 2 Duo, Pebble Time 2 or Pebble Round 2. The original
-  Pebble and Pebble Steel (Aplite) have no microphone and are not supported.
+  (not the 2 SE), Pebble 2 Duo, Pebble Time 2 or Pebble Round 2. On the
+  Pebble 2 SE, which has no microphone, only quick commands work. The original
+  Pebble and Pebble Steel (Aplite) are not supported.
 - An Android 7.0+ phone with a Pebble/Core phone app that supports
   dictation and PebbleKit Android 2.
 - The included Android companion app.
@@ -77,13 +78,27 @@ This is a sideload build signed with the build machine's debug key.
 
 Open **Phone Voice Commands** on the watch. It starts listening straight
 away. Speak, check the transcription on the confirmation screen, and accept
-it. Press **Select** to speak again, or **Back** to leave.
+it. Press **Select** to speak again, **Up** or **Down** for quick commands, or
+**Back** to leave.
 
 The phone's reply appears in the bar at the bottom of the screen. One short
 vibration means the command worked; two mean it did not.
 
 The companion's screen on the phone shows the last command it received and
 the reply it sent. It updates while open, which helps when testing.
+
+## Quick commands
+
+Press **Up** or **Down** to open a list of saved commands and **Select** to
+run one, without speaking. A quick command is sent to the phone exactly as if
+it had been dictated, so anything you can say works, and it runs straight away
+without the confirmation screen. While **Did you mean this?** is showing,
+**Down** still means "speak again".
+
+The list has six slots, set on the Settings page (below). It starts with
+"Flashlight on", "Flashlight off", "Set a timer for 5 minutes", "Pause" and
+"Next song"; an empty slot is hidden. Quick commands also work on watches
+without a microphone, such as the Pebble 2 SE.
 
 ## Did you mean…?
 
@@ -113,6 +128,10 @@ In the Pebble phone app, open **Phone Voice Commands** and tap the settings
 - **When it works**: stay open (default), or return to the watchface two
   seconds after a successful command. A failed command always stays on screen.
 - **Vibrate**: one pulse for success and two for failure; on by default.
+- **Quick commands**: six phrases, written the way you would say them, such
+  as "Call Mom" or "Navigate home". Leave a box empty to hide it. **Move up**
+  under a command swaps it with the one above, to change the order the watch
+  lists them in; the change is sent when you tap **Save**.
 
 The watch keeps these settings between launches.
 
@@ -162,6 +181,7 @@ accepted form.
 | 3 | `REPLY` | phone → watch | Optional text to show, up to 127 bytes |
 | 4–8 | `THEME`, `AUTO_LISTEN`, `CONFIRM`, `AFTER_SUCCESS`, `VIBRATE` | settings page → watch | Settings, sent by Clay in PebbleKit JS |
 | 9 | `SUGGESTION` | phone → watch | With `RESULT` 2, a corrected phrase to offer as "Did you mean…?"; up to 255 bytes |
+| 10–15 | `QUICK_1` … `QUICK_6` | settings page → watch | Quick command phrases, up to 63 bytes each |
 
 The watch app UUID and Android package name are matched:
 

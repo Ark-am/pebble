@@ -34,7 +34,13 @@
       "CONFIRM": 6,
       "AFTER_SUCCESS": 7,
       "VIBRATE": 8,
-      "SUGGESTION": 9
+      "SUGGESTION": 9,
+      "QUICK_1": 10,
+      "QUICK_2": 11,
+      "QUICK_3": 12,
+      "QUICK_4": 13,
+      "QUICK_5": 14,
+      "QUICK_6": 15
     },
     "resources": {
       "media": [

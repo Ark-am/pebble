@@ -77,6 +77,107 @@ module.exports = [
     ]
   },
   {
+    type: 'section',
+    items: [
+      {
+        type: 'heading',
+        defaultValue: 'Quick commands'
+      },
+      {
+        type: 'text',
+        defaultValue: 'Press Up or Down on the watch to pick one of these instead of speaking. ' +
+          'Write each one the way you would say it, such as "Call Mom" or "Navigate home". ' +
+          'It runs as soon as you choose it, without the confirmation screen. ' +
+          'Use Move up to change the order the watch lists them in.'
+      },
+      {
+        type: 'input',
+        messageKey: 'QUICK_1',
+        label: 'Command 1',
+        defaultValue: 'Flashlight on',
+        attributes: {
+          placeholder: 'Empty: not shown',
+          maxlength: 63
+        }
+      },
+      {
+        type: 'input',
+        messageKey: 'QUICK_2',
+        label: 'Command 2',
+        defaultValue: 'Flashlight off',
+        attributes: {
+          placeholder: 'Empty: not shown',
+          maxlength: 63
+        }
+      },
+      {
+        type: 'button',
+        id: 'QUICK_UP_2',
+        defaultValue: '\u25B2 Move up'
+      },
+      {
+        type: 'input',
+        messageKey: 'QUICK_3',
+        label: 'Command 3',
+        defaultValue: 'Set a timer for 5 minutes',
+        attributes: {
+          placeholder: 'Empty: not shown',
+          maxlength: 63
+        }
+      },
+      {
+        type: 'button',
+        id: 'QUICK_UP_3',
+        defaultValue: '\u25B2 Move up'
+      },
+      {
+        type: 'input',
+        messageKey: 'QUICK_4',
+        label: 'Command 4',
+        defaultValue: 'Pause',
+        attributes: {
+          placeholder: 'Empty: not shown',
+          maxlength: 63
+        }
+      },
+      {
+        type: 'button',
+        id: 'QUICK_UP_4',
+        defaultValue: '\u25B2 Move up'
+      },
+      {
+        type: 'input',
+        messageKey: 'QUICK_5',
+        label: 'Command 5',
+        defaultValue: 'Next song',
+        attributes: {
+          placeholder: 'Empty: not shown',
+          maxlength: 63
+        }
+      },
+      {
+        type: 'button',
+        id: 'QUICK_UP_5',
+        defaultValue: '\u25B2 Move up'
+      },
+      {
+        type: 'input',
+        messageKey: 'QUICK_6',
+        label: 'Command 6',
+        defaultValue: '',
+        attributes: {
+          placeholder: 'Empty: not shown',
+          maxlength: 63
+        }
+      },
+      {
+        type: 'button',
+        id: 'QUICK_UP_6',
+        defaultValue: '\u25B2 Move up'
+      }
+    ]
+  },
+  {
     type: 'submit',
     defaultValue: 'Save'
   }
