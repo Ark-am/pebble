@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254">
+  <!-- Same phone, palette and badge placement as phone-dialer-icon.png and phone-sound-mode-icon.png. -->
+  <defs>
+    <mask id="phone">
+      <rect width="1254" height="1254" fill="#fff"/>
+      <rect x="405" y="345" width="442" height="570" rx="24" fill="#000"/>
+      <rect x="548" y="284" width="156" height="27" rx="13.5" fill="#000"/>
+      <circle cx="626" cy="981" r="42" fill="#000"/>
+    </mask>
+  </defs>
+
+  <g transform="translate(-40 0)">
+  <rect x="357" y="235" width="538" height="812" rx="104" fill="#222C34" mask="url(#phone)"/>
+
+  <!-- Microphone -->
+  <g fill="none" stroke="#00C4BD" stroke-linecap="round" stroke-width="40">
+    <path d="M498 585 a118 118 0 0 0 236 0"/>
+    <path d="M616 705 V770 M556 790 H676"/>
+  </g>
+  <rect x="551" y="400" width="130" height="250" rx="65" fill="#00C4BD"/>
+
+  <!-- Speech bubble badge -->
+  <path d="M800 760 H980 a60 60 0 0 1 60 60 V910 a60 60 0 0 1 -60 60 H866 L782 1030 L800 970 a60 60 0 0 1 -60 -60 V820 a60 60 0 0 1 60 -60 Z"
+        fill="#FDB620" stroke="#222C34" stroke-width="24" stroke-linejoin="round" paint-order="stroke"/>
+  <g stroke="#222C34" stroke-linecap="round" stroke-width="26">
+    <path d="M806 850 V880"/>
+    <path d="M848 825 V905"/>
+    <path d="M890 805 V925"/>
+    <path d="M932 825 V905"/>
+    <path d="M974 850 V880"/>
+  </g>
+  </g>
+</svg>

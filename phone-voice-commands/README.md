@@ -6,6 +6,18 @@ The watch turns your speech into text with Pebble dictation and sends the
 text to an Android companion app. The companion works out what you asked for,
 does it, and sends a short reply back to the watch.
 
+## Store artwork
+
+- [App icon](phone-voice-commands-icon.png): 1254 × 1254 transparent artwork
+  in the charcoal, teal and amber style of Phone Dialer and Phone Sound Mode,
+  drawn from [phone-voice-commands-icon.svg](phone-voice-commands-icon.svg).
+  [store/](store/) has it at the store's 144 × 144 and 80 × 80 sizes.
+- [Watch screenshot](phone-voice-commands-screenshot.png): 144 × 168 Basalt
+  capture after "Set a timer for 5 minutes". [store/screenshots/](store/screenshots/)
+  also has the 180 × 180 Chalk capture.
+
+Release files and store submission steps are in [PUBLISHING.md](PUBLISHING.md).
+
 ## Requirements
 
 - A Pebble with a microphone: Pebble Time, Time Steel, Time Round, Pebble 2
