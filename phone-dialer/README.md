@@ -21,9 +21,11 @@ Chalk, Diorite, Emery, Flint and Gabbro.
    **Allow Contacts** for Favorites/Contacts, and **Allow Call history** for
    Recent calls. These permissions are independent; denying call history does
    not disable the keypad or contacts. On Android 12 and newer, also tap
-   **Link your Pebble** under **Call controls** and choose your watch from
-   Android's list; this lets the watch switch a call between the phone, the
-   speaker and Bluetooth.
+   **Link your Pebble** under **Call controls**. Allow **Nearby devices** when
+   asked (it lets the app list your paired Bluetooth devices), choose your
+   watch if a list appears, and confirm. The Pebble must already be paired in
+   the Pebble app; the phone does not need to be discoverable. This lets the
+   watch switch a call between the phone, the speaker and Bluetooth.
 3. Open the PBW with your Pebble/Core phone app and install it on your paired
    watch. The phone app must support PebbleKit Android 2 (as used by Phone
    Sound Mode). Install **both** updated packages.

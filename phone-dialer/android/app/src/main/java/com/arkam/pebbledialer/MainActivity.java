@@ -1,10 +1,14 @@
 package com.arkam.pebbledialer;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothManager;
 import android.companion.AssociationRequest;
 import android.companion.BluetoothDeviceFilter;
-import android.companion.BluetoothLeDeviceFilter;
 import android.companion.CompanionDeviceManager;
 import android.content.Intent;
 import android.content.IntentSender;
@@ -20,6 +24,8 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Pattern;
 
 public final class MainActivity extends Activity {
@@ -38,9 +44,11 @@ public final class MainActivity extends Activity {
     private final Button[] permissionButtons = new Button[PERMISSIONS.length];
     private TextView statusView;
     private Button linkButton;
+    private TextView linkStatus;
 
     private static final int LINK_REQUEST = 100;
-    // The Bluetooth names Pebble watches use, for Android's list of watches.
+    private static final int NEARBY_REQUEST = 101;
+    // The Bluetooth names Pebble watches use, to list them first.
     private static final Pattern PEBBLE_NAME = Pattern.compile("(?i).*(pebble|core).*");
 
     @Override
@@ -100,6 +108,10 @@ public final class MainActivity extends Activity {
             linkButton.setOnClickListener(view -> linkWatch());
             layout.addView(linkButton, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            linkStatus = new TextView(this);
+            linkStatus.setTextSize(14);
+            layout.addView(linkStatus);
         }
 
         TextView help = new TextView(this);
@@ -182,27 +194,97 @@ public final class MainActivity extends Activity {
         boolean linked = linked();
         linkButton.setEnabled(!linked);
         linkButton.setText(linked ? R.string.link_done : R.string.link_button);
+        if (linked) {
+            linkStatus.setText("");
+        }
     }
 
     /**
-     * Asks Android to link the Pebble to this app with the watch profile.
-     * Android shows its own list of Pebble watches; once one is chosen, the
-     * watch profile grants MANAGE_ONGOING_CALLS, and Android then binds
-     * CallControlService to calls, which lets the watch switch their audio.
-     * The watch role is not exclusive, so the Pebble phone app keeps its own.
+     * Links the Pebble to this app with Android's watch profile, which grants
+     * MANAGE_ONGOING_CALLS; Android then binds CallControlService to calls,
+     * which lets the watch switch their audio. The watch role is not exclusive,
+     * so the Pebble phone app keeps its own.
+     *
+     * Android's companion list only includes a device that is already paired
+     * and connected when it is asked for by its exact Bluetooth address; a
+     * Pebble connected to the Pebble app does not advertise, so a search by
+     * name finds nothing. So the paired devices are listed here (which needs
+     * the Nearby devices permission), and the chosen one is linked by address.
      */
+    @SuppressLint("MissingPermission")
     private void linkWatch() {
+        if (!granted(Manifest.permission.BLUETOOTH_CONNECT)) {
+            if (blocked(Manifest.permission.BLUETOOTH_CONNECT)) {
+                startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", getPackageName(), null)));
+            } else {
+                requestPermissions(new String[] { Manifest.permission.BLUETOOTH_CONNECT },
+                        NEARBY_REQUEST);
+            }
+            return;
+        }
+        BluetoothManager bluetooth = getSystemService(BluetoothManager.class);
+        BluetoothAdapter adapter = bluetooth == null ? null : bluetooth.getAdapter();
+        if (adapter == null || !adapter.isEnabled()) {
+            linkStatus.setText(R.string.link_bluetooth_off);
+            return;
+        }
+
+        // Pebble watches first; any other paired device can still be chosen,
+        // in case the watch has been renamed.
+        List<BluetoothDevice> devices = new ArrayList<>();
+        List<BluetoothDevice> pebbles = new ArrayList<>();
+        for (BluetoothDevice device : adapter.getBondedDevices()) {
+            if (isPebble(device)) {
+                pebbles.add(device);
+            }
+        }
+        devices.addAll(pebbles);
+        for (BluetoothDevice device : adapter.getBondedDevices()) {
+            if (!isPebble(device)) {
+                devices.add(device);
+            }
+        }
+        if (devices.isEmpty()) {
+            linkStatus.setText(R.string.link_no_devices);
+            return;
+        }
+        if (pebbles.size() == 1) {
+            associate(pebbles.get(0));
+            return;
+        }
+
+        String[] names = new String[devices.size()];
+        for (int i = 0; i < devices.size(); i++) {
+            String name = devices.get(i).getName();
+            names[i] = name == null || name.isEmpty() ? devices.get(i).getAddress() : name;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.link_choose)
+                .setItems(names, (dialog, which) -> associate(devices.get(which)))
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    @SuppressLint("MissingPermission")
+    private static boolean isPebble(BluetoothDevice device) {
+        String name = device.getName();
+        return name != null && PEBBLE_NAME.matcher(name).matches();
+    }
+
+    /** Asks Android to link this exact device; it then only asks to confirm. */
+    private void associate(BluetoothDevice device) {
         CompanionDeviceManager manager = getSystemService(CompanionDeviceManager.class);
         if (manager == null) {
             return;
         }
         AssociationRequest request = new AssociationRequest.Builder()
                 .addDeviceFilter(new BluetoothDeviceFilter.Builder()
-                        .setNamePattern(PEBBLE_NAME).build())
-                .addDeviceFilter(new BluetoothLeDeviceFilter.Builder()
-                        .setNamePattern(PEBBLE_NAME).build())
+                        .setAddress(device.getAddress()).build())
+                .setSingleDevice(true)
                 .setDeviceProfile(AssociationRequest.DEVICE_PROFILE_WATCH)
                 .build();
+        linkStatus.setText("");
         manager.associate(request, new CompanionDeviceManager.Callback() {
             // Android 13 and newer.
             @Override
@@ -210,7 +292,7 @@ public final class MainActivity extends Activity {
                 showChooser(chooser);
             }
 
-            // Android 12 and older.
+            // Android 12.
             @Override
             @SuppressWarnings("deprecation")
             public void onDeviceFound(IntentSender chooser) {
@@ -219,6 +301,7 @@ public final class MainActivity extends Activity {
 
             @Override
             public void onFailure(CharSequence error) {
+                linkStatus.setText(getString(R.string.link_failed, error));
                 refreshLinkState();
             }
         }, null);
@@ -236,6 +319,16 @@ public final class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode == NEARBY_REQUEST) {
+            getPreferences(MODE_PRIVATE).edit()
+                    .putBoolean(Manifest.permission.BLUETOOTH_CONNECT, true).apply();
+            if (granted(Manifest.permission.BLUETOOTH_CONNECT)) {
+                linkWatch();
+            } else {
+                linkStatus.setText(R.string.link_nearby_needed);
+            }
+            return;
+        }
         // An empty result means the prompt was interrupted; it is safe to ask again.
         for (int i = 0; i < Math.min(permissions.length, results.length); i++) {
             getPreferences(MODE_PRIVATE).edit().putBoolean(permissions[i], true).apply();
