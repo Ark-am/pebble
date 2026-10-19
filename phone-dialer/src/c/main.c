@@ -246,6 +246,14 @@ static time_t s_call_status_until;
 static bool s_call_ticking;
 static Layer *s_call_audio_layer;
 static Layer *s_call_mute_layer;
+// The contact's picture on the call screen (Pebble Time 2 and Pebble Round 2):
+// their photo when the phone sends one, otherwise their initials or a person.
+static Layer *s_call_avatar_layer;
+static int16_t s_avatar_size;
+#if defined(PBL_COLOR)
+static GBitmap *s_avatar_bitmap;
+static bool s_avatar_ready;
+#endif
 
 typedef enum {
   CALL_CONFIRM,   // Placing the call failed to start; Select (or Call) retries.
@@ -1079,9 +1087,13 @@ static void call_layout(void) {
 
   // The single button along the bottom: Call on the confirmation, End during
   // the call.
+  // Round screens move End a little lower during a call, to make room for the
+  // contact's picture.
+  const int16_t end_y = PBL_IF_ROUND_ELSE(h * (call_in_progress() && s_avatar_size ? 74 : 71) / 100,
+                                          h - 46);
   layer_set_frame(s_call_button_layer,
-                  PBL_IF_ROUND_ELSE(GRect(w * 26 / 100, h * 71 / 100, w * 48 / 100, 38),
-                                    GRect(w / 5, h - 46, w * 3 / 5, 38)));
+                  PBL_IF_ROUND_ELSE(GRect(w * 26 / 100, end_y, w * 48 / 100, 38),
+                                    GRect(w / 5, end_y, w * 3 / 5, 38)));
 
   if (call_in_progress()) {
     // Mute and Audio along the top, End (Down) at the bottom, and the call in
@@ -1099,8 +1111,12 @@ static void call_layout(void) {
     const int16_t status_h = MIN(44, text_layer_get_content_size(s_call_status_layer).h + 4);
     const int16_t top = audio.origin.y + audio.size.h + 2;
     const int16_t bottom = layer_get_frame(s_call_button_layer).origin.y;
-    const int16_t block = status_h + 30 + (number ? 24 : 0);
-    const int16_t y = top + MAX(0, (bottom - top - block) / 2);
+    const int16_t avatar = s_avatar_size ? s_avatar_size + 4 : 0;
+    const int16_t block = avatar + status_h + 30 + (number ? 24 : 0);
+    int16_t y = top + MAX(0, (bottom - top - block) / 2);
+    layer_set_frame(s_call_avatar_layer,
+                    GRect((w - s_avatar_size) / 2, y, s_avatar_size, s_avatar_size));
+    y += avatar;
     layer_set_frame(status, GRect(inset, y, width, status_h));
     layer_set_frame(name, GRect(inset, y + status_h, width, 30));
     layer_set_frame(number_line, GRect(inset, y + status_h + 28, width, 24));
@@ -1115,6 +1131,7 @@ static void call_layout(void) {
   layer_set_hidden(s_call_button_layer, !button);
   layer_set_hidden(s_call_audio_layer, !call_in_progress());
   layer_set_hidden(s_call_mute_layer, !call_in_progress());
+  layer_set_hidden(s_call_avatar_layer, !call_in_progress() || !s_avatar_size);
   layer_mark_dirty(s_call_button_layer);
   layer_mark_dirty(s_call_audio_layer);
   layer_mark_dirty(s_call_mute_layer);
@@ -1166,6 +1183,7 @@ static void call_handle_reply(int32_t result, DictionaryIterator *iterator) {
     s_call_name[sizeof(s_call_name) - 1] = '\0';
     text_layer_set_font(s_call_name_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
     text_layer_set_text(s_call_name_layer, s_call_name);
+    layer_mark_dirty(s_call_avatar_layer);
   }
   const Tuple *number = dict_find(iterator, MESSAGE_KEY_NUMBER);
   if (number && number->type == TUPLE_CSTRING && (s_call_source != -1 || named)) {
@@ -1268,6 +1286,134 @@ static void call_audio_draw(Layer *layer, GContext *ctx) {
                      GRect(0, bounds.size.h / 2 - 13, bounds.size.w - hint, 22),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
   draw_button_hint(ctx, bounds, true, s_theme.key_text);
+}
+
+// Up to two initials from a name ("Afsana Mimi" is "AM"), from the first
+// letter of the first and last words. Names that do not start with a Latin
+// letter (or numbers) have none, and get a person instead.
+static bool call_initials(const char *name, char *out) {
+  char first = 0;
+  char last = 0;
+  bool word_start = true;
+  for (const char *c = name; *c; c++) {
+    if (*c == ' ') {
+      word_start = true;
+      continue;
+    }
+    if (word_start) {
+      const char letter = (*c >= 'a' && *c <= 'z') ? *c - 'a' + 'A' : *c;
+      const bool latin = letter >= 'A' && letter <= 'Z';
+      if (!first) {
+        if (!latin) {
+          return false;
+        }
+        first = letter;
+      } else if (latin) {
+        last = letter;
+      }
+      word_start = false;
+    }
+  }
+  out[0] = first;
+  out[1] = last;
+  out[2] = '\0';
+  return first != 0;
+}
+
+// The contact's picture: their photo, or a coloured circle with their
+// initials (the colour comes from the name, so it is the same every time),
+// or a person when there is no name to take initials from.
+static void call_avatar_draw(Layer *layer, GContext *ctx) {
+  const GRect bounds = layer_get_bounds(layer);
+  const GPoint c = grect_center_point(&bounds);
+  const int16_t radius = bounds.size.w / 2;
+#if defined(PBL_COLOR)
+  if (s_avatar_ready && s_avatar_bitmap) {
+    // Corners outside the circle are transparent in the photo.
+    graphics_context_set_compositing_mode(ctx, GCompOpSet);
+    graphics_draw_bitmap_in_rect(ctx, s_avatar_bitmap, bounds);
+    return;
+  }
+#endif
+  char initials[3];
+  if (call_initials(s_call_name, initials)) {
+#if defined(PBL_COLOR)
+    static const uint8_t palette[] = {
+      GColorCobaltBlueARGB8, GColorIslamicGreenARGB8, GColorWindsorTanARGB8,
+      GColorImperialPurpleARGB8, GColorJaegerGreenARGB8, GColorDukeBlueARGB8,
+      GColorOrangeARGB8, GColorPurpleARGB8,
+    };
+    uint32_t hash = 0;
+    for (const char *ch = s_call_name; *ch; ch++) {
+      hash = hash * 31 + (uint8_t)*ch;
+    }
+    graphics_context_set_fill_color(ctx, (GColor) { .argb = palette[hash % ARRAY_LENGTH(palette)] });
+    graphics_context_set_text_color(ctx, GColorWhite);
+#else
+    graphics_context_set_fill_color(ctx, s_theme.text);
+    graphics_context_set_text_color(ctx, s_theme.background);
+#endif
+    graphics_fill_circle(ctx, c, radius);
+    const GFont font = fonts_get_system_font(bounds.size.w >= 56 ? FONT_KEY_GOTHIC_28_BOLD
+                                                                 : FONT_KEY_GOTHIC_24_BOLD);
+    const GSize text = graphics_text_layout_get_content_size(
+      initials, font, bounds, GTextOverflowModeFill, GTextAlignmentCenter);
+    graphics_draw_text(ctx, initials, font,
+                       GRect(0, c.y - text.h / 2 - text.h / 5, bounds.size.w, text.h + 4),
+                       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+    return;
+  }
+
+  // A person: head and shoulders in the key colours.
+  graphics_context_set_fill_color(ctx, s_theme.key);
+  graphics_fill_circle(ctx, c, radius);
+  graphics_context_set_fill_color(ctx, s_theme.key_text);
+  graphics_fill_circle(ctx, GPoint(c.x, c.y - radius / 4), radius * 3 / 10);
+  graphics_fill_rect(ctx, GRect(c.x - radius / 2, c.y + radius / 8, radius, radius / 2),
+                     radius / 4, GCornersTop);
+}
+
+#if defined(PBL_COLOR)
+// A piece of the contact's photo from the phone: rows of pixels in Pebble's
+// 8-bit colour format (2 bits each of alpha, red, green, blue), sent in
+// order. The photo shows once the last piece arrives.
+static void call_avatar_piece(DictionaryIterator *iterator) {
+  const Tuple *size = dict_find(iterator, MESSAGE_KEY_AVATAR_SIZE);
+  const Tuple *offset = dict_find(iterator, MESSAGE_KEY_AVATAR_OFFSET);
+  const Tuple *data = dict_find(iterator, MESSAGE_KEY_AVATAR_DATA);
+  if (!s_call_window || !call_in_progress() || !s_avatar_size || !size || !offset || !data ||
+      size->value->int32 != s_avatar_size || data->type != TUPLE_BYTE_ARRAY) {
+    return;
+  }
+  if (!s_avatar_bitmap) {
+    s_avatar_bitmap = gbitmap_create_blank(GSize(s_avatar_size, s_avatar_size), GBitmapFormat8Bit);
+    if (!s_avatar_bitmap) {
+      return;
+    }
+  }
+  uint8_t *pixels = gbitmap_get_data(s_avatar_bitmap);
+  const uint16_t stride = gbitmap_get_bytes_per_row(s_avatar_bitmap);
+  const int32_t total = s_avatar_size * s_avatar_size;
+  const uint8_t *bytes = data->value->data;
+  int32_t at = offset->value->int32;
+  for (uint16_t i = 0; i < data->length && at >= 0 && at < total; i++, at++) {
+    pixels[(at / s_avatar_size) * stride + at % s_avatar_size] = bytes[i];
+  }
+  if (dict_find(iterator, MESSAGE_KEY_AVATAR_DONE)) {
+    s_avatar_ready = true;
+    layer_mark_dirty(s_call_avatar_layer);
+  }
+}
+#endif
+
+static void call_avatar_reset(void) {
+#if defined(PBL_COLOR)
+  if (s_avatar_bitmap) {
+    gbitmap_destroy(s_avatar_bitmap);
+    s_avatar_bitmap = NULL;
+  }
+  s_avatar_ready = false;
+#endif
 }
 
 // The mute button: a microphone, crossed out and red-orange while muted.
@@ -1419,6 +1565,11 @@ static void call_window_load(Window *window) {
   s_call_mute_layer = layer_create(GRect(0, 0, 0, 0));
   layer_set_update_proc(s_call_mute_layer, call_mute_draw);
   layer_add_child(root, s_call_mute_layer);
+  // Only the tall colour screens have room for a picture under the call controls.
+  s_avatar_size = PBL_IF_COLOR_ELSE(bounds.size.h >= 200 ? PBL_IF_ROUND_ELSE(48, 64) : 0, 0);
+  s_call_avatar_layer = layer_create(GRect(0, 0, 0, 0));
+  layer_set_update_proc(s_call_avatar_layer, call_avatar_draw);
+  layer_add_child(root, s_call_avatar_layer);
 
   call_layout();
 }
@@ -1445,8 +1596,11 @@ static void call_window_unload(Window *window) {
   layer_destroy(s_call_button_layer);
   layer_destroy(s_call_audio_layer);
   layer_destroy(s_call_mute_layer);
+  layer_destroy(s_call_avatar_layer);
+  call_avatar_reset();
   s_call_audio_layer = NULL;
   s_call_mute_layer = NULL;
+  s_call_avatar_layer = NULL;
   gpath_destroy(s_call_icon_path);
   gpath_destroy(s_hangup_icon_path);
   s_call_status_layer = NULL;
@@ -1474,6 +1628,11 @@ static void call_submit(ClickRecognizerRef recognizer, void *context) {
   } else {
     dict_write_cstring(iterator, MESSAGE_KEY_ITEM_ID, s_call_entry.id);
     dict_write_int32(iterator, MESSAGE_KEY_LIST, s_call_source);
+  }
+  if (s_avatar_size) {
+    // Ask for the contact's photo at this size, in pieces that fit the inbox.
+    dict_write_int32(iterator, MESSAGE_KEY_AVATAR_SIZE, s_avatar_size);
+    dict_write_int32(iterator, MESSAGE_KEY_CAPACITY, s_inbox_size - INBOX_OVERHEAD);
   }
   if (!send_request(&error)) {
     call_show_error(error);
@@ -1628,6 +1787,7 @@ static void call_window_push(const Entry *entry, int32_t source) {
   s_audio_route = 0;
   s_audio_routes = 0;
   s_audio_muted = false;
+  call_avatar_reset();
   s_call_connected_at = 0;
   s_call_on_hold = false;
   s_call_status_until = 0;
@@ -2026,6 +2186,13 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
     call_status_changed(call_status->value->int32, seconds ? seconds->value->int32 : 0);
     return;
   }
+#if defined(PBL_COLOR)
+  // And the contact's photo, in pieces.
+  if (dict_find(iterator, MESSAGE_KEY_AVATAR_DATA)) {
+    call_avatar_piece(iterator);
+    return;
+  }
+#endif
   // And audio output updates during that call.
   const Tuple *routes = dict_find(iterator, MESSAGE_KEY_AUDIO_ROUTES);
   if (routes) {

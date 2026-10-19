@@ -6,6 +6,7 @@ Favorites shows your starred contacts, and Contacts is grouped from A to Z so yo
 
 Key features during a call, your watch becomes a remote:
 - See who you're calling and their number, even for a number typed on the keypad that belongs to a contact
+- On Pebble Time 2 and Pebble Round 2, see the contact's photo, or their initials when they have no photo
 - Watch the call go from Calling to Connected with a running timer
 - Switch the sound between the phone, the speaker, and a Bluetooth device
 - Mute and unmute your microphone

@@ -63,6 +63,13 @@ public final class DialerService extends BaseJavaPebbleListenerService {
     private static final int KEY_CALL_STATUS = 30;
     private static final int KEY_CALL_SECONDS = 31;
     private static final int KEY_CALL_NAME = 32;
+    private static final int KEY_AVATAR_SIZE = 33;
+    private static final int KEY_AVATAR_OFFSET = 34;
+    private static final int KEY_AVATAR_DATA = 35;
+    private static final int KEY_AVATAR_DONE = 36;
+    // Room in each photo message for the keys other than the pixels.
+    private static final int AVATAR_MESSAGE_OVERHEAD = 48;
+    private static final int MAX_AVATAR_SIZE = 96;
 
     private static final int REQUEST_LIST = 1;
     private static final int REQUEST_CALL = 2;
@@ -228,7 +235,14 @@ public final class DialerService extends BaseJavaPebbleListenerService {
                     reply = resultMessage(token, result);
                 }
                 reply.put(KEY_COMPANION_VERSION, new PebbleDictionaryItem.Int32(COMPANION_VERSION));
-                send(watch, token, Collections.singletonList(reply), 0);
+                List<Map<Integer, PebbleDictionaryItem>> messages = new ArrayList<>();
+                messages.add(reply);
+                // The contact's photo, if the watch has room for one, follows the
+                // reply in the same queue so it always arrives after it.
+                if (result == RESULT_OK && lastDialedNumber != null) {
+                    messages.addAll(avatarMessages(lastDialedNumber, requestData));
+                }
+                send(watch, token, messages, 0);
             }
         });
     }
@@ -374,6 +388,53 @@ public final class DialerService extends BaseJavaPebbleListenerService {
             Log.e(TAG, "Could not place the call", error);
             return RESULT_FAILED;
         }
+    }
+
+    /**
+     * The contact's photo as watch messages: the pixels in pieces that fit
+     * the watch's inbox, the last one marked done. Empty when the watch did
+     * not ask (no room on its screen), or the number has no contact photo.
+     */
+    private List<Map<Integer, PebbleDictionaryItem>> avatarMessages(
+            String number, Map<Integer, PebbleDictionaryItem> request) {
+        List<Map<Integer, PebbleDictionaryItem>> messages = new ArrayList<>();
+        int size = intValue(request.get(KEY_AVATAR_SIZE), 0);
+        if (size <= 0 || size > MAX_AVATAR_SIZE
+                || checkSelfPermission(Manifest.permission.READ_CONTACTS)
+                != PackageManager.PERMISSION_GRANTED) {
+            return messages;
+        }
+        byte[] pixels;
+        try {
+            android.graphics.Bitmap photo = ContactDirectory.photoFor(this, number);
+            if (photo == null) {
+                return messages;
+            }
+            pixels = AvatarImage.toPebble(photo, size);
+            photo.recycle();
+        }
+        catch (RuntimeException error) {
+            Log.w(TAG, "Could not prepare the contact photo", error);
+            return messages;
+        }
+
+        int capacity = clamp(intValue(request.get(KEY_CAPACITY), MIN_CAPACITY),
+                MIN_CAPACITY, MAX_CAPACITY);
+        int piece = capacity - AVATAR_MESSAGE_OVERHEAD;
+        for (int offset = 0; offset < pixels.length; offset += piece) {
+            int length = Math.min(piece, pixels.length - offset);
+            byte[] data = new byte[length];
+            System.arraycopy(pixels, offset, data, 0, length);
+            Map<Integer, PebbleDictionaryItem> message = new HashMap<>();
+            message.put(KEY_AVATAR_SIZE, new PebbleDictionaryItem.Int32(size));
+            message.put(KEY_AVATAR_OFFSET, new PebbleDictionaryItem.Int32(offset));
+            message.put(KEY_AVATAR_DATA, new PebbleDictionaryItem.Bytes(data));
+            if (offset + length >= pixels.length) {
+                message.put(KEY_AVATAR_DONE, new PebbleDictionaryItem.Int32(1));
+            }
+            messages.add(message);
+        }
+        return messages;
     }
 
     /** The contact name for a dialled number, or null without a match or permission. */

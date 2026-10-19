@@ -96,7 +96,11 @@ name, the number, and a red **End** button at the bottom. With the Pebble
 linked, the status follows the call: **Calling** until the other person
 answers, then **Connected** with a timer (0:42), or **On hold** while held.
 Without the link it stays **Calling**. A number typed on the keypad that
-belongs to a contact shows the contact's name, with the number beneath it. Press Select (or tap the
+belongs to a contact shows the contact's name, with the number beneath it.
+On Pebble Time 2 and Pebble Round 2, a round contact picture sits above the
+status: the contact's photo from the phone, or their initials on a coloured
+circle when they have no photo, or a person outline for a number not in
+Contacts. Press Select (or tap the
 microphone) to mute or unmute; while muted it turns red-orange and is crossed
 out. The audio button shows where the call is heard (**Phone**,
 **Speaker**, **Headset** or **Bluetooth**); press Up (or tap it) to move the
@@ -190,6 +194,18 @@ its own clock minus `CALL_SECONDS`, so the two clocks need not agree. Android
 does not report when the other phone starts ringing, so that is still
 "calling". The status uses its own key because watch apps from before it
 treat any `CALL_STATE` as the end of the call.
+
+On watches with room for a picture (Pebble Time 2: 64 pixels; Pebble Round 2:
+48 pixels), call requests also carry `AVATAR_SIZE`. If the contact has a photo
+(`PHOTO_THUMBNAIL_URI` through `PhoneLookup`, which needs the Contacts
+permission), the companion crops it to a square, scales it, adds saturation,
+dithers it to Pebble's 64 colours and clears the corners outside the circle
+(`AvatarImage`). It then sends the pixels after the call reply, one byte per
+pixel in Pebble's 8-bit format, in pieces that fit the watch's inbox: each
+piece has `AVATAR_SIZE`, `AVATAR_OFFSET` (the first pixel) and `AVATAR_DATA`,
+and the last also has `AVATAR_DONE`. The watch draws the photo only once every
+piece has arrived; until then, or without a photo, it shows the initials. Calls
+the phone receives use the Pebble's own call screen, so they show no picture.
 
 Audio updates (`AUDIO_ROUTE`, `AUDIO_ROUTES`, the routes available as a bit
 mask, and `AUDIO_MUTED`) are sent unprompted during that call: when it starts,

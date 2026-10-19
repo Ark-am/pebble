@@ -4,6 +4,8 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Resources;
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.SystemClock;
 import android.provider.ContactsContract.CommonDataKinds.Phone;
@@ -137,6 +139,28 @@ final class ContactDirectory {
             }
         }
         return null;
+    }
+
+    /** The thumbnail photo of the contact with this number, or null if they have none. */
+    static Bitmap photoFor(Context context, String number) {
+        Uri lookup = Uri.withAppendedPath(PhoneLookup.CONTENT_FILTER_URI, Uri.encode(number));
+        String photo = null;
+        try (Cursor cursor = context.getContentResolver().query(
+                lookup, new String[] { PhoneLookup.PHOTO_THUMBNAIL_URI }, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                photo = cursor.getString(0);
+            }
+        }
+        if (photo == null) {
+            return null;
+        }
+        try (java.io.InputStream stream =
+                     context.getContentResolver().openInputStream(Uri.parse(photo))) {
+            return stream == null ? null : BitmapFactory.decodeStream(stream);
+        }
+        catch (java.io.IOException error) {
+            return null;
+        }
     }
 
     private static List<PhoneEntry> query(Context context) {

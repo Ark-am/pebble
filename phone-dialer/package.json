@@ -55,7 +55,11 @@
       "AUDIO_MUTED": 29,
       "CALL_STATUS": 30,
       "CALL_SECONDS": 31,
-      "CALL_NAME": 32
+      "CALL_NAME": 32,
+      "AVATAR_SIZE": 33,
+      "AVATAR_OFFSET": 34,
+      "AVATAR_DATA": 35,
+      "AVATAR_DONE": 36
     },
     "resources": {
       "media": [
