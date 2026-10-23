@@ -86,6 +86,10 @@ See [Android's permission documentation](https://developer.android.com/reference
   call it.
 
 Lists contain 20 rows per page, with **More** and **Previous** for navigation.
+The original Pebble and Pebble Steel (Aplite) have only about 5 KB of memory
+left for the app, so there lists show 10 rows per page, the inbox is 512 bytes,
+and a list covered by another window frees its rows and fetches them again
+when it comes back.
 Contact names are shortened to fit the watch; dialing resolves the full number
 from the phone's current contact or call-log record. No number is derived from
 truncated display text.

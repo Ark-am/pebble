@@ -54,12 +54,19 @@ enum {
 #define FIELD_SEPARATOR '\x1f'
 #define ENTRY_SEPARATOR '\x1e'
 
+// The original Pebble has about 5 KB of memory left for the app, so it gets
+// shorter pages and a smaller inbox; the others have plenty.
+#if defined(PBL_PLATFORM_APLITE)
+#define PAGE_SIZE 10
+#define MAX_INBOX_SIZE 512
+#else
 #define PAGE_SIZE 20
+#define MAX_INBOX_SIZE 2048
+#endif
 #define TITLE_SIZE 32
 #define SUBTITLE_SIZE 32
 #define FILTER_SIZE 4
 #define HEADING_SIZE 20
-#define MAX_INBOX_SIZE 2048
 // Room for the dictionary header and the non-ITEMS tuples in each reply.
 #define INBOX_OVERHEAD 80
 #define OUTBOX_SIZE 128
@@ -194,7 +201,10 @@ typedef struct {
   int32_t select_row_after_load;
   ListState state;
   const char *message;
-  Entry entries[PAGE_SIZE];
+  // PAGE_SIZE entries, allocated when the page is requested. On the original
+  // Pebble they are freed while another window covers the list, and the page
+  // is fetched again when it comes back, so Contacts can open two lists.
+  Entry *entries;
 } ListView;
 
 typedef enum {
@@ -435,6 +445,13 @@ static bool list_shows_message(const ListView *view) {
 }
 
 static void list_request_page(ListView *view, int32_t offset, int32_t select_row) {
+  if (!view->entries) {
+    view->entries = calloc(PAGE_SIZE, sizeof(Entry));
+    if (!view->entries) {
+      list_show_error(view, "Out of memory");
+      return;
+    }
+  }
   view->state = LIST_STATE_LOADING;
   view->message = "Loading...";
   view->offset = offset;
@@ -517,6 +534,9 @@ static void copy_field(char *dest, size_t size, const char *start, const char *e
 // ITEMS holds entries separated by ENTRY_SEPARATOR, each made of
 // "id FIELD_SEPARATOR title FIELD_SEPARATOR subtitle".
 static void list_store_items(ListView *view, int32_t first_index, const char *items) {
+  if (!view->entries) {
+    return;
+  }
   int32_t slot = first_index - view->offset;
   const char *entry = items;
   while (*entry && slot < PAGE_SIZE) {
@@ -811,9 +831,34 @@ static void list_window_load(Window *window) {
   list_apply_theme(view);
   menu_layer_set_click_config_onto_window(view->menu_layer, window);
   layer_add_child(root, menu_layer_get_layer(view->menu_layer));
-
-  list_request_page(view, 0, 0);
 }
+
+// The page is fetched on appear rather than load, so that a list covered by
+// this one has already released its entries.
+static void list_window_appear(Window *window) {
+  ListView *view = window_get_user_data(window);
+  if (!view->entries) {
+    list_request_page(view, view->offset, view->select_row_after_load);
+  }
+}
+
+#if defined(PBL_PLATFORM_APLITE)
+static void list_window_disappear(Window *window) {
+  ListView *view = window_get_user_data(window);
+  // Come back to the same row.
+  view->select_row_after_load = menu_layer_get_selected_index(view->menu_layer).row;
+  if (s_waiting_list == view) {
+    cancel_response_timer();
+    s_waiting_list = NULL;
+    abandon_request();
+  }
+  view->state = LIST_STATE_LOADING;
+  view->message = "Loading...";
+  view->received = 0;
+  free(view->entries);
+  view->entries = NULL;
+}
+#endif
 
 static void list_window_unload(Window *window) {
   ListView *view = window_get_user_data(window);
@@ -829,17 +874,28 @@ static void list_window_unload(Window *window) {
   }
   menu_layer_destroy(view->menu_layer);
   window_destroy(window);
+  free(view->entries);
   free(view);
 }
 
+// Memory a list's window and menu layer need. Its entries come later, and
+// running out of room for them only shows "Out of memory".
+#define LIST_WINDOW_MEMORY 800
+
 static void list_window_push(int32_t list, const char *filter) {
+  // Running out part way would crash inside the system, so check first.
+  if (heap_bytes_free() < sizeof(ListView) + LIST_WINDOW_MEMORY) {
+    APP_LOG(APP_LOG_LEVEL_ERROR, "Out of memory for list");
+    vibes_double_pulse();
+    return;
+  }
   ListView *view = calloc(1, sizeof(ListView));
   if (!view) {
-    APP_LOG(APP_LOG_LEVEL_ERROR, "Out of memory for list");
     return;
   }
 
   view->list = list;
+  view->message = "Loading...";
   if (filter) {
     strncpy(view->filter, filter, sizeof(view->filter) - 1);
   }
@@ -862,6 +918,10 @@ static void list_window_push(int32_t list, const char *filter) {
   window_set_user_data(view->window, view);
   window_set_window_handlers(view->window, (WindowHandlers) {
     .load = list_window_load,
+    .appear = list_window_appear,
+#if defined(PBL_PLATFORM_APLITE)
+    .disappear = list_window_disappear,
+#endif
     .unload = list_window_unload,
   });
   window_stack_push(view->window, true);
