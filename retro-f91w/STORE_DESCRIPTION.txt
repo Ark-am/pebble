@@ -6,6 +6,7 @@ Features:
  - Five LCD colours: classic grey, backlit green, blue, amber, or dark with light segments
  - Black, gold or silver case on colour watches
  - Editable brand, model and labels
+ - Show weather, steps, heart rate or battery in place of F-91W, WATER or RESIST
  - 12-hour or 24-hour time, with a PM sign in 12-hour time
  - Optional seconds; note, battery usage increases when the seconds are shown
  - An optional hourly chime that respects Quiet Time

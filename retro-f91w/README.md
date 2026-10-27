@@ -1,9 +1,10 @@
 # Retro F-91W
 
 A digital watchface after the classic Casio F-91W. Inside a blue frame sit the
-brand and model, LIGHT and ALARM CHRONOGRAPH above the LCD, MODE and
-ALARM ON-OFF/24HR below it, and WATER, a boxed red WR, and RESIST along the
-bottom. The LCD shows the time in large seven-segment digits with the seconds
+brand and model, then labels pointing with small red arrows at the Pebble's
+buttons: LIGHT at the top left by Back, MODE at the top right by Up, and
+ALARM ON/OFF below the LCD by Down. WATER, a boxed red WR, and RESIST run along
+the bottom. The LCD shows the time in large seven-segment digits with the seconds
 smaller beside them, a top row with the day and date (or the weather, steps or
 heart rate), and at the left the hourly signal's sign and PM.
 
@@ -17,13 +18,18 @@ does not use the Casio name or logo.
   Dark.
 - **Case:** Black with a blue frame, orange model name and red WR (default),
   Gold or Silver. Colour watches only.
-- **Brand**, **Model**, **Label above the LCD** and **Label at the bottom:** any
-  text (PEBBLE, F-91W, ALARM CHRONOGRAPH and WATER WR RESIST by default); all
-  but the brand can be left empty. A bottom label of three words is set out as
-  on the original, with the middle word in a red box.
+- **Brand**, **Model** and **Label at the bottom:** any text (PEBBLE, F-91W and
+  WATER WR RESIST by default); all but the brand can be left empty. A bottom
+  label of three words is set out as on the original, with the middle word in
+  a red box.
+- **Button labels:** the text by the Back, Up and Down buttons (LIGHT, MODE and
+  ALARM ON/OFF by default); leave one empty to hide it and its arrow.
 - **Top row:** Day and date (default), Weather (a two-letter condition and the
   temperature), Steps, Heart rate (on watches with a sensor), or each in turn,
   changed with a shake of the wrist.
+- **Beside the brand (F-91W)**, **Bottom left (WATER)** and **Bottom right
+  (RESIST):** the printed text (default), or the weather (temperature), steps,
+  heart rate or battery level in its place.
 - **Time format:** the same as the watch (default), 12-hour (with a PM sign in
   the afternoon) or 24-hour.
 - **Show seconds:** off by default. When on, the face updates every second,
@@ -44,9 +50,12 @@ weather, and the watch requests an update every 30 minutes.
 
 ## Drawing
 
-Every digit and letter is drawn from segments rather than a font: seven
-segments for digits and fourteen for letters, each a bar cut to a point at
-both ends.
+Every digit and letter on the LCD is drawn from segments rather than a font:
+seven segments for digits and fourteen for letters, each a bar cut to a point at
+both ends. The model name beside the brand, and anything shown in its place,
+is set in IBM Plex Sans Condensed Bold Italic, bundled in `resources/fonts`
+under the SIL Open Font License (`OFL-IBMPlex.txt`); the rest of the printed
+text uses the watch's own fonts.
 
 ## Build and test
 

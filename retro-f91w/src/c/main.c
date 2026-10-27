@@ -22,7 +22,8 @@
   #define BRAND_FONT FONT_KEY_GOTHIC_28_BOLD
   #define BRAND_PAD 9
   #define BRAND_HEIGHT 20
-  #define MODEL_FONT FONT_KEY_GOTHIC_18_BOLD
+  // The model name is in a bold condensed italic, IBM Plex Sans Condensed.
+  #define MODEL_FONT RESOURCE_ID_FONT_MODEL_LARGE_18
   #define MODEL_PAD 5
   #define MODEL_HEIGHT 13
   #define BOTTOM_FONT FONT_KEY_GOTHIC_18_BOLD
@@ -43,7 +44,7 @@
   #define BRAND_FONT FONT_KEY_GOTHIC_18_BOLD
   #define BRAND_PAD 5
   #define BRAND_HEIGHT 13
-  #define MODEL_FONT FONT_KEY_GOTHIC_14_BOLD
+  #define MODEL_FONT RESOURCE_ID_FONT_MODEL_SMALL_14
   #define MODEL_PAD 4
   #define MODEL_HEIGHT 10
   #define BOTTOM_FONT FONT_KEY_GOTHIC_14_BOLD
@@ -87,6 +88,17 @@ typedef enum {
   TOP_COUNT,
 } TopRow;
 
+// What can show in place of the model name, or the bottom label's first or
+// last word.
+typedef enum {
+  WIDGET_TEXT,  // The printed word itself.
+  WIDGET_WEATHER,
+  WIDGET_STEPS,
+  WIDGET_HEART_RATE,
+  WIDGET_BATTERY,
+  WIDGET_COUNT,
+} Widget;
+
 typedef enum {
   FORMAT_WATCH,  // Whatever the watch is set to.
   FORMAT_12H,
@@ -95,19 +107,28 @@ typedef enum {
 } TimeFormat;
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 2
+#define SETTINGS_VERSION 5
 typedef struct {
   uint8_t version;
   uint8_t lcd;
   uint8_t case_colour;
   char brand[16];
   char model[16];
-  char top_label[32];
+  // The labels by the Back, Up and Down buttons.
+  char light_label[16];
+  char up_label[16];
+  char down_label[24];
   char bottom_label[32];
   bool seconds;
   bool chime;
   uint8_t time_format;
   uint8_t top_row;
+  // What shows in place of the bottom label's first and last words (see
+  // Widget).
+  uint8_t bottom_left;
+  uint8_t bottom_right;
+  // What shows in place of the model name (see Widget).
+  uint8_t model_widget;
 } Settings;
 
 static Settings s_settings;
@@ -117,7 +138,8 @@ typedef struct {
   GColor print;      // Text printed on the case.
   GColor frame;      // The line framing the face plate.
   GColor model;      // The model name beside the brand.
-  GColor badge;      // The middle word of the bottom label, in its box.
+  GColor badge;      // The middle word of the bottom label, in its box, and
+                     // the arrows to the buttons.
   GColor trim;       // The thin border round the LCD.
   GColor lcd;        // The LCD background.
   GColor segment;    // Lit segments.
@@ -127,6 +149,7 @@ static Palette s_palette;
 
 static Window *s_window;
 static Layer *s_canvas;
+static GFont s_model_font;
 
 static int32_t s_temperature = NO_TEMPERATURE;
 static char s_condition[4];
@@ -143,7 +166,9 @@ static void settings_set_defaults(Settings *settings) {
     .case_colour = CASE_BLACK,
     .brand = "PEBBLE",
     .model = "F-91W",
-    .top_label = "ALARM CHRONOGRAPH",
+    .light_label = "LIGHT",
+    .up_label = "MODE",
+    .down_label = "ALARM ON/OFF",
     .bottom_label = "WATER WR RESIST",
     .seconds = false,
     .chime = false,
@@ -227,7 +252,9 @@ static bool use_24h(void) {
 }
 
 static bool weather_wanted(void) {
-  return s_settings.top_row == TOP_WEATHER || s_settings.top_row == TOP_CYCLE;
+  return s_settings.top_row == TOP_WEATHER || s_settings.top_row == TOP_CYCLE
+    || s_settings.bottom_left == WIDGET_WEATHER || s_settings.bottom_right == WIDGET_WEATHER
+    || s_settings.model_widget == WIDGET_WEATHER;
 }
 
 // What the top row shows right now.
@@ -478,12 +505,17 @@ static TopRow next_info(TopRow from) {
 // ---------------------------------------------------------------------------
 // Drawing
 
-static void draw_label(GContext *ctx, const char *text, const char *font_key, GRect box,
-                       int16_t pad, GTextAlignment alignment, GColor colour) {
+static void draw_text_in(GContext *ctx, const char *text, GFont font, GRect box, int16_t pad,
+                         GTextAlignment alignment, GColor colour) {
   graphics_context_set_text_color(ctx, colour);
-  graphics_draw_text(ctx, text, fonts_get_system_font(font_key),
+  graphics_draw_text(ctx, text, font,
                      GRect(box.origin.x, box.origin.y - pad, box.size.w, box.size.h + pad * 2),
                      GTextOverflowModeTrailingEllipsis, alignment, NULL);
+}
+
+static void draw_label(GContext *ctx, const char *text, const char *font_key, GRect box,
+                       int16_t pad, GTextAlignment alignment, GColor colour) {
+  draw_text_in(ctx, text, fonts_get_system_font(font_key), box, pad, alignment, colour);
 }
 
 static int16_t text_width(const char *text, const char *font_key, int16_t height) {
@@ -600,9 +632,49 @@ static void draw_lcd(GContext *ctx, GRect area, const struct tm *t) {
   }
 }
 
+// Fills in what a widget shows in place of a printed word, such as 21°,
+// 5,432 STEPS, 72 BPM or 80%. Returns false for the printed word itself.
+static bool widget_text(Widget widget, char *out, size_t size) {
+  switch (widget) {
+    case WIDGET_WEATHER:
+      if (s_temperature == NO_TEMPERATURE) {
+        snprintf(out, size, "--\xc2\xb0");
+      } else {
+        snprintf(out, size, "%d\xc2\xb0", (int)s_temperature);
+      }
+      return true;
+#if defined(PBL_HEALTH)
+    case WIDGET_STEPS: {
+      const int steps = health_service_sum_today(HealthMetricStepCount);
+      if (steps >= 1000) {
+        snprintf(out, size, "%d,%03d", steps / 1000, steps % 1000);
+      } else {
+        snprintf(out, size, "%d", steps);
+      }
+      return true;
+    }
+    case WIDGET_HEART_RATE: {
+      const HealthValue bpm = health_service_peek_current_value(HealthMetricHeartRateBPM);
+      if (bpm > 0) {
+        snprintf(out, size, "%d BPM", (int)bpm);
+      } else {
+        snprintf(out, size, "-- BPM");
+      }
+      return true;
+    }
+#endif
+    case WIDGET_BATTERY:
+      snprintf(out, size, "%d%%", battery_state_service_peek().charge_percent);
+      return true;
+    default:
+      return false;
+  }
+}
+
 // The bottom label. Three words are set out as on the original: the first at
 // the left, the middle one in a box at the centre in the badge colour, and
-// the last at the right. Anything else is centred.
+// the last at the right. Anything else is centred. The first and last places
+// can show a widget instead of their word.
 static void draw_bottom_label(GContext *ctx, GRect box) {
   const char *text = s_settings.bottom_label;
   char words[3][16];
@@ -627,12 +699,24 @@ static void draw_bottom_label(GContext *ctx, GRect box) {
     count++;
     p += length;
   }
+  char left[16];
+  char right[16];
+  const bool left_widget = widget_text(s_settings.bottom_left, left, sizeof(left));
+  const bool right_widget = widget_text(s_settings.bottom_right, right, sizeof(right));
   if (count != 3) {
     draw_label(ctx, text, BOTTOM_FONT, box, BOTTOM_PAD, GTextAlignmentCenter, s_palette.print);
+    if (left_widget) {
+      draw_label(ctx, left, BOTTOM_FONT, box, BOTTOM_PAD, GTextAlignmentLeft, s_palette.print);
+    }
+    if (right_widget) {
+      draw_label(ctx, right, BOTTOM_FONT, box, BOTTOM_PAD, GTextAlignmentRight, s_palette.print);
+    }
     return;
   }
-  draw_label(ctx, words[0], BOTTOM_FONT, box, BOTTOM_PAD, GTextAlignmentLeft, s_palette.print);
-  draw_label(ctx, words[2], BOTTOM_FONT, box, BOTTOM_PAD, GTextAlignmentRight, s_palette.print);
+  draw_label(ctx, left_widget ? left : words[0], BOTTOM_FONT, box, BOTTOM_PAD,
+             GTextAlignmentLeft, s_palette.print);
+  draw_label(ctx, right_widget ? right : words[2], BOTTOM_FONT, box, BOTTOM_PAD,
+             GTextAlignmentRight, s_palette.print);
   const int16_t width = text_width(words[1], BOTTOM_FONT, BOTTOM_HEIGHT);
   const int16_t centre = box.origin.x + box.size.w / 2;
   const GRect badge = GRect(centre - width / 2 - 4, box.origin.y - 2, width + 8,
@@ -641,6 +725,42 @@ static void draw_bottom_label(GContext *ctx, GRect box) {
   graphics_context_set_stroke_width(ctx, 1);
   graphics_draw_round_rect(ctx, badge, 2);
   draw_label(ctx, words[1], BOTTOM_FONT, box, BOTTOM_PAD, GTextAlignmentCenter, s_palette.badge);
+}
+
+// A small solid arrow pointing left or right, its tip at a point, the way
+// the original points its labels at the buttons.
+static void draw_arrow(GContext *ctx, GPoint tip, bool left, int16_t size) {
+  const int16_t back = tip.x + (left ? 1 : -1) * size * 7 / 10;
+  GPoint points[] = {
+    tip, GPoint(back, tip.y - size / 2), GPoint(back, tip.y + size / 2),
+  };
+  GPathInfo info = { .num_points = ARRAY_LENGTH(points), .points = points };
+  GPath *path = gpath_create(&info);
+  graphics_context_set_fill_color(ctx, s_palette.badge);
+  gpath_draw_filled(ctx, path);
+  gpath_destroy(path);
+}
+
+// A button's label in a row of small print, at the left or right edge, with
+// an arrow pointing past it to the button on that side.
+static void draw_button_label(GContext *ctx, const char *text, GRect row, bool left) {
+  if (!text[0]) {
+    return;
+  }
+  const int16_t arrow = LABEL_HEIGHT;
+  const int16_t centre_y = row.origin.y + LABEL_HEIGHT / 2;
+  const int16_t text_inset = arrow * 7 / 10 + 3;
+  if (left) {
+    draw_arrow(ctx, GPoint(row.origin.x, centre_y), true, arrow);
+    draw_label(ctx, text, LABEL_FONT, GRect(row.origin.x + text_inset, row.origin.y,
+                                            row.size.w - text_inset, LABEL_HEIGHT),
+               LABEL_PAD, GTextAlignmentLeft, s_palette.print);
+  } else {
+    draw_arrow(ctx, GPoint(row.origin.x + row.size.w - 1, centre_y), false, arrow);
+    draw_label(ctx, text, LABEL_FONT, GRect(row.origin.x, row.origin.y,
+                                            row.size.w - text_inset, LABEL_HEIGHT),
+               LABEL_PAD, GTextAlignmentRight, s_palette.print);
+  }
 }
 
 static void canvas_update_proc(Layer *layer, GContext *ctx) {
@@ -683,25 +803,24 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   int16_t y = plate.origin.y + FRAME_PAD + ROW_GAP / 2;
   const int16_t w = inner_w;
 
-  // The brand at the left and the model at the right, on the same baseline.
+  // The brand at the left and the model (or a widget in its place) at the
+  // right, on the same baseline.
   draw_label(ctx, s_settings.brand, BRAND_FONT, GRect(x, y, w, BRAND_HEIGHT), BRAND_PAD,
              GTextAlignmentLeft, s_palette.print);
-  draw_label(ctx, s_settings.model, MODEL_FONT,
+  char model[16];
+  if (!widget_text(s_settings.model_widget, model, sizeof(model))) {
+    strncpy(model, s_settings.model, sizeof(model));
+  }
+  draw_text_in(ctx, model, s_model_font,
              GRect(x, y + BRAND_HEIGHT - MODEL_HEIGHT, w, MODEL_HEIGHT), MODEL_PAD,
              GTextAlignmentRight, s_palette.model);
   y += BRAND_HEIGHT + ROW_GAP;
 
-  // LIGHT at the left, by the light button, and the top label centred.
-  // The label is centred on the plate where it clears LIGHT, and otherwise in
-  // the space after it.
-  draw_label(ctx, "LIGHT", LABEL_FONT, GRect(x, y, w, LABEL_HEIGHT), LABEL_PAD,
-             GTextAlignmentLeft, s_palette.print);
-  const int16_t light_w = text_width("LIGHT", LABEL_FONT, LABEL_HEIGHT) + 4;
-  const int16_t label_w = text_width(s_settings.top_label, LABEL_FONT, LABEL_HEIGHT);
-  const GRect label_box = label_w / 2 <= w / 2 - light_w
-    ? GRect(x, y, w, LABEL_HEIGHT) : GRect(x + light_w, y, w - light_w, LABEL_HEIGHT);
-  draw_label(ctx, s_settings.top_label, LABEL_FONT, label_box, LABEL_PAD,
-             GTextAlignmentCenter, s_palette.print);
+  // Labels by the Pebble's buttons: LIGHT by Back at the top left, and MODE
+  // by Up at the top right.
+  const GRect top_row = GRect(x, y, w, LABEL_HEIGHT);
+  draw_button_label(ctx, s_settings.light_label, top_row, true);
+  draw_button_label(ctx, s_settings.up_label, top_row, false);
   y += LABEL_HEIGHT + ROW_GAP;
 
   // The LCD with its thin border.
@@ -713,11 +832,8 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   draw_lcd(ctx, grect_inset(lcd, GEdgeInsets(TRIM + LCD_PAD)), t);
   y += lcd_h + ROW_GAP;
 
-  // MODE at the left and the alarm button's label at the right.
-  draw_label(ctx, "MODE", LABEL_FONT, GRect(x, y, w, LABEL_HEIGHT), LABEL_PAD,
-             GTextAlignmentLeft, s_palette.print);
-  draw_label(ctx, "ALARM ON-OFF/24HR", LABEL_FONT, GRect(x, y, w, LABEL_HEIGHT), LABEL_PAD,
-             GTextAlignmentRight, s_palette.print);
+  // ALARM ON/OFF by Down at the bottom right.
+  draw_button_label(ctx, s_settings.down_label, GRect(x, y, w, LABEL_HEIGHT), false);
   y += LABEL_HEIGHT + ROW_GAP;
 
   draw_bottom_label(ctx, GRect(x, y, w, BOTTOM_HEIGHT));
@@ -753,6 +869,13 @@ static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
 // show.
 static void subscribe_ticks(void) {
   tick_timer_service_subscribe(s_settings.seconds ? SECOND_UNIT : MINUTE_UNIT, tick_handler);
+}
+
+static void battery_handler(BatteryChargeState state) {
+  if (s_settings.bottom_left == WIDGET_BATTERY || s_settings.bottom_right == WIDGET_BATTERY
+      || s_settings.model_widget == WIDGET_BATTERY) {
+    layer_mark_dirty(s_canvas);
+  }
 }
 
 static void tap_handler(AccelAxisType axis, int32_t direction) {
@@ -802,14 +925,30 @@ static bool read_settings(DictionaryIterator *iterator) {
     s_settings.time_format = tuple_int(tuple) % FORMAT_COUNT;
     changed = true;
   }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_MODEL_WIDGET))) {
+    s_settings.model_widget = tuple_int(tuple) % WIDGET_COUNT;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_BOTTOM_LEFT))) {
+    s_settings.bottom_left = tuple_int(tuple) % WIDGET_COUNT;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_BOTTOM_RIGHT))) {
+    s_settings.bottom_right = tuple_int(tuple) % WIDGET_COUNT;
+    changed = true;
+  }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_TOP_ROW))) {
     s_settings.top_row = tuple_int(tuple) % TOP_COUNT;
     changed = true;
   }
   read_string(iterator, MESSAGE_KEY_BRAND, s_settings.brand, sizeof(s_settings.brand), &changed);
   read_string(iterator, MESSAGE_KEY_MODEL, s_settings.model, sizeof(s_settings.model), &changed);
-  read_string(iterator, MESSAGE_KEY_TOP_LABEL, s_settings.top_label,
-              sizeof(s_settings.top_label), &changed);
+  read_string(iterator, MESSAGE_KEY_LIGHT_LABEL, s_settings.light_label,
+              sizeof(s_settings.light_label), &changed);
+  read_string(iterator, MESSAGE_KEY_UP_LABEL, s_settings.up_label,
+              sizeof(s_settings.up_label), &changed);
+  read_string(iterator, MESSAGE_KEY_DOWN_LABEL, s_settings.down_label,
+              sizeof(s_settings.down_label), &changed);
   read_string(iterator, MESSAGE_KEY_BOTTOM_LABEL, s_settings.bottom_label,
               sizeof(s_settings.bottom_label), &changed);
   return changed;
@@ -883,6 +1022,7 @@ static void load_saved_state(void) {
 
 static void init(void) {
   load_saved_state();
+  s_model_font = fonts_load_custom_font(resource_get_handle(MODEL_FONT));
 
   s_window = window_create();
   window_set_background_color(s_window, GColorBlack);
@@ -894,6 +1034,7 @@ static void init(void) {
 
   subscribe_ticks();
   accel_tap_service_subscribe(tap_handler);
+  battery_state_service_subscribe(battery_handler);
 #if !defined(PBL_PLATFORM_APLITE)
   unobstructed_area_service_subscribe((UnobstructedAreaHandlers) {
     .change = unobstructed_change,
@@ -908,7 +1049,9 @@ static void init(void) {
 static void deinit(void) {
   tick_timer_service_unsubscribe();
   accel_tap_service_unsubscribe();
+  battery_state_service_unsubscribe();
   window_destroy(s_window);
+  fonts_unload_custom_font(s_model_font);
 }
 
 int main(void) {

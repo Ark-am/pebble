@@ -36,12 +36,17 @@
       "CASE_COLOUR",
       "BRAND",
       "MODEL",
-      "TOP_LABEL",
+      "MODEL_WIDGET",
+      "LIGHT_LABEL",
+      "UP_LABEL",
+      "DOWN_LABEL",
       "BOTTOM_LABEL",
       "SECONDS",
       "CHIME",
       "TIME_FORMAT",
       "TOP_ROW",
+      "BOTTOM_LEFT",
+      "BOTTOM_RIGHT",
       "TEMPERATURE_UNIT"
     ],
     "resources": {
@@ -51,6 +56,29 @@
           "name": "IMAGE_MENU_ICON",
           "file": "images/menu_icon.png",
           "menuIcon": true
+        },
+        {
+          "type": "font",
+          "name": "FONT_MODEL_LARGE_18",
+          "file": "fonts/IBMPlexSansCondensed-BoldItalic.ttf",
+          "characterRegex": "[ -~\u00b0]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_MODEL_SMALL_14",
+          "file": "fonts/IBMPlexSansCondensed-BoldItalic.ttf",
+          "characterRegex": "[ -~\u00b0]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
         }
       ]
     }

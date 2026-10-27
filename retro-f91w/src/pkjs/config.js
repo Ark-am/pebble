@@ -1,6 +1,17 @@
 // Settings page, rendered on the phone by Clay. Each messageKey matches one in
 // package.json; the watch reads them in read_settings() in src/c/main.c.
 
+// What can show in place of the model name or a word of the bottom label;
+// values match the
+// Widget enum in src/c/main.c.
+var WIDGETS = [
+          { label: 'The printed text', value: '0' },
+          { label: 'Weather', value: '1' },
+          { label: 'Steps', value: '2' },
+          { label: 'Heart rate', value: '3' },
+          { label: 'Battery', value: '4' }
+        ];
+
 module.exports = [
   {
     type: 'heading',
@@ -65,11 +76,27 @@ module.exports = [
       },
       {
         type: 'input',
-        messageKey: 'TOP_LABEL',
-        label: 'Label above the LCD',
+        messageKey: 'LIGHT_LABEL',
+        label: 'By the Back button (top left)',
         description: 'Leave empty for none.',
-        defaultValue: 'ALARM CHRONOGRAPH',
-        attributes: { maxlength: 30 }
+        defaultValue: 'LIGHT',
+        attributes: { maxlength: 14 }
+      },
+      {
+        type: 'input',
+        messageKey: 'UP_LABEL',
+        label: 'By the Up button (top right)',
+        description: 'Leave empty for none.',
+        defaultValue: 'MODE',
+        attributes: { maxlength: 14 }
+      },
+      {
+        type: 'input',
+        messageKey: 'DOWN_LABEL',
+        label: 'By the Down button (bottom right)',
+        description: 'Leave empty for none.',
+        defaultValue: 'ALARM ON/OFF',
+        attributes: { maxlength: 22 }
       },
       {
         type: 'input',
@@ -101,6 +128,30 @@ module.exports = [
           { label: 'Heart rate', value: '3' },
           { label: 'Each in turn: shake the watch to change', value: '4' }
         ]
+      },
+      {
+        type: 'select',
+        messageKey: 'MODEL_WIDGET',
+        label: 'Beside the brand (F-91W)',
+        description: 'Show information in place of the model name.',
+        defaultValue: '0',
+        options: WIDGETS
+      },
+      {
+        type: 'select',
+        messageKey: 'BOTTOM_LEFT',
+        label: 'Bottom left (WATER)',
+        description: 'Show information in place of the first word of the bottom label.',
+        defaultValue: '0',
+        options: WIDGETS
+      },
+      {
+        type: 'select',
+        messageKey: 'BOTTOM_RIGHT',
+        label: 'Bottom right (RESIST)',
+        description: 'Show information in place of the last word of the bottom label.',
+        defaultValue: '0',
+        options: WIDGETS
       },
       {
         type: 'select',

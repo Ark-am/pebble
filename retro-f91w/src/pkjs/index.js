@@ -34,11 +34,16 @@ function savedSettings() {
   }
 }
 
-// Whether the top row shows the weather, alone or in turn with the others
-// (values 1 and 4, see src/pkjs/config.js).
+// Whether the weather shows anywhere: in the top row, alone or in turn with
+// the others (values 1 and 4), or in place of the model name or a bottom word
+// (value 1); see src/pkjs/config.js.
 function weatherShown() {
-  var row = String(savedSettings().TOP_ROW);
-  return row === '1' || row === '4';
+  var settings = savedSettings();
+  var row = String(settings.TOP_ROW);
+  return row === '1' || row === '4' ||
+    ['MODEL_WIDGET', 'BOTTOM_LEFT', 'BOTTOM_RIGHT'].some(function (key) {
+      return String(settings[key]) === '1';
+    });
 }
 
 function sendWeather(position) {
