@@ -1,0 +1,62 @@
+{
+  "name": "retro-f91w",
+  "author": "ark-am",
+  "version": "1.0.0",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "pebble": {
+    "displayName": "Retro F-91W",
+    "uuid": "99a07f56-ca87-404b-bfe4-9ac34d93d0eb",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": true
+    },
+    "capabilities": [
+      "location",
+      "health",
+      "configurable"
+    ],
+    "messageKeys": [
+      "TEMPERATURE",
+      "CONDITION",
+      "REQUEST_WEATHER",
+      "LCD_COLOUR",
+      "CASE_COLOUR",
+      "BRAND",
+      "MODEL",
+      "TOP_LABEL",
+      "BOTTOM_LABEL",
+      "SECONDS",
+      "GHOST",
+      "CHIME",
+      "TIME_FORMAT",
+      "TOP_ROW",
+      "TEMPERATURE_UNIT"
+    ],
+    "resources": {
+      "media": [
+        {
+          "type": "png",
+          "name": "IMAGE_MENU_ICON",
+          "file": "images/menu_icon.png",
+          "menuIcon": true
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "@rebble/clay": "^1.1.0"
+  }
+}

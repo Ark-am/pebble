@@ -24,6 +24,7 @@ A growing collection of independent apps and watch faces for the Pebble watches.
 | [Gnomon 2](./epoch/) | Classic analog watch-face with turned hour numbers and tapered hands, plus weather, health data, the date, a battery ring, and connection and Quiet Time alerts. Heavily inspired by the Gnomon watch-face. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Meridian](./meridian/) | Analog watch-face with weather, date, battery, connection and Quiet Time alerts, and health data. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Sketchy Weather Analog](./sketchy-weather-analog/) | Pencil-sketch analog watch-face with a hand-drawn weather widget in the centre where the hands stay clear. Inspired by the Sketchy Weather watch-face. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
+| [Retro F-91W](./retro-f91w/) | Digital face after the classic F-91W: a segmented LCD with faint unlit segments, a top row for the date, weather, steps or heart rate, and your own brand and labels, LCD and case colours. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [World Clock](./world-clock/) | Digital face with the current local time being large and at the top. Beside is the date, and below are the times of two other cities. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 
 Follow a project's link for its requirements, build instructions, testing steps, and platform-specific notes, but please try not to follow because we are still new to Python and C languages. 
