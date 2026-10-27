@@ -1,10 +1,12 @@
 # Retro F-91W
 
-A digital watchface after the classic Casio F-91W. Inside a blue frame sit the
-brand and model, then labels pointing with small red arrows at the Pebble's
+A digital watchface after the classic Casio F-91W, laid out from measurements
+of a photo of the original. A blue band with large curved corners frames the
+face plate, with a thin silver line just inside it. The brand and model sit
+above a blue line, then labels pointing with small red arrows at the Pebble's
 buttons: LIGHT at the top left by Back, MODE at the top right by Up, and
-ALARM ON/OFF below the LCD by Down. WATER, a boxed red WR, and RESIST run along
-the bottom. The LCD shows the time in large seven-segment digits with the seconds
+ALARM ON/OFF below the LCD by Down. Along the bottom, below a second blue line,
+run WATER, a red italic WR in a box that the line runs into, and RESIST. The LCD shows the time in large seven-segment digits with the seconds
 smaller beside them, a top row with the day and date (or the weather, steps or
 heart rate), and at the left the hourly signal's sign and PM.
 
@@ -13,10 +15,10 @@ does not use the Casio name or logo.
 
 ## Settings
 
-- **LCD:** Classic grey (default), Backlit green, Blue, Amber, or Dark with
-  light segments. Black-and-white watches show a white LCD, or a black one for
-  Dark.
-- **Case:** Black with a blue frame, orange model name and red WR (default),
+- **LCD:** Classic pale grey-green (default), Classic grey, Backlit green, Blue,
+  Amber, or Dark with light segments. Black-and-white watches show a white LCD,
+  or a black one for Dark.
+- **Case:** Black with a blue frame, olive-gold model name and red WR (default),
   Gold or Silver. Colour watches only.
 - **Brand**, **Model** and **Label at the bottom:** any text (PEBBLE, F-91W and
   WATER WR RESIST by default); all but the brand can be left empty. A bottom

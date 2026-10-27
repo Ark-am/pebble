@@ -31,7 +31,8 @@ module.exports = [
         description: 'On black-and-white watches, every choice but Dark shows a white LCD.',
         defaultValue: '0',
         options: [
-          { label: 'Classic grey', value: '0' },
+          { label: 'Classic pale grey-green', value: '0' },
+          { label: 'Classic grey', value: '5' },
           { label: 'Backlit green', value: '1' },
           { label: 'Blue', value: '2' },
           { label: 'Amber', value: '3' },

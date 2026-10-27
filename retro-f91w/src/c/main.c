@@ -15,28 +15,41 @@
 #define WEATHER_REFRESH_MINUTES 30
 #define NO_TEMPERATURE INT32_MIN
 
+// Sizes, after a photo of the original. The text is set larger than the
+// photo's to stay readable, keeping its proportions to the brand.
 #if PBL_DISPLAY_WIDTH >= 200
   #define LABEL_FONT FONT_KEY_GOTHIC_14
   #define LABEL_PAD 4
   #define LABEL_HEIGHT 10
-  #define BRAND_FONT FONT_KEY_GOTHIC_28_BOLD
-  #define BRAND_PAD 9
-  #define BRAND_HEIGHT 20
-  // The model name is in a bold condensed italic, IBM Plex Sans Condensed.
+  #define BRAND_FONT FONT_KEY_GOTHIC_24_BOLD
+  #define BRAND_PAD 7
+  #define BRAND_HEIGHT 17
+  // The model name (and the WR) is in a bold condensed italic, IBM Plex Sans
+  // Condensed.
   #define MODEL_FONT RESOURCE_ID_FONT_MODEL_LARGE_18
   #define MODEL_PAD 5
   #define MODEL_HEIGHT 13
   #define BOTTOM_FONT FONT_KEY_GOTHIC_18_BOLD
   #define BOTTOM_PAD 5
   #define BOTTOM_HEIGHT 13
-  #define ROW_GAP 4
-  #define FRAME_WIDTH 2
-  #define FRAME_PAD 6
-  #define TRIM 2
-  #define LCD_PAD 5
   #define PM_FONT FONT_KEY_GOTHIC_14_BOLD
   #define PM_PAD 4
   #define PM_HEIGHT 10
+  // The face plate: a blue band, a thin silver line inside it, and blue lines
+  // across the plate.
+  #define BAND_WIDTH 4
+  #define SILVER_INSET 5  // From the middle of the band to the silver line.
+  #define LINE_WIDTH 2
+  // The box round the middle word of the bottom label.
+  #define BOX_PAD 8
+  #define BOX_BELOW 4
+  #define BOX_TOP_RADIUS 2
+  #define BOX_BOTTOM_RADIUS 6
+  #define WORD_GAP 5
+  // The LCD: a thin outline, a dark gap, then the LCD itself.
+  #define LCD_RADIUS 4
+  #define LCD_GAP 3
+  #define LCD_PAD 5
 #else
   #define LABEL_FONT FONT_KEY_GOTHIC_09
   #define LABEL_PAD 2
@@ -47,26 +60,52 @@
   #define MODEL_FONT RESOURCE_ID_FONT_MODEL_SMALL_14
   #define MODEL_PAD 4
   #define MODEL_HEIGHT 10
-  #define BOTTOM_FONT FONT_KEY_GOTHIC_14_BOLD
+  #define BOTTOM_FONT FONT_KEY_GOTHIC_14
   #define BOTTOM_PAD 4
   #define BOTTOM_HEIGHT 10
-  #define ROW_GAP 3
-  #define FRAME_WIDTH 2
-  #define FRAME_PAD 4
-  #define TRIM 1
-  #define LCD_PAD 3
   #define PM_FONT FONT_KEY_GOTHIC_09
   #define PM_PAD 2
   #define PM_HEIGHT 7
+  #define BAND_WIDTH 2
+  #define SILVER_INSET 4
+  #define LINE_WIDTH 2
+  #define BOX_PAD 5
+  #define BOX_BELOW 3
+  #define BOX_TOP_RADIUS 1
+  #define BOX_BOTTOM_RADIUS 4
+  #define WORD_GAP 3
+  #define LCD_RADIUS 3
+  #define LCD_GAP 2
+  #define LCD_PAD 3
 #endif
+
+// Proportions measured from the photo, in thousandths of the plate's width
+// (taken along the middle of the blue band).
+#define CORNER_SIZE 235      // How far each corner's curve reaches along the edges.
+#define LINE_INSET 65        // The ends of the blue lines, in from the band.
+#define LCD_INSET 99         // The LCD's outline, in from the band.
+#define BRAND_CENTRE 310     // The middle of the brand, from the left of the plate.
+#define MODEL_CENTRE 695     // The middle of the model name.
+// The gaps between the rows, from the top of the plate down.
+#define GAP_TO_BRAND 43      // Silver line to the brand.
+#define GAP_TO_TOP_LINE 43   // Brand to the top blue line.
+#define GAP_TO_LABELS 43     // Top line to LIGHT and MODE.
+#define GAP_TO_LCD 22        // LIGHT and MODE to the LCD.
+#define GAP_FROM_LCD 18      // LCD to ALARM ON/OFF.
+#define GAP_TO_BOTTOM_LINE 25
+#define GAP_TO_WORDS 22      // Bottom line to WATER, WR and RESIST.
+#define GAP_TO_SILVER 40     // The bottom label to the silver line.
+// The LCD's outline is at most this many hundredths as tall as it is wide.
+#define LCD_MAX_ASPECT 75
 
 // LCD colours; values match the options in src/pkjs/config.js.
 typedef enum {
-  LCD_CLASSIC,
+  LCD_CLASSIC,  // Pale grey-green.
   LCD_BACKLIT,
   LCD_BLUE,
   LCD_AMBER,
   LCD_DARK,
+  LCD_GREY,     // Plain grey.
   LCD_COUNT,
 } LcdColour;
 
@@ -136,7 +175,8 @@ static Settings s_settings;
 typedef struct {
   GColor body;       // The case.
   GColor print;      // Text printed on the case.
-  GColor frame;      // The line framing the face plate.
+  GColor frame;      // The blue band round the face plate, and the lines.
+  GColor silver;     // The thin line inside the band.
   GColor model;      // The model name beside the brand.
   GColor badge;      // The middle word of the bottom label, in its box, and
                      // the arrows to the buttons.
@@ -184,6 +224,7 @@ static void apply_palette(void) {
       s_palette.body = GColorChromeYellow;
       s_palette.print = GColorBlack;
       s_palette.frame = GColorBlack;
+      s_palette.silver = GColorBlack;
       s_palette.model = GColorBlack;
       s_palette.badge = GColorDarkCandyAppleRed;
       s_palette.trim = GColorBlack;
@@ -192,17 +233,21 @@ static void apply_palette(void) {
       s_palette.body = GColorLightGray;
       s_palette.print = GColorBlack;
       s_palette.frame = GColorDukeBlue;
-      s_palette.model = GColorOrange;
-      s_palette.badge = GColorRed;
+      s_palette.silver = GColorDarkGray;
+      s_palette.model = GColorDukeBlue;
+      s_palette.badge = GColorDarkCandyAppleRed;
       s_palette.trim = GColorDarkGray;
       break;
     default:
-      // As the original: a blue frame, an orange model name and a red badge.
+      // The colours of the original, chosen by how each looks on the
+      // screen next to a photo of it: a blue band and lines, a silver line, an
+      // olive-gold model name, and a deep red WR and arrows.
       s_palette.body = GColorBlack;
       s_palette.print = GColorWhite;
-      s_palette.frame = GColorBlueMoon;
-      s_palette.model = GColorChromeYellow;
-      s_palette.badge = GColorRed;
+      s_palette.frame = GColorBlue;
+      s_palette.silver = GColorLightGray;
+      s_palette.model = GColorLimerick;
+      s_palette.badge = GColorDarkCandyAppleRed;
       s_palette.trim = GColorDarkGray;
       break;
   }
@@ -223,8 +268,13 @@ static void apply_palette(void) {
       s_palette.lcd = GColorBlack;
       s_palette.segment = GColorWhite;
       break;
-    default:
+    case LCD_GREY:
       s_palette.lcd = GColorLightGray;
+      s_palette.segment = GColorBlack;
+      break;
+    default:
+      // The pale grey-green of the original's LCD.
+      s_palette.lcd = GColorMintGreen;
       s_palette.segment = GColorBlack;
       break;
   }
@@ -234,6 +284,7 @@ static void apply_palette(void) {
   s_palette.body = GColorBlack;
   s_palette.print = GColorWhite;
   s_palette.frame = GColorWhite;
+  s_palette.silver = GColorWhite;
   s_palette.model = GColorWhite;
   s_palette.badge = GColorWhite;
   s_palette.trim = GColorWhite;
@@ -518,12 +569,6 @@ static void draw_label(GContext *ctx, const char *text, const char *font_key, GR
   draw_text_in(ctx, text, fonts_get_system_font(font_key), box, pad, alignment, colour);
 }
 
-static int16_t text_width(const char *text, const char *font_key, int16_t height) {
-  return graphics_text_layout_get_content_size(
-    text, fonts_get_system_font(font_key), GRect(0, 0, 400, height * 3),
-    GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft).w;
-}
-
 // The hourly signal's sign, a dot between two pairs of brackets: (( . )).
 static void draw_chime_sign(GContext *ctx, GPoint at, int16_t size) {
   graphics_context_set_stroke_color(ctx, s_palette.segment);
@@ -583,10 +628,14 @@ static void draw_lcd(GContext *ctx, GRect area, const struct tm *t) {
   const bool twenty_four = use_24h();
   const bool seconds = s_settings.seconds;
   const int32_t parts = seconds ? 622 : 502;
+  // Digits are up to twice as tall as wide, like the original's, where there
+  // is room, and never squatter than 1.75 to 1.
   int16_t digit_w = w * 100 / parts;
-  int16_t digit_h = digit_w * 175 / 100;
+  int16_t digit_h = digit_w * 2;
   if (digit_h > time_h) {
     digit_h = time_h;
+  }
+  if (digit_w * 175 / 100 > digit_h) {
     digit_w = digit_h * 100 / 175;
   }
   const int16_t thickness = digit_w * 20 / 100 > 2 ? digit_w * 20 / 100 : 2;
@@ -671,11 +720,143 @@ static bool widget_text(Widget widget, char *out, size_t size) {
   }
 }
 
-// The bottom label. Three words are set out as on the original: the first at
-// the left, the middle one in a box at the centre in the badge colour, and
-// the last at the right. Anything else is centred. The first and last places
-// can show a widget instead of their word.
-static void draw_bottom_label(GContext *ctx, GRect box) {
+// A blue line across the plate, from one x to another.
+static void draw_line_across(GContext *ctx, int16_t left, int16_t right, int16_t y) {
+  graphics_context_set_fill_color(ctx, s_palette.frame);
+  graphics_fill_rect(ctx, GRect(left, y, right - left, LINE_WIDTH), 0, GCornerNone);
+}
+
+// A slim solid arrow pointing left or right, its tip at a point, the way the
+// original points its labels at the buttons.
+static void draw_arrow(GContext *ctx, GPoint tip, bool left, int16_t length, int16_t width) {
+  const int16_t back = tip.x + (left ? 1 : -1) * length;
+  GPoint points[] = {
+    tip, GPoint(back, tip.y - width / 2), GPoint(back, tip.y + width / 2),
+  };
+  GPathInfo info = { .num_points = ARRAY_LENGTH(points), .points = points };
+  GPath *path = gpath_create(&info);
+  graphics_context_set_fill_color(ctx, s_palette.badge);
+  gpath_draw_filled(ctx, path);
+  gpath_destroy(path);
+}
+
+// A button's label in a row of small print, at the left or right edge, with
+// an arrow pointing past it to the button on that side.
+static void draw_button_label(GContext *ctx, const char *text, GRect row, bool left) {
+  if (!text[0]) {
+    return;
+  }
+  // Longer than the text is tall, and about half as wide.
+  const int16_t length = LABEL_HEIGHT * 13 / 10;
+  const int16_t width = LABEL_HEIGHT * 6 / 10 > 4 ? LABEL_HEIGHT * 6 / 10 : 4;
+  const int16_t centre_y = row.origin.y + LABEL_HEIGHT / 2;
+  const int16_t text_inset = length + 3;
+  if (left) {
+    draw_arrow(ctx, GPoint(row.origin.x, centre_y), true, length, width);
+    draw_label(ctx, text, LABEL_FONT, GRect(row.origin.x + text_inset, row.origin.y,
+                                            row.size.w - text_inset, LABEL_HEIGHT),
+               LABEL_PAD, GTextAlignmentLeft, s_palette.print);
+  } else {
+    draw_arrow(ctx, GPoint(row.origin.x + row.size.w - 1, centre_y), false, length, width);
+    draw_label(ctx, text, LABEL_FONT, GRect(row.origin.x, row.origin.y,
+                                            row.size.w - text_inset, LABEL_HEIGHT),
+               LABEL_PAD, GTextAlignmentRight, s_palette.print);
+  }
+}
+
+// The corner curve of the face plate, measured from a photo of the original:
+// a quarter of a "squircle" (|x|^2.65 + |y|^2.65 = 1), from the side of the
+// plate round to its top. Each pair is how far a point lies in from the side
+// and down from the top, in thousandths of the corner's size.
+static const int16_t CORNER_CURVE[][2] = {
+  { 0, 1000 }, { 9, 753 }, { 37, 588 }, { 83, 449 }, { 148, 330 }, { 230, 230 },
+  { 330, 148 }, { 449, 83 }, { 588, 37 }, { 753, 9 }, { 1000, 0 },
+};
+
+// A quarter circle, the same way round, for the WR box's corners.
+static const int16_t QUARTER_CIRCLE[][2] = {
+  { 0, 1000 }, { 76, 617 }, { 293, 293 }, { 617, 76 }, { 1000, 0 },
+};
+
+// How far in from the side a corner of the given size curves, at a distance
+// down from the top (or up from the bottom).
+static int16_t corner_in(int16_t size, int16_t down) {
+  if (size <= 0 || down >= size) {
+    return 0;
+  }
+  const int32_t d = down * 1000 / size;
+  for (int i = 1; i < (int)ARRAY_LENGTH(CORNER_CURVE); i++) {
+    const int32_t d0 = CORNER_CURVE[i - 1][1];
+    const int32_t d1 = CORNER_CURVE[i][1];
+    if (d <= d0 && d >= d1) {
+      const int32_t x0 = CORNER_CURVE[i - 1][0];
+      const int32_t x1 = CORNER_CURVE[i][0];
+      return (x0 + (x1 - x0) * (d0 - d) / (d0 - d1)) * size / 1000;
+    }
+  }
+  return size;
+}
+
+#define MAX_CURVE_STEPS 11
+
+// Outlines a rectangle whose top and bottom corners follow a curve, each of
+// its own size, along the middle of a line of the given width.
+static void draw_rounded_shape(GContext *ctx, GRect rect, const int16_t (*curve)[2],
+                               int steps, int16_t top, int16_t bottom, int16_t width,
+                               GColor colour) {
+  const int16_t l = rect.origin.x;
+  const int16_t t = rect.origin.y;
+  const int16_t r = rect.origin.x + rect.size.w - 1;
+  const int16_t b = rect.origin.y + rect.size.h - 1;
+  GPoint points[4 * MAX_CURVE_STEPS];
+  int n = 0;
+  // Clockwise from the left side: the top left corner, then the top right,
+  // bottom right and bottom left.
+  for (int i = 0; i < steps; i++) {
+    points[n++] = GPoint(l + curve[i][0] * top / 1000, t + curve[i][1] * top / 1000);
+  }
+  for (int i = steps - 1; i >= 0; i--) {
+    points[n++] = GPoint(r - curve[i][0] * top / 1000, t + curve[i][1] * top / 1000);
+  }
+  for (int i = 0; i < steps; i++) {
+    points[n++] = GPoint(r - curve[i][0] * bottom / 1000, b - curve[i][1] * bottom / 1000);
+  }
+  for (int i = steps - 1; i >= 0; i--) {
+    points[n++] = GPoint(l + curve[i][0] * bottom / 1000, b - curve[i][1] * bottom / 1000);
+  }
+  GPathInfo info = { .num_points = n, .points = points };
+  GPath *path = gpath_create(&info);
+  graphics_context_set_stroke_color(ctx, colour);
+  graphics_context_set_stroke_width(ctx, width);
+  gpath_draw_outline(ctx, path);
+  gpath_destroy(path);
+}
+
+// Draws text centred on an x, kept between two limits.
+static void draw_centred_on(GContext *ctx, const char *text, GFont font, int16_t centre,
+                            int16_t min_x, int16_t max_x, int16_t y, int16_t height,
+                            int16_t pad, GColor colour) {
+  const int16_t width = graphics_text_layout_get_content_size(
+    text, font, GRect(0, 0, max_x - min_x, height + pad * 2), GTextOverflowModeTrailingEllipsis,
+    GTextAlignmentLeft).w;
+  int16_t x = centre - width / 2;
+  if (x + width > max_x) {
+    x = max_x - width;
+  }
+  if (x < min_x) {
+    x = min_x;
+  }
+  draw_text_in(ctx, text, font, GRect(x, y, max_x - x, height), pad, GTextAlignmentLeft, colour);
+}
+
+// The bottom row: a blue line across the plate with the bottom label below it.
+// Three words are set out as on the original: the middle one, in the italic,
+// sits in a box whose top meets the line, which runs into the box's sides,
+// and the first and last sit either side of the box. Anything else is centred
+// under an unbroken line. The first and last places can show a widget instead
+// of their word.
+static void draw_bottom_row(GContext *ctx, GRect plate, int16_t line_left, int16_t line_right,
+                            int16_t line_y, int16_t words_y) {
   const char *text = s_settings.bottom_label;
   char words[3][16];
   int count = 0;
@@ -704,63 +885,45 @@ static void draw_bottom_label(GContext *ctx, GRect box) {
   const bool left_widget = widget_text(s_settings.bottom_left, left, sizeof(left));
   const bool right_widget = widget_text(s_settings.bottom_right, right, sizeof(right));
   if (count != 3) {
-    draw_label(ctx, text, BOTTOM_FONT, box, BOTTOM_PAD, GTextAlignmentCenter, s_palette.print);
+    const GRect row = GRect(line_left, words_y, line_right - line_left, BOTTOM_HEIGHT);
+    draw_line_across(ctx, line_left, line_right, line_y);
+    draw_label(ctx, text, BOTTOM_FONT, row, BOTTOM_PAD, GTextAlignmentCenter, s_palette.print);
     if (left_widget) {
-      draw_label(ctx, left, BOTTOM_FONT, box, BOTTOM_PAD, GTextAlignmentLeft, s_palette.print);
+      draw_label(ctx, left, BOTTOM_FONT, row, BOTTOM_PAD, GTextAlignmentLeft, s_palette.print);
     }
     if (right_widget) {
-      draw_label(ctx, right, BOTTOM_FONT, box, BOTTOM_PAD, GTextAlignmentRight, s_palette.print);
+      draw_label(ctx, right, BOTTOM_FONT, row, BOTTOM_PAD, GTextAlignmentRight, s_palette.print);
     }
     return;
   }
-  draw_label(ctx, left_widget ? left : words[0], BOTTOM_FONT, box, BOTTOM_PAD,
-             GTextAlignmentLeft, s_palette.print);
-  draw_label(ctx, right_widget ? right : words[2], BOTTOM_FONT, box, BOTTOM_PAD,
-             GTextAlignmentRight, s_palette.print);
-  const int16_t width = text_width(words[1], BOTTOM_FONT, BOTTOM_HEIGHT);
-  const int16_t centre = box.origin.x + box.size.w / 2;
-  const GRect badge = GRect(centre - width / 2 - 4, box.origin.y - 2, width + 8,
-                            box.size.h + 4);
-  graphics_context_set_stroke_color(ctx, s_palette.badge);
-  graphics_context_set_stroke_width(ctx, 1);
-  graphics_draw_round_rect(ctx, badge, 2);
-  draw_label(ctx, words[1], BOTTOM_FONT, box, BOTTOM_PAD, GTextAlignmentCenter, s_palette.badge);
-}
 
-// A small solid arrow pointing left or right, its tip at a point, the way
-// the original points its labels at the buttons.
-static void draw_arrow(GContext *ctx, GPoint tip, bool left, int16_t size) {
-  const int16_t back = tip.x + (left ? 1 : -1) * size * 7 / 10;
-  GPoint points[] = {
-    tip, GPoint(back, tip.y - size / 2), GPoint(back, tip.y + size / 2),
-  };
-  GPathInfo info = { .num_points = ARRAY_LENGTH(points), .points = points };
-  GPath *path = gpath_create(&info);
-  graphics_context_set_fill_color(ctx, s_palette.badge);
-  gpath_draw_filled(ctx, path);
-  gpath_destroy(path);
-}
+  // The box: its top border just above the line, its bottom a little below
+  // the words, with small corners at the top and larger ones at the bottom.
+  const int16_t word_w = graphics_text_layout_get_content_size(
+    words[1], s_model_font, GRect(0, 0, plate.size.w, MODEL_HEIGHT * 3),
+    GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter).w;
+  const int16_t centre = plate.origin.x + plate.size.w / 2;
+  const int16_t box_top = line_y - 1;
+  const GRect box = GRect(centre - word_w / 2 - BOX_PAD, box_top, word_w + BOX_PAD * 2,
+                          words_y + BOTTOM_HEIGHT + BOX_BELOW - box_top);
+  const int16_t box_right = box.origin.x + box.size.w;
+  draw_line_across(ctx, line_left, box.origin.x, line_y);
+  draw_line_across(ctx, box_right, line_right, line_y);
+  draw_rounded_shape(ctx, box, QUARTER_CIRCLE, ARRAY_LENGTH(QUARTER_CIRCLE), BOX_TOP_RADIUS,
+                     BOX_BOTTOM_RADIUS, 1, s_palette.frame);
+  draw_text_in(ctx, words[1], s_model_font, GRect(box.origin.x, words_y, box.size.w, BOTTOM_HEIGHT),
+               MODEL_PAD, GTextAlignmentCenter, s_palette.badge);
 
-// A button's label in a row of small print, at the left or right edge, with
-// an arrow pointing past it to the button on that side.
-static void draw_button_label(GContext *ctx, const char *text, GRect row, bool left) {
-  if (!text[0]) {
-    return;
-  }
-  const int16_t arrow = LABEL_HEIGHT;
-  const int16_t centre_y = row.origin.y + LABEL_HEIGHT / 2;
-  const int16_t text_inset = arrow * 7 / 10 + 3;
-  if (left) {
-    draw_arrow(ctx, GPoint(row.origin.x, centre_y), true, arrow);
-    draw_label(ctx, text, LABEL_FONT, GRect(row.origin.x + text_inset, row.origin.y,
-                                            row.size.w - text_inset, LABEL_HEIGHT),
-               LABEL_PAD, GTextAlignmentLeft, s_palette.print);
-  } else {
-    draw_arrow(ctx, GPoint(row.origin.x + row.size.w - 1, centre_y), false, arrow);
-    draw_label(ctx, text, LABEL_FONT, GRect(row.origin.x, row.origin.y,
-                                            row.size.w - text_inset, LABEL_HEIGHT),
-               LABEL_PAD, GTextAlignmentRight, s_palette.print);
-  }
+  // The words either side, close to the box.
+  const int16_t plate_right = plate.origin.x + plate.size.w;
+  draw_label(ctx, left_widget ? left : words[0], BOTTOM_FONT,
+             GRect(plate.origin.x, words_y, box.origin.x - WORD_GAP - plate.origin.x,
+                   BOTTOM_HEIGHT),
+             BOTTOM_PAD, GTextAlignmentRight, s_palette.print);
+  draw_label(ctx, right_widget ? right : words[2], BOTTOM_FONT,
+             GRect(box_right + WORD_GAP, words_y, plate_right - box_right - WORD_GAP,
+                   BOTTOM_HEIGHT),
+             BOTTOM_PAD, GTextAlignmentLeft, s_palette.print);
 }
 
 static void canvas_update_proc(Layer *layer, GContext *ctx) {
@@ -772,71 +935,120 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   graphics_context_set_fill_color(ctx, s_palette.body);
   graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
 
-  // Everything sits in a rectangle: the screen less a margin, or the
-  // rectangle that fits inside a round screen.
+  // The face plate is measured along the middle of its blue band. It fills
+  // the screen, its band a pixel from the edges, or on a round screen the
+  // largest square that its curved corners let fit inside the circle.
 #if defined(PBL_ROUND)
-  const int16_t side = bounds.size.w * 76 / 100;
-  const GRect content = GRect(bounds.origin.x + (bounds.size.w - side) / 2,
-                              bounds.origin.y + (bounds.size.h - side * 86 / 100) / 2,
-                              side, side * 86 / 100);
+  const int16_t side = bounds.size.w * 77 / 100;
+  const GRect area = GRect(bounds.origin.x + (bounds.size.w - side) / 2,
+                           bounds.origin.y + (bounds.size.h - side) / 2, side, side);
 #else
-  const GRect content = grect_inset(bounds, GEdgeInsets(3));
+  const GRect area = grect_inset(bounds, GEdgeInsets(1 + BAND_WIDTH / 2));
 #endif
+  const int16_t pw = area.size.w;
+  // A proportion of the plate's width, in thousandths, and at least 2 pixels.
+  #define SCALED(thousandths) (pw * (thousandths) / 1000 > 2 ? pw * (thousandths) / 1000 : 2)
+  int16_t gap_brand = SCALED(GAP_TO_BRAND);
+  int16_t gap_top_line = SCALED(GAP_TO_TOP_LINE);
+  int16_t gap_labels = SCALED(GAP_TO_LABELS);
+  int16_t gap_lcd = SCALED(GAP_TO_LCD);
+  int16_t gap_from_lcd = SCALED(GAP_FROM_LCD);
+  int16_t gap_bottom_line = SCALED(GAP_TO_BOTTOM_LINE);
+  int16_t gap_words = SCALED(GAP_TO_WORDS);
+  int16_t gap_silver = SCALED(GAP_TO_SILVER);
+  const int16_t lcd_inset = SCALED(LCD_INSET);
+  const int16_t line_inset = SCALED(LINE_INSET);
+  const int16_t corner = SCALED(CORNER_SIZE);
+  #undef SCALED
 
-  // The face plate, framed: the brand and model, a row of small print, the
-  // LCD, another row of small print, and the bottom label.
-  const int16_t fixed = BRAND_HEIGHT + LABEL_HEIGHT * 2 + BOTTOM_HEIGHT + ROW_GAP * 5
-    + FRAME_PAD * 2;
-  const int16_t inner_w = content.size.w - FRAME_PAD * 2;
-  int16_t lcd_h = content.size.h - fixed;
-  if (lcd_h > inner_w * 56 / 100) {
-    lcd_h = inner_w * 56 / 100;
+  // The rows have fixed heights and the LCD takes the rest, up to a limit.
+  // Any height beyond that is shared among the gaps, so the plate always fills
+  // its space.
+  const int16_t rows = SILVER_INSET * 2 + BRAND_HEIGHT + LINE_WIDTH * 2 + LABEL_HEIGHT * 2
+    + BOTTOM_HEIGHT;
+  int16_t *const gaps[] = {
+    &gap_brand, &gap_top_line, &gap_labels, &gap_lcd, &gap_from_lcd, &gap_bottom_line,
+    &gap_words, &gap_silver,
+  };
+  int16_t gap_total = 0;
+  for (size_t i = 0; i < ARRAY_LENGTH(gaps); i++) {
+    gap_total += *gaps[i];
   }
-  const GRect plate = GRect(content.origin.x,
-                            content.origin.y + (content.size.h - fixed - lcd_h) / 2,
-                            content.size.w, fixed + lcd_h);
-  graphics_context_set_stroke_color(ctx, s_palette.frame);
-  graphics_context_set_stroke_width(ctx, FRAME_WIDTH);
-  graphics_draw_round_rect(ctx, grect_inset(plate, GEdgeInsets(FRAME_WIDTH / 2)), 5);
+  const int16_t lcd_w = pw - lcd_inset * 2;
+  int16_t lcd_h = area.size.h - rows - gap_total;
+  const int16_t lcd_max = lcd_w * LCD_MAX_ASPECT / 100;
+  if (lcd_h > lcd_max) {
+    const int16_t spare = lcd_h - lcd_max;
+    int16_t shared = 0;
+    for (size_t i = 0; i < ARRAY_LENGTH(gaps); i++) {
+      const int16_t share = spare * *gaps[i] / gap_total;
+      *gaps[i] += share;
+      shared += share;
+    }
+    // What the shares leave over, from rounding, stays with the LCD.
+    lcd_h -= shared;
+  }
+  const GRect plate = area;
 
-  const int16_t x = plate.origin.x + FRAME_PAD;
-  int16_t y = plate.origin.y + FRAME_PAD + ROW_GAP / 2;
-  const int16_t w = inner_w;
+  // The blue band, and the thin silver line inside it.
+  draw_rounded_shape(ctx, plate, CORNER_CURVE, ARRAY_LENGTH(CORNER_CURVE), corner, corner,
+                     BAND_WIDTH, s_palette.frame);
+  draw_rounded_shape(ctx, grect_inset(plate, GEdgeInsets(SILVER_INSET)), CORNER_CURVE,
+                     ARRAY_LENGTH(CORNER_CURVE), corner - SILVER_INSET, corner - SILVER_INSET,
+                     1, s_palette.silver);
 
-  // The brand at the left and the model (or a widget in its place) at the
-  // right, on the same baseline.
-  draw_label(ctx, s_settings.brand, BRAND_FONT, GRect(x, y, w, BRAND_HEIGHT), BRAND_PAD,
-             GTextAlignmentLeft, s_palette.print);
+  const int16_t left = plate.origin.x;
+  const int16_t right = plate.origin.x + pw;
+  const int16_t middle = left + pw / 2;
+  int16_t y = plate.origin.y + SILVER_INSET + gap_brand;
+
+  // The brand over the left half and the model name (or a widget in its
+  // place) over the right, each centred where the original has them, clear
+  // of the curved corners.
+  const int16_t clear = corner_in(corner, y - plate.origin.y) + SILVER_INSET + 3;
+  draw_centred_on(ctx, s_settings.brand, fonts_get_system_font(BRAND_FONT),
+                  left + pw * BRAND_CENTRE / 1000, left + clear, middle - 2, y, BRAND_HEIGHT,
+                  BRAND_PAD, s_palette.print);
   char model[16];
   if (!widget_text(s_settings.model_widget, model, sizeof(model))) {
     strncpy(model, s_settings.model, sizeof(model));
   }
-  draw_text_in(ctx, model, s_model_font,
-             GRect(x, y + BRAND_HEIGHT - MODEL_HEIGHT, w, MODEL_HEIGHT), MODEL_PAD,
-             GTextAlignmentRight, s_palette.model);
-  y += BRAND_HEIGHT + ROW_GAP;
+  draw_centred_on(ctx, model, s_model_font, left + pw * MODEL_CENTRE / 1000, middle + 2,
+                  right - clear, y + (BRAND_HEIGHT - MODEL_HEIGHT) / 2, MODEL_HEIGHT, MODEL_PAD,
+                  s_palette.model);
+  y += BRAND_HEIGHT + gap_top_line;
 
-  // Labels by the Pebble's buttons: LIGHT by Back at the top left, and MODE
-  // by Up at the top right.
-  const GRect top_row = GRect(x, y, w, LABEL_HEIGHT);
-  draw_button_label(ctx, s_settings.light_label, top_row, true);
-  draw_button_label(ctx, s_settings.up_label, top_row, false);
-  y += LABEL_HEIGHT + ROW_GAP;
+  // The top blue line.
+  const int16_t line_left = left + line_inset;
+  const int16_t line_right = right - line_inset;
+  draw_line_across(ctx, line_left, line_right, y);
+  y += LINE_WIDTH + gap_labels;
 
-  // The LCD with its thin border.
-  const GRect lcd = GRect(x, y, w, lcd_h);
-  graphics_context_set_fill_color(ctx, s_palette.trim);
-  graphics_fill_rect(ctx, lcd, 2, GCornersAll);
+  // Labels by the Pebble's buttons, their arrows level with the LCD's
+  // outline: LIGHT by Back at the top left, and MODE by Up at the top right.
+  const GRect top_labels = GRect(left + lcd_inset, y, lcd_w, LABEL_HEIGHT);
+  draw_button_label(ctx, s_settings.light_label, top_labels, true);
+  draw_button_label(ctx, s_settings.up_label, top_labels, false);
+  y += LABEL_HEIGHT + gap_lcd;
+
+  // The LCD: a thin outline, a dark gap, then the LCD itself.
+  const GRect lcd = GRect(left + lcd_inset, y, lcd_w, lcd_h);
+  graphics_context_set_stroke_color(ctx, s_palette.trim);
+  graphics_context_set_stroke_width(ctx, 1);
+  graphics_draw_round_rect(ctx, lcd, LCD_RADIUS);
+  const GRect glass = grect_inset(lcd, GEdgeInsets(1 + LCD_GAP));
   graphics_context_set_fill_color(ctx, s_palette.lcd);
-  graphics_fill_rect(ctx, grect_inset(lcd, GEdgeInsets(TRIM)), 2, GCornersAll);
-  draw_lcd(ctx, grect_inset(lcd, GEdgeInsets(TRIM + LCD_PAD)), t);
-  y += lcd_h + ROW_GAP;
+  graphics_fill_rect(ctx, glass, 2, GCornersAll);
+  draw_lcd(ctx, grect_inset(glass, GEdgeInsets(LCD_PAD)), t);
+  y += lcd_h + gap_from_lcd;
 
   // ALARM ON/OFF by Down at the bottom right.
-  draw_button_label(ctx, s_settings.down_label, GRect(x, y, w, LABEL_HEIGHT), false);
-  y += LABEL_HEIGHT + ROW_GAP;
+  draw_button_label(ctx, s_settings.down_label, GRect(left + lcd_inset, y, lcd_w, LABEL_HEIGHT),
+                    false);
+  y += LABEL_HEIGHT + gap_bottom_line;
 
-  draw_bottom_label(ctx, GRect(x, y, w, BOTTOM_HEIGHT));
+  // The bottom blue line and the label below it.
+  draw_bottom_row(ctx, plate, line_left, line_right, y, y + LINE_WIDTH + gap_words);
 }
 
 // ---------------------------------------------------------------------------
