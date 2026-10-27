@@ -122,13 +122,6 @@ module.exports = [
       },
       {
         type: 'toggle',
-        messageKey: 'GHOST',
-        label: 'Show faint unlit segments',
-        description: 'Like the faint outline of every segment on a real LCD.',
-        defaultValue: true
-      },
-      {
-        type: 'toggle',
         messageKey: 'CHIME',
         label: 'Hourly chime',
         description: 'A short vibration on the hour, except during Quiet Time.',

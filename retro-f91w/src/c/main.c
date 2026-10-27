@@ -3,7 +3,7 @@
 // A digital face after the classic F-91W: a segmented LCD showing the time,
 // the seconds and a top row, set in a resin case with printed labels. The
 // wearer chooses the LCD and case colours, the brand and label text, whether
-// the seconds and the faint unlit segments show, 12- or 24-hour time, an
+// the seconds show, 12- or 24-hour time, an
 // hourly chime, and what the top row shows: the day and date, the weather,
 // steps or heart rate, or each in turn with a shake of the wrist.
 
@@ -95,7 +95,7 @@ typedef enum {
 } TimeFormat;
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 1
+#define SETTINGS_VERSION 2
 typedef struct {
   uint8_t version;
   uint8_t lcd;
@@ -105,7 +105,6 @@ typedef struct {
   char top_label[32];
   char bottom_label[32];
   bool seconds;
-  bool ghost;
   bool chime;
   uint8_t time_format;
   uint8_t top_row;
@@ -122,7 +121,6 @@ typedef struct {
   GColor trim;       // The thin border round the LCD.
   GColor lcd;        // The LCD background.
   GColor segment;    // Lit segments.
-  GColor faint;      // The dots of the faint unlit segments.
 } Palette;
 
 static Palette s_palette;
@@ -148,7 +146,6 @@ static void settings_set_defaults(Settings *settings) {
     .top_label = "ALARM CHRONOGRAPH",
     .bottom_label = "WATER WR RESIST",
     .seconds = false,
-    .ghost = true,
     .chime = false,
     .time_format = FORMAT_WATCH,
     .top_row = TOP_DATE,
@@ -188,27 +185,22 @@ static void apply_palette(void) {
     case LCD_BACKLIT:
       s_palette.lcd = GColorSpringBud;
       s_palette.segment = GColorBlack;
-      s_palette.faint = GColorBrass;
       break;
     case LCD_BLUE:
       s_palette.lcd = GColorCeleste;
       s_palette.segment = GColorOxfordBlue;
-      s_palette.faint = GColorCadetBlue;
       break;
     case LCD_AMBER:
       s_palette.lcd = GColorRajah;
       s_palette.segment = GColorBlack;
-      s_palette.faint = GColorWindsorTan;
       break;
     case LCD_DARK:
       s_palette.lcd = GColorBlack;
       s_palette.segment = GColorWhite;
-      s_palette.faint = GColorDarkGray;
       break;
     default:
       s_palette.lcd = GColorLightGray;
       s_palette.segment = GColorBlack;
-      s_palette.faint = GColorDarkGray;
       break;
   }
 #else
@@ -223,7 +215,6 @@ static void apply_palette(void) {
   const bool dark = s_settings.lcd == LCD_DARK;
   s_palette.lcd = dark ? GColorBlack : GColorWhite;
   s_palette.segment = dark ? GColorWhite : GColorBlack;
-  s_palette.faint = s_palette.segment;
 #endif
 }
 
@@ -248,10 +239,7 @@ static TopRow top_row_shown(void) {
 // Segments
 //
 // Every segment is a bar from one point to another, cut to a point at each
-// end the way LCD segments are. A lit segment is filled solid. An unlit one,
-// when the faint segments are shown, is a sparse pattern of dots, like the
-// faint outline a real LCD shows: every other pixel in a softer colour on
-// colour watches, and every third in the segment colour on black and white.
+// end the way LCD segments are, and filled solid.
 
 static int32_t isqrt(int32_t n) {
   if (n <= 0) {
@@ -298,44 +286,10 @@ static void draw_lit_segment(GContext *ctx, GPoint a, GPoint b, int16_t thicknes
   gpath_destroy(path);
 }
 
-static void draw_faint_segment(GContext *ctx, GPoint a, GPoint b, int16_t thickness) {
-  const int32_t dx = b.x - a.x;
-  const int32_t dy = b.y - a.y;
-  const int32_t length = isqrt(dx * dx + dy * dy);
-  if (length == 0) {
-    return;
-  }
-  // Half the thickness, in 16ths of a pixel, narrowing to nothing at the ends.
-  const int32_t half = thickness * 8;
-  const int16_t reach = thickness / 2 + 1;
-  const int16_t left = (a.x < b.x ? a.x : b.x) - reach;
-  const int16_t right = (a.x > b.x ? a.x : b.x) + reach;
-  const int16_t top = (a.y < b.y ? a.y : b.y) - reach;
-  const int16_t bottom = (a.y > b.y ? a.y : b.y) + reach;
-  const int16_t step = PBL_IF_COLOR_ELSE(2, 3);
-  graphics_context_set_stroke_color(ctx, s_palette.faint);
-  for (int16_t y = top - top % step; y <= bottom; y += step) {
-    for (int16_t x = left - left % step; x <= right; x += step) {
-      const int32_t px = x - a.x;
-      const int32_t py = y - a.y;
-      const int32_t along = (px * dx + py * dy) * 16 / length;
-      const int32_t across = abs(px * dy - py * dx) * 16 / length;
-      const int32_t from_end = along < length * 16 - along ? along : length * 16 - along;
-      if (along < 0 || along > length * 16) {
-        continue;
-      }
-      if (across <= (half < from_end ? half : from_end)) {
-        graphics_draw_pixel(ctx, GPoint(x, y));
-      }
-    }
-  }
-}
-
+// Only lit segments are drawn; unlit ones leave the LCD blank.
 static void draw_segment(GContext *ctx, GPoint a, GPoint b, int16_t thickness, bool lit) {
   if (lit) {
     draw_lit_segment(ctx, a, b, thickness);
-  } else if (s_settings.ghost) {
-    draw_faint_segment(ctx, a, b, thickness);
   }
 }
 
@@ -838,10 +792,6 @@ static bool read_settings(DictionaryIterator *iterator) {
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_SECONDS))) {
     s_settings.seconds = tuple_int(tuple) != 0;
-    changed = true;
-  }
-  if ((tuple = dict_find(iterator, MESSAGE_KEY_GHOST))) {
-    s_settings.ghost = tuple_int(tuple) != 0;
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_CHIME))) {

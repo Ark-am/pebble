@@ -5,8 +5,7 @@ brand and model, LIGHT and ALARM CHRONOGRAPH above the LCD, MODE and
 ALARM ON-OFF/24HR below it, and WATER, a boxed red WR, and RESIST along the
 bottom. The LCD shows the time in large seven-segment digits with the seconds
 smaller beside them, a top row with the day and date (or the weather, steps or
-heart rate), and at the left the hourly signal's sign and PM. Like a real LCD,
-the unlit segments can show as a faint outline.
+heart rate), and at the left the hourly signal's sign and PM.
 
 The brand on the case is the wearer's own text (PEBBLE by default); the face
 does not use the Casio name or logo.
@@ -29,7 +28,6 @@ does not use the Casio name or logo.
   the afternoon) or 24-hour.
 - **Show seconds:** off by default. When on, the face updates every second,
   which uses more battery.
-- **Show faint unlit segments:** on by default.
 - **Hourly chime:** a short vibration on the hour, except during Quiet Time;
   off by default. While it is on, the LCD shows the signal's sign, (( . )).
 - **Temperature:** Celsius or Fahrenheit.
@@ -48,7 +46,7 @@ weather, and the watch requests an update every 30 minutes.
 
 Every digit and letter is drawn from segments rather than a font: seven
 segments for digits and fourteen for letters, each a bar cut to a point at
-both ends. The faint unlit segments are a sparse pattern of dots.
+both ends.
 
 ## Build and test
 
