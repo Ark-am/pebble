@@ -25,26 +25,31 @@
 #define NO_TEMPERATURE INT32_MIN
 
 #if PBL_DISPLAY_WIDTH >= 200
-  #define TEXT_FONT FONT_KEY_GOTHIC_18
+  #define TEXT_FONT FONT_KEY_GOTHIC_28
+  // The name under the information.
+  #define NAME_FONT FONT_KEY_GOTHIC_18
+  #define NAME_HEIGHT 13
+  #define NAME_PAD 5
   // Hour numbers: Pebble's font, visible height and the blank space that font
   // leaves above it. The bundled font styles have their own, in font_styles.h, as
   // do the text and day fonts below.
   #define NUMERAL_FONT FONT_KEY_GOTHIC_24
   #define NUMERAL_HEIGHT 17
   #define NUMERAL_PAD 7
-  #define DAY_FONT FONT_KEY_GOTHIC_18_BOLD
-  #define DAY_HEIGHT 13
-  #define DAY_PAD 5
+  #define DAY_FONT FONT_KEY_GOTHIC_28_BOLD
+  #define DAY_HEIGHT 20
+  #define DAY_PAD 8
   // Visible height of the text and the blank space the font leaves above it.
-  #define TEXT_HEIGHT 13
-  #define TEXT_PAD 5
-  #define ICON_SIZE 76
+  #define TEXT_HEIGHT 20
+  #define TEXT_PAD 8
+  #define ICON_SIZE 124
   // How far the icon's centre sits above the widget's centre, and the
   // underline below it.
-  #define ICON_RISE 15
-  #define RULE_DROP 14
-  // Radius of the sketched ring the hands start outside of.
-  #define CLEAR_RADIUS 52
+  #define ICON_RISE 32
+  #define RULE_DROP 13
+  // Radius of the round area the information fills; the hands are short
+  // pointers outside it.
+  #define CLEAR_RADIUS 68
   #define HOUR_TICK_LENGTH 11
   #define MINUTE_TICK_LENGTH 4
   // Half the width of each hand at its widest point.
@@ -52,19 +57,22 @@
   #define MINUTE_HAND_WIDTH 4
   #define HATCH_SPACING 4
 #else
-  #define TEXT_FONT FONT_KEY_GOTHIC_14
+  #define TEXT_FONT FONT_KEY_GOTHIC_18
+  #define NAME_FONT FONT_KEY_GOTHIC_14
+  #define NAME_HEIGHT 10
+  #define NAME_PAD 4
   #define NUMERAL_FONT FONT_KEY_GOTHIC_18
   #define NUMERAL_HEIGHT 13
   #define NUMERAL_PAD 5
-  #define DAY_FONT FONT_KEY_GOTHIC_14_BOLD
-  #define DAY_HEIGHT 10
-  #define DAY_PAD 4
-  #define TEXT_HEIGHT 10
-  #define TEXT_PAD 4
-  #define ICON_SIZE 54
-  #define ICON_RISE 11
-  #define RULE_DROP 10
-  #define CLEAR_RADIUS 40
+  #define DAY_FONT FONT_KEY_GOTHIC_18_BOLD
+  #define DAY_HEIGHT 13
+  #define DAY_PAD 5
+  #define TEXT_HEIGHT 13
+  #define TEXT_PAD 5
+  #define ICON_SIZE 74
+  #define ICON_RISE 16
+  #define RULE_DROP 11
+  #define CLEAR_RADIUS 46
   #define HOUR_TICK_LENGTH 8
   #define MINUTE_TICK_LENGTH 3
   #define HOUR_HAND_WIDTH 4
@@ -80,6 +88,8 @@
 #define CORNER_PERCENT 55
 #define HAND_GAP 3
 #define TEXT_GAP 4
+// Space between the values and the name under them.
+#define NAME_GAP 20
 
 // What the centre widget can show. Values match the options in src/pkjs/config.js.
 typedef enum {
@@ -93,7 +103,7 @@ typedef enum {
 } Item;
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 6
+#define SETTINGS_VERSION 7
 typedef struct {
   uint8_t version;
   bool dark_theme;
@@ -117,6 +127,8 @@ typedef struct {
   // longer used.
   uint8_t unused_elegant_hands;
   uint8_t sketchy_hands;
+  // Added in version 7: the name under the information; empty shows none.
+  char dial_name[24];
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -128,6 +140,7 @@ static int settings_size(uint8_t version) {
     case 3: return offsetof(Settings, unused_sketchy_dial);
     case 4: return offsetof(Settings, number_font);
     case 5: return offsetof(Settings, unused_elegant_hands);
+    case 6: return offsetof(Settings, dial_name);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -173,6 +186,7 @@ static Layer *s_canvas;
 static StyledFont s_text_font;
 static StyledFont s_numeral_font;
 static StyledFont s_day_font;
+static StyledFont s_name_font;
 
 static BatteryChargeState s_battery;
 static bool s_bluetooth_connected;
@@ -189,6 +203,7 @@ static void unload_fonts(void) {
   styled_font_unload(&s_numeral_font);
   styled_font_unload(&s_text_font);
   styled_font_unload(&s_day_font);
+  styled_font_unload(&s_name_font);
 }
 
 // Loads the chosen font styles: one for the hour numbers, one for the
@@ -199,6 +214,7 @@ static void load_fonts(void) {
                    NUMERAL_PAD, FONTS_NUMERAL);
   styled_font_load(&s_text_font, s_settings.info_font, TEXT_FONT, TEXT_PAD, FONTS_TEXT);
   styled_font_load(&s_day_font, s_settings.info_font, DAY_FONT, DAY_PAD, FONTS_DAY);
+  styled_font_load(&s_name_font, s_settings.info_font, NAME_FONT, NAME_PAD, FONTS_NAME);
 }
 
 // ---------------------------------------------------------------------------
@@ -207,7 +223,10 @@ static void load_fonts(void) {
 static void settings_set_defaults(Settings *settings) {
   *settings = (Settings) {
     .version = SETTINGS_VERSION,
+    .dial_name = "PEBBLE",
     .dark_theme = false,
+    .number_font = FONT_STYLE_SKETCH,
+    .info_font = FONT_STYLE_SKETCH,
     .disconnect_vibe = true,
     .temperature_unit = 'C',
     .hour_numbers = false,
@@ -1041,13 +1060,15 @@ static int16_t text_width(const char *text) {
                                                GTextOverflowModeFill, GTextAlignmentLeft).w;
 }
 
-// Half the width of the ring at a distance below its centre.
+// Half the width of the information's round area at a distance below its
+// centre.
 static int16_t ring_half_width(int16_t below) {
   return isqrt(CLEAR_RADIUS * CLEAR_RADIUS - below * below);
 }
 
 // One or two values under a pencil rule, split by a short upright stroke.
-// Values switch to their short forms if they would not fit inside the ring.
+// Values switch to their short forms if they would not fit inside the round
+// area.
 static NOINLINE void draw_values(GContext *ctx, GPoint centre, Item main, Item second,
                         const struct tm *t) {
   const int16_t rule_y = centre.y + RULE_DROP;
@@ -1092,6 +1113,21 @@ static NOINLINE void draw_values(GContext *ctx, GPoint centre, Item main, Item s
                      GRect(divider + TEXT_GAP, text_top - s_text_font.pad, other_w + 2,
                            TEXT_HEIGHT + s_text_font.pad * 2),
                      GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+}
+
+// The wearer's name for the watch, centred under the values, cut short if it
+// is too wide for the information's round area there.
+static NOINLINE void draw_name(GContext *ctx, GPoint centre) {
+  if (!s_settings.dial_name[0]) {
+    return;
+  }
+  const int16_t below = RULE_DROP + 3 + TEXT_HEIGHT + NAME_GAP;
+  const int16_t room = ring_half_width(below) * 2 - 6;
+  graphics_context_set_text_color(ctx, s_palette.ink);
+  graphics_draw_text(ctx, s_settings.dial_name, s_name_font.font,
+                     GRect(centre.x - room / 2, centre.y + below - s_name_font.pad, room,
+                           NAME_HEIGHT + s_name_font.pad * 2),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
 }
 
 // ---------------------------------------------------------------------------
@@ -1146,6 +1182,7 @@ static NOINLINE void draw_widget(GContext *ctx, GPoint centre, const struct tm *
   screen_items(&main, &second);
   draw_item_picture(ctx, main, GPoint(centre.x, centre.y - ICON_RISE), t);
   draw_values(ctx, centre, main, second, t);
+  draw_name(ctx, centre);
 }
 
 // ---------------------------------------------------------------------------
@@ -1220,18 +1257,18 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   draw_alerts(ctx, ray_point(centre, corner_left,
                              edge_distance(bounds, corner_left) - inset));
 
-  // The widget and the ring that keeps the hands out of it.
-  sketch_circle(ctx, centre, CLEAR_RADIUS, s_palette.faint, NULL, NULL);
+  // The information fills the middle of the face.
   draw_widget(ctx, centre, t);
 
-  // The hands run from just outside the ring towards the ticks, following the
-  // shape of the dial, so they are longest towards the corners.
+  // The hands are short pointers from just outside the information towards
+  // the ticks, following the shape of the dial, so they are longest towards
+  // the corners. The minute hand reaches in among the hour ticks to the
+  // minute ticks; the hour hand stops short of the hour ticks.
   const int16_t start = CLEAR_RADIUS + HAND_GAP;
   const int32_t minute_angle = TRIG_MAX_ANGLE * t->tm_min / 60;
   const int32_t hour_angle = TRIG_MAX_ANGLE * ((t->tm_hour % 12) * 60 + t->tm_min) / 720;
-  const int16_t minute_end = edge_distance(bounds, minute_angle) - HOUR_TICK_LENGTH - 3;
-  const int16_t hour_end = start
-    + (edge_distance(bounds, hour_angle) - HOUR_TICK_LENGTH - 3 - start) * 58 / 100;
+  const int16_t minute_end = edge_distance(bounds, minute_angle) - MINUTE_TICK_LENGTH - 1;
+  const int16_t hour_end = edge_distance(bounds, hour_angle) - HOUR_TICK_LENGTH - 3;
   draw_dial_hand(ctx, centre, hour_angle, start, hour_end, HOUR_HAND_WIDTH, false);
   draw_dial_hand(ctx, centre, minute_angle, start, minute_end, MINUTE_HAND_WIDTH, true);
 }
@@ -1319,6 +1356,11 @@ static bool read_settings(DictionaryIterator *iterator) {
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_INFO_FONT))) {
     s_settings.info_font = tuple_int(tuple) % FONT_STYLE_COUNT;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_DIAL_NAME)) && tuple->type == TUPLE_CSTRING) {
+    strncpy(s_settings.dial_name, tuple->value->cstring, sizeof(s_settings.dial_name) - 1);
+    s_settings.dial_name[sizeof(s_settings.dial_name) - 1] = '\0';
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_SKETCHY_HANDS))) {
@@ -1452,7 +1494,7 @@ static void init(void) {
 #endif
 
   app_message_register_inbox_received(inbox_received);
-  app_message_open(256, 32);
+  app_message_open(384, 32);
 }
 
 static void deinit(void) {

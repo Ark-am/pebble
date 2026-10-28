@@ -8,6 +8,7 @@ other styles are bundled fonts in resources/fonts:
     Serif    IBM Plex Serif
     Rounded  Varela Round
     Mono     DM Mono
+    Sketchy  Patrick Hand, a handwritten font to match the pencil drawing
 
 Each piece of text the face draws is a "role" in tools/fonts.json, with the
 font it normally uses and the visible height of its capitals (or digits)
@@ -37,6 +38,7 @@ STYLES = [
     ('SERIF', 'Serif', 'IBMPlexSerif-Regular.ttf', 'IBMPlexSerif-SemiBold.ttf'),
     ('ROUNDED', 'Rounded', 'VarelaRound-Regular.ttf', 'VarelaRound-Regular.ttf'),
     ('MONO', 'Mono', 'DMMono-Regular.ttf', 'DMMono-Medium.ttf'),
+    ('SKETCH', 'Sketchy', 'PatrickHand-Regular.ttf', 'PatrickHand-Regular.ttf'),
 ]
 
 PLATFORMS = {
@@ -64,8 +66,8 @@ SYSTEM_WIDTHS = {
 
 # How much wider than Pebble's font the text may be. Pebble's Gothic is very
 # narrow, so other fonts at the same width would be much smaller; letting them
-# run a little wider keeps them readable. A role can set its own
-# "width_allowance" where space is tight.
+# run a little wider keeps them readable. A role, or one screen size of it,
+# can set its own "width_allowance" where space is tight.
 WIDTH_ALLOWANCE = {'numbers': 1.15, 'info': 1.3}
 
 FONT_DIR = 'resources/fonts'
@@ -122,7 +124,8 @@ def main():
             rows = []
             for prefix, label, regular, bold in STYLES:
                 file = bold if spec.get('bold') else regular
-                allowance = spec.get('width_allowance', WIDTH_ALLOWANCE[spec['kind']])
+                allowance = spec[group].get(
+                    'width_allowance', spec.get('width_allowance', WIDTH_ALLOWANCE[spec['kind']]))
                 size, pad = choose_size(os.path.join(FONT_DIR, file), numbers, height,
                                         usual_width, allowance)
                 name = 'FONT_%s_%s_%s_%d' % (prefix, role, group.upper(), size)
@@ -161,7 +164,7 @@ def main():
 
 // Style 0 is the face's usual font; the bundled ones follow.
 enum { FONT_STYLE_PEBBLE, FONT_STYLE_SERIF, FONT_STYLE_ROUNDED, FONT_STYLE_MONO,
-       FONT_STYLE_COUNT };
+       FONT_STYLE_SKETCH, FONT_STYLE_COUNT };
 #define CUSTOM_FONT_COUNT (FONT_STYLE_COUNT - 1)
 
 typedef struct {

@@ -48,7 +48,8 @@
       "SCREEN_4_MAIN",
       "SCREEN_4_SECOND",
       "ROTATE_SCREENS",
-      "DISCONNECT_VIBE"
+      "DISCONNECT_VIBE",
+      "DIAL_NAME"
     ],
     "resources": {
       "media": [
@@ -82,6 +83,16 @@
           "type": "font",
           "name": "FONT_MONO_NUMERAL_LARGE_17",
           "file": "fonts/DMMono-Regular.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_SKETCH_NUMERAL_LARGE_24",
+          "file": "fonts/PatrickHand-Regular.ttf",
           "characterRegex": "[0-9]",
           "targetPlatforms": [
             "emery",
@@ -129,7 +140,20 @@
         },
         {
           "type": "font",
-          "name": "FONT_SERIF_TEXT_LARGE_15",
+          "name": "FONT_SKETCH_NUMERAL_SMALL_19",
+          "file": "fonts/PatrickHand-Regular.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_SERIF_TEXT_LARGE_19",
           "file": "fonts/IBMPlexSerif-Regular.ttf",
           "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
@@ -139,7 +163,7 @@
         },
         {
           "type": "font",
-          "name": "FONT_ROUNDED_TEXT_LARGE_14",
+          "name": "FONT_ROUNDED_TEXT_LARGE_19",
           "file": "fonts/VarelaRound-Regular.ttf",
           "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
@@ -149,7 +173,7 @@
         },
         {
           "type": "font",
-          "name": "FONT_MONO_TEXT_LARGE_15",
+          "name": "FONT_MONO_TEXT_LARGE_20",
           "file": "fonts/DMMono-Regular.ttf",
           "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
@@ -159,7 +183,17 @@
         },
         {
           "type": "font",
-          "name": "FONT_SERIF_TEXT_SMALL_13",
+          "name": "FONT_SKETCH_TEXT_LARGE_27",
+          "file": "fonts/PatrickHand-Regular.ttf",
+          "characterRegex": "[ -~\u00b0]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_SERIF_TEXT_SMALL_15",
           "file": "fonts/IBMPlexSerif-Regular.ttf",
           "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
@@ -172,7 +206,7 @@
         },
         {
           "type": "font",
-          "name": "FONT_ROUNDED_TEXT_SMALL_12",
+          "name": "FONT_ROUNDED_TEXT_SMALL_14",
           "file": "fonts/VarelaRound-Regular.ttf",
           "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
@@ -185,7 +219,7 @@
         },
         {
           "type": "font",
-          "name": "FONT_MONO_TEXT_SMALL_13",
+          "name": "FONT_MONO_TEXT_SMALL_15",
           "file": "fonts/DMMono-Regular.ttf",
           "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
@@ -198,7 +232,112 @@
         },
         {
           "type": "font",
-          "name": "FONT_SERIF_DAY_LARGE_16",
+          "name": "FONT_SKETCH_TEXT_SMALL_20",
+          "file": "fonts/PatrickHand-Regular.ttf",
+          "characterRegex": "[ -~\u00b0]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_SERIF_NAME_LARGE_15",
+          "file": "fonts/IBMPlexSerif-Regular.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_ROUNDED_NAME_LARGE_14",
+          "file": "fonts/VarelaRound-Regular.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_MONO_NAME_LARGE_15",
+          "file": "fonts/DMMono-Regular.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_SKETCH_NAME_LARGE_20",
+          "file": "fonts/PatrickHand-Regular.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_SERIF_NAME_SMALL_13",
+          "file": "fonts/IBMPlexSerif-Regular.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_ROUNDED_NAME_SMALL_12",
+          "file": "fonts/VarelaRound-Regular.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_MONO_NAME_SMALL_13",
+          "file": "fonts/DMMono-Regular.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_SKETCH_NAME_SMALL_15",
+          "file": "fonts/PatrickHand-Regular.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_SERIF_DAY_LARGE_22",
           "file": "fonts/IBMPlexSerif-SemiBold.ttf",
           "characterRegex": "[A-Z]",
           "targetPlatforms": [
@@ -208,7 +347,7 @@
         },
         {
           "type": "font",
-          "name": "FONT_ROUNDED_DAY_LARGE_17",
+          "name": "FONT_ROUNDED_DAY_LARGE_23",
           "file": "fonts/VarelaRound-Regular.ttf",
           "characterRegex": "[A-Z]",
           "targetPlatforms": [
@@ -218,7 +357,7 @@
         },
         {
           "type": "font",
-          "name": "FONT_MONO_DAY_LARGE_17",
+          "name": "FONT_MONO_DAY_LARGE_23",
           "file": "fonts/DMMono-Medium.ttf",
           "characterRegex": "[A-Z]",
           "targetPlatforms": [
@@ -228,7 +367,17 @@
         },
         {
           "type": "font",
-          "name": "FONT_SERIF_DAY_SMALL_14",
+          "name": "FONT_SKETCH_DAY_LARGE_30",
+          "file": "fonts/PatrickHand-Regular.ttf",
+          "characterRegex": "[A-Z]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_SERIF_DAY_SMALL_16",
           "file": "fonts/IBMPlexSerif-SemiBold.ttf",
           "characterRegex": "[A-Z]",
           "targetPlatforms": [
@@ -241,7 +390,7 @@
         },
         {
           "type": "font",
-          "name": "FONT_ROUNDED_DAY_SMALL_13",
+          "name": "FONT_ROUNDED_DAY_SMALL_17",
           "file": "fonts/VarelaRound-Regular.ttf",
           "characterRegex": "[A-Z]",
           "targetPlatforms": [
@@ -254,8 +403,21 @@
         },
         {
           "type": "font",
-          "name": "FONT_MONO_DAY_SMALL_14",
+          "name": "FONT_MONO_DAY_SMALL_17",
           "file": "fonts/DMMono-Medium.ttf",
+          "characterRegex": "[A-Z]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_SKETCH_DAY_SMALL_20",
+          "file": "fonts/PatrickHand-Regular.ttf",
           "characterRegex": "[A-Z]",
           "targetPlatforms": [
             "aplite",

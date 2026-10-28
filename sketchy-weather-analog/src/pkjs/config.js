@@ -3,7 +3,8 @@
 
 // Font styles; values match the styles in src/c/font_styles.h.
 var FONT_OPTIONS = [
-  { label: 'Default (the face\'s own fonts)', value: '0' },
+  { label: 'Sketchy (Patrick Hand)', value: '4' },
+  { label: 'Pebble (the watch\'s own Gothic)', value: '0' },
   { label: 'Serif (IBM Plex Serif)', value: '1' },
   { label: 'Rounded (Varela Round)', value: '2' },
   { label: 'Mono (DM Mono)', value: '3' }
@@ -65,6 +66,16 @@ module.exports = [
         ]
       },
       {
+        type: 'input',
+        messageKey: 'DIAL_NAME',
+        label: 'Name under the information',
+        description: 'Leave empty to show no name.',
+        defaultValue: 'PEBBLE',
+        attributes: {
+          maxlength: 20
+        }
+      },
+      {
         type: 'select',
         messageKey: 'SKETCHY_HANDS',
         label: 'Hands',
@@ -85,8 +96,8 @@ module.exports = [
         type: 'select',
         messageKey: 'NUMBER_FONT',
         label: 'Number font',
-        description: 'For the hour numbers. Pebble uses the watch\'s own font.',
-        defaultValue: '0',
+        description: 'For the hour numbers.',
+        defaultValue: '4',
         options: FONT_OPTIONS
       },
       {
@@ -94,7 +105,7 @@ module.exports = [
         messageKey: 'INFO_FONT',
         label: 'Information font',
         description: 'For the date, weather, battery and health values in the centre.',
-        defaultValue: '0',
+        defaultValue: '4',
         options: FONT_OPTIONS
       }
     ]

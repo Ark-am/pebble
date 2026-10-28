@@ -1,4 +1,4 @@
-Sketchy Weather Analog was inspired by Sketchy Weather, developed by Igor Traskovetskyi. This watch-face adds a little pencil-and-paper character to your Pebble. Hand-drawn weather icons and everyday information sit inside a central ring, while the hour and minute hands stay outside it to keep the centre clear and easy to read.
+Sketchy Weather Analog was inspired by Sketchy Weather, developed by Igor Traskovetskyi. This watch-face adds a little pencil-and-paper character to your Pebble. Large hand-drawn weather icons and everyday information fill the centre of the face, while short hour and minute pointers stay around the edge to keep it clear and easy to read.
 
 Choose pencil-stroke, sketched spear or sketched arrow hands, with a light Paper or dark Chalkboard background. Customize the fonts and show or hide hour numbers to finish the layout.
 

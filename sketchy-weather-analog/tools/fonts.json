@@ -7,13 +7,18 @@
     },
     "TEXT": {
       "kind": "info", "characters": "[ -~°]",
+      "large": { "height": 20, "like": "GOTHIC_28_BOLD", "width_allowance": 1.1 },
+      "small": { "height": 13, "like": "GOTHIC_18" }
+    },
+    "NAME": {
+      "kind": "info", "characters": "[ -~]",
       "large": { "height": 13, "like": "GOTHIC_18" },
       "small": { "height": 10, "like": "GOTHIC_14" }
     },
     "DAY": {
       "kind": "info", "bold": true, "characters": "[A-Z]",
-      "large": { "height": 13, "like": "GOTHIC_18_BOLD" },
-      "small": { "height": 10, "like": "GOTHIC_14_BOLD" }
+      "large": { "height": 20, "like": "GOTHIC_28_BOLD" },
+      "small": { "height": 13, "like": "GOTHIC_18_BOLD" }
     }
   }
 }

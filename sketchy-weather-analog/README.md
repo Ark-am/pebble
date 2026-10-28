@@ -1,15 +1,19 @@
 # Sketchy Weather Analog
 
-An analog watchface drawn in a pencil-sketch style. A hand-drawn widget sits
-in the centre of the dial: a picture with one or two values underneath, such
-as the weather icon above the temperature and date. The hour and minute hands
-start just outside a sketched ring around the widget, so they never cover it.
+An analog watchface drawn in a pencil-sketch style. A large hand-drawn widget
+fills most of the dial: a picture with one or two values underneath, such as
+the weather icon above the temperature and date. The hour and minute hands
+are short pointers between the widget and the ticks, so they never cover it:
+the minute hand reaches in among the hour ticks, and the hour hand stops just
+short of them.
 
 On rectangular watches the screen has heavily rounded corners, and the ticks
 and hour numbers follow the rounded edge. Round watches use the full circle.
 
-The hands, hour markers and ring are pencil strokes, and the hour numbers
-are in the watch's own font unless another is chosen.
+The hands and hour markers are pencil strokes, and the hour numbers
+and all the text are handwritten, in Patrick Hand, unless another font is
+chosen. The Pebble Time 2 (Emery), with the most room, has the largest
+picture and text.
 
 ## Centre screens
 
@@ -29,7 +33,7 @@ charging), steps, and heart rate (a heart). **Tap the watch** to move to the
 next screen, or turn on **Change screen every minute** to cycle through them
 automatically. Set both items on a screen to Nothing to skip it.
 
-If both values do not fit inside the ring, the second, then the first,
+If both values do not fit across the widget, the second, then the first,
 switches to a short form: `17°` instead of `17°C`, `Oct 3` instead of
 `Oct 03`, `8.4k` instead of `8,432`, `72` instead of `72 bpm`. Steps show
 `--` on Aplite, and heart rate shows `--` on watches without a heart-rate
@@ -64,6 +68,8 @@ battery, choose it as one of the centre screen items.
 - **Hands:** Pencil stroke (default), Sketched spear (a pencil outline with
   a line down the middle) or Sketched arrow (a pencil shaft with an open
   arrowhead and fletching)
+- **Name under the information:** any text, PEBBLE by default; leave it empty
+  to show none. A name too wide for the space ends in an ellipsis.
 - **Number font** and **Information font:** see Font styles below
 - **Show hour numbers:** off by default; when on, 1 to 12 sit just inside the hour ticks
 - **Temperature:** Celsius or Fahrenheit
@@ -81,11 +87,12 @@ empty cloud and `--°`.
 ## Font styles
 
 Two settings choose the fonts: **Number font** (the hour numbers) and
-**Information font** (the values and the calendar day in the centre circle). Each offers:
+**Information font** (the values, the calendar day and the name in the centre). Each offers:
 
 | Style | Font |
 | --- | --- |
-| Default | the watch's own Gothic |
+| Sketchy (default) | Patrick Hand, a handwritten font |
+| Pebble | the watch's own Gothic |
 | Serif | IBM Plex Serif |
 | Rounded | Varela Round |
 | Mono | DM Mono |
