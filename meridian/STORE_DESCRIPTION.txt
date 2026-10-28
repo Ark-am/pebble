@@ -8,6 +8,7 @@ Features:
 - Choose a light or dark background, accent colours on colour watches, and separate fonts for the hour numbers and information/widgets.
 - Show or hide hour numbers, add an optional second hand (uses more battery), and rotate the dial to suit how you wear your watch (only works correctly on Pebble Round 2).
 - Turn on Shine and light glints across the hands and the hour marks as you turn your wrist (colour watches; uses more battery while the watch is moving).
+- Turn on Rim glint and the edge of the screen catches the light like the rim of a watch glass as you turn your wrist (colour watches; uses more battery while the watch is moving).
 
 Customize Meridian through the Pebble phone app. Weather supports Celsius and Fahrenheit and needs your paired phone's location and internet access, with no weather account or API key required. Health data depends on your watch; the original Pebble shows the month and year instead. Heart rate requires a supported sensor.
 

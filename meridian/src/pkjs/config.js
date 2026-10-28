@@ -98,6 +98,15 @@ module.exports = [
         capabilities: ['COLOR']
       },
       {
+        type: 'toggle',
+        messageKey: 'RIM_GLINT',
+        label: 'Rim glint',
+        description: 'The edge of the screen catches the light as you turn your wrist, ' +
+          'like the rim of a watch glass. Uses more battery while the watch is moving.',
+        defaultValue: false,
+        capabilities: ['COLOR']
+      },
+      {
         type: 'input',
         messageKey: 'DIAL_NAME',
         label: 'Name on the dial',

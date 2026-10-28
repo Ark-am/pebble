@@ -74,7 +74,7 @@ enum { POSITION_TOP, POSITION_RIGHT, POSITION_BOTTOM, POSITION_LEFT, POSITION_CO
 enum { NAME_SMALL, NAME_LARGE };
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 5
+#define SETTINGS_VERSION 6
 typedef struct {
   uint8_t version;
   bool light_theme;
@@ -95,6 +95,9 @@ typedef struct {
   // "Shine"), and the name's size, NAME_SMALL or NAME_LARGE.
   bool shine;
   uint8_t name_size;
+  // Added in version 6: light glints along the edge of the screen as the
+  // watch moves (see "Rim glint").
+  bool rim_glint;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -105,6 +108,7 @@ static int settings_size(uint8_t version) {
     case 2: return offsetof(Settings, number_font);
     case 3: return offsetof(Settings, dial_name);
     case 4: return offsetof(Settings, shine);
+    case 5: return offsetof(Settings, rim_glint);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -279,6 +283,7 @@ static void settings_set_defaults(Settings *settings) {
     .dial_name = DEFAULT_DIAL_NAME,
     .shine = false,
     .name_size = NAME_SMALL,
+    .rim_glint = false,
   };
 }
 
@@ -307,7 +312,6 @@ static GPoint ray_point(GPoint centre, int32_t angle, int32_t distance) {
   );
 }
 
-#if !defined(PBL_ROUND)
 // The whole-number square root, rounded down.
 static uint32_t square_root(uint64_t value) {
   uint64_t root = 0;
@@ -326,7 +330,6 @@ static uint32_t square_root(uint64_t value) {
   }
   return root;
 }
-#endif
 
 // Distance from the centre to the screen edge along an angle. Round screens
 // use a circle; rectangular ones follow the display's edge with rounded
@@ -633,6 +636,100 @@ static void draw_sparkles(GContext *ctx, GRect bounds, GPoint centre) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Rim glint
+//
+// The edge of the screen catches the light like the rim of a watch crystal:
+// where the light's line meets the edge, a short streak shows, brightest in
+// the middle and fading to grey at its ends. As the wrist turns the streaks
+// slide along the edge. The same greys show on the light face, where the
+// white middle blends into the background.
+
+#if PBL_DISPLAY_WIDTH >= 200
+  #define GLINT_REACH 26
+#else
+  #define GLINT_REACH 20
+#endif
+
+// One layer of a streak: its half length along the edge and its thickness.
+typedef struct {
+  int16_t half;
+  int16_t width;
+} GlintLayer;
+
+static const GlintLayer GLINT_LAYERS[] = {
+  { GLINT_REACH, 3 }, { GLINT_REACH * 6 / 10, 3 }, { GLINT_REACH * 3 / 10, 2 },
+};
+
+// Each layer of the streak, from the outer grey to the white middle.
+static GColor glint_colour(int layer) {
+  return layer == 2 ? GColorWhite : layer == 1 ? GColorLightGray : GColorDarkGray;
+}
+
+#if defined(PBL_ROUND)
+// The light's line meets the round edge at two points, either side of the
+// diagonal through the centre.
+static void draw_rim_glint(GContext *ctx, GRect bounds) {
+  const GPoint centre = grect_center_point(&bounds);
+  const int32_t radius = bounds.size.w / 2;
+  // How far the line lies from the centre, along the diagonal, in pixels.
+  const int32_t across = (s_light - centre.x - centre.y) * 707 / 1000;
+  if (abs(across) >= radius) {
+    return;
+  }
+  // The hits lie half a chord either side of the diagonal, at angles
+  // measured clockwise from 12 o'clock.
+  const int32_t chord = square_root(radius * radius - across * across);
+  int32_t hits[2];
+  for (int side = 0; side < 2; side++) {
+    const int32_t dx = (across + (side ? chord : -chord)) * 707 / 1000;
+    const int32_t dy = (across - (side ? chord : -chord)) * 707 / 1000;
+    hits[side] = atan2_lookup(dx, -dy);
+  }
+  for (int layer = 0; layer < (int)ARRAY_LENGTH(GLINT_LAYERS); layer++) {
+    const GlintLayer *l = &GLINT_LAYERS[layer];
+    const int32_t half = TRIG_MAX_ANGLE * l->half / (radius * 628 / 100);
+    graphics_context_set_fill_color(ctx, glint_colour(layer));
+    for (int side = 0; side < 2; side++) {
+      const int32_t at = hits[side];
+      graphics_fill_radial(ctx, bounds, GOvalScaleModeFitCircle, l->width, at - half, at + half);
+    }
+  }
+}
+#else
+// The light's line meets the rectangular edge at up to four points: one on
+// each edge it crosses.
+static void draw_rim_glint(GContext *ctx, GRect bounds) {
+  const int16_t w = bounds.size.w;
+  const int16_t h = bounds.size.h;
+  const int16_t light = s_light;
+  // Where the line meets the top, left, bottom and right edges.
+  const GPoint hits[] = {
+    GPoint(light, 0), GPoint(0, light), GPoint(light - (h - 1), h - 1),
+    GPoint(w - 1, light - (w - 1)),
+  };
+  for (int layer = 0; layer < (int)ARRAY_LENGTH(GLINT_LAYERS); layer++) {
+    const GlintLayer *l = &GLINT_LAYERS[layer];
+    graphics_context_set_fill_color(ctx, glint_colour(layer));
+    for (int i = 0; i < (int)ARRAY_LENGTH(hits); i++) {
+      const GPoint p = hits[i];
+      if (p.x < 0 || p.x >= w || p.y < 0 || p.y >= h) {
+        continue;
+      }
+      if (i % 2 == 0) {
+        // Along the top or bottom.
+        graphics_fill_rect(ctx, GRect(p.x - l->half, i == 0 ? 0 : h - l->width,
+                                      l->half * 2, l->width), 0, GCornerNone);
+      } else {
+        // Along the left or right side.
+        graphics_fill_rect(ctx, GRect(i == 1 ? 0 : w - l->width, p.y - l->half,
+                                      l->width, l->half * 2), 0, GCornerNone);
+      }
+    }
+  }
+}
+#endif
+
 // One side of a polished hand: the spine from `back` to `tip`, and the outer
 // edge through `back_side` and `middle_side`. The outer edge is also stroked
 // so the narrow tip fills in.
@@ -831,7 +928,7 @@ static void draw_hand(GContext *ctx, GPoint centre, int32_t angle,
   graphics_context_set_stroke_width(ctx, 4);
   gpath_draw_outline(ctx, hand);
 #if defined(PBL_COLOR)
-  if (s_shine_visible) {
+  if (s_shine_visible && s_settings.shine) {
     gpath_destroy(hand);
     draw_facets(ctx, centre, angle, length, back, points);
     return;
@@ -1064,9 +1161,12 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   graphics_fill_circle(ctx, centre, 2);
 
 #if defined(PBL_COLOR)
-  // Sparkles go over everything.
-  if (s_shine_visible) {
+  // Sparkles and the rim glint go over everything.
+  if (s_shine_visible && s_settings.shine) {
     draw_sparkles(ctx, bounds, centre);
+  }
+  if (s_shine_visible && s_settings.rim_glint) {
+    draw_rim_glint(ctx, layer_get_bounds(layer));
   }
 #endif
 }
@@ -1237,12 +1337,13 @@ static void shine_accel_handler(AccelData *data, uint32_t count) {
   }
 }
 
-// Reads the accelerometer only while the shine is turned on.
+// Reads the accelerometer only while the shine or the rim glint is turned on.
 static void update_shine_subscription(void) {
-  if (s_settings.shine == s_shine_subscribed) {
+  const bool wanted = s_settings.shine || s_settings.rim_glint;
+  if (wanted == s_shine_subscribed) {
     return;
   }
-  s_shine_subscribed = s_settings.shine;
+  s_shine_subscribed = wanted;
   s_have_tilt = false;
   s_shine_moving = false;
   if (s_shine_visible) {
@@ -1325,6 +1426,10 @@ static bool read_settings(DictionaryIterator *iterator) {
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_SHINE))) {
     s_settings.shine = tuple_int(tuple) != 0;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_RIM_GLINT))) {
+    s_settings.rim_glint = tuple_int(tuple) != 0;
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_DISCONNECT_VIBE))) {

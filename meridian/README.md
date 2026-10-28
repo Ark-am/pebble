@@ -94,6 +94,17 @@ How readily the shine starts, how far the light moves for a given tilt and how s
 it clears are set by the `SHINE_*` constants in the "Motion" section of
 `src/c/main.c`.
 
+## Rim glint
+
+Turn on **Rim glint** and the edge of the screen catches the light like the
+rim of a watch glass: short streaks, white in the middle and fading to grey,
+slide along the edge as the wrist turns, and arcs slide round the rim on
+round watches. It follows the same unseen light as Shine and can be on
+with it or alone, with the same battery use and the same three still
+seconds before it clears. It is off by default and on colour watches only.
+The streaks' length is set by `GLINT_REACH` in the "Rim glint" section of
+`src/c/main.c`.
+
 ## Build
 
 From this directory:

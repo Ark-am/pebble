@@ -47,7 +47,8 @@
       "INFO_FONT",
       "DIAL_NAME",
       "SHINE",
-      "NAME_SIZE"
+      "NAME_SIZE",
+      "RIM_GLINT"
     ],
     "resources": {
       "media": [
