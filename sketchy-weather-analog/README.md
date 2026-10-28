@@ -8,16 +8,8 @@ start just outside a sketched ring around the widget, so they never cover it.
 On rectangular watches the screen has heavily rounded corners, and the ticks
 and hour numbers follow the rounded edge. Round watches use the full circle.
 
-The dial comes in two styles:
-
-- **Elegant** (default): slim dauphine hands and small matching wedge
-  markers, each with one solid and one shaded side (12 o'clock has a pair),
-  a smooth ring around the centre, and hour numbers in Noto Serif Display, a
-  fine high-contrast serif.
-- **Sketchy**: pencil-stroke hands and markers, a hand-drawn ring, and hour
-  numbers in the watch's own font.
-
-The centre widget is drawn in the pencil-sketch style either way.
+The hands, hour markers and ring are pencil strokes, and the hour numbers
+are in the watch's own font unless another is chosen.
 
 ## Centre screens
 
@@ -69,13 +61,9 @@ battery, choose it as one of the centre screen items.
 
 - **Background:** Paper (light) or Chalkboard (dark)
 - **Centre circle:** the four screens and whether they change every minute (see above)
-- **Dial style:** Elegant or Sketchy
-- **Elegant hands** (with the Elegant dial): Dauphine (default), Sword (a
-  narrow shaded blade that widens two thirds of the way out, then sweeps to a
-  point) or Breguet (a fine needle through an open ring)
-- **Sketchy hands** (with the Sketchy dial): Pencil stroke (default), Sketched
-  spear (a pencil outline with a line down the middle) or Sketched arrow (a
-  pencil shaft with an open arrowhead and fletching)
+- **Hands:** Pencil stroke (default), Sketched spear (a pencil outline with
+  a line down the middle) or Sketched arrow (a pencil shaft with an open
+  arrowhead and fletching)
 - **Number font** and **Information font:** see Font styles below
 - **Show hour numbers:** off by default; when on, 1 to 12 sit just inside the hour ticks
 - **Temperature:** Celsius or Fahrenheit
@@ -90,18 +78,6 @@ watch requests an update every 30 minutes and keeps the last reading if the
 phone is unavailable. Until the first reading arrives, the widget shows an
 empty cloud and `--°`.
 
-## Hour number images
-
-Pebble's fonts are drawn without smoothing, so the hour numbers are images
-made by `tools/make_numerals.py` (it needs Python with Pillow and the Noto
-Serif Display font). After changing the font or sizes, run it from this
-directory; it rewrites `resources/images/numerals/` and the matching entries
-in `package.json`:
-
-```sh
-python3 tools/make_numerals.py
-```
-
 ## Font styles
 
 Two settings choose the fonts: **Number font** (the hour numbers) and
@@ -109,14 +85,10 @@ Two settings choose the fonts: **Number font** (the hour numbers) and
 
 | Style | Font |
 | --- | --- |
-| Default | each dial style's own numbers and the watch's own Gothic |
+| Default | the watch's own Gothic |
 | Serif | IBM Plex Serif |
 | Rounded | Varela Round |
 | Mono | DM Mono |
-
-Choosing a number font draws the hour numbers in it in both dial styles;
-Default keeps the Elegant style's serif images and the Sketchy style's
-Gothic.
 
 The bundled fonts are in `resources/fonts`, under the SIL Open Font License
 (the `OFL-*.txt` files there). Pebble's own fonts are very narrow, so the

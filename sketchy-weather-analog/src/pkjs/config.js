@@ -66,32 +66,8 @@ module.exports = [
       },
       {
         type: 'select',
-        messageKey: 'DIAL_STYLE',
-        label: 'Dial style',
-        description: 'The hands, hour markers, hour numbers and centre ring.',
-        defaultValue: '0',
-        options: [
-          { label: 'Elegant', value: '0' },
-          { label: 'Sketchy', value: '1' }
-        ]
-      },
-      {
-        type: 'select',
-        messageKey: 'ELEGANT_HANDS',
-        label: 'Elegant hands',
-        description: 'Used with the Elegant dial style.',
-        defaultValue: '0',
-        options: [
-          { label: 'Dauphine: slim and faceted', value: '0' },
-          { label: 'Sword: a narrow shaded blade', value: '1' },
-          { label: 'Breguet: a fine needle through an open ring', value: '2' }
-        ]
-      },
-      {
-        type: 'select',
         messageKey: 'SKETCHY_HANDS',
-        label: 'Sketchy hands',
-        description: 'Used with the Sketchy dial style.',
+        label: 'Hands',
         defaultValue: '0',
         options: [
           { label: 'Pencil stroke', value: '0' },
@@ -109,7 +85,7 @@ module.exports = [
         type: 'select',
         messageKey: 'NUMBER_FONT',
         label: 'Number font',
-        description: 'For the hour numbers. Pebble uses each dial style\'s own numbers.',
+        description: 'For the hour numbers. Pebble uses the watch\'s own font.',
         defaultValue: '0',
         options: FONT_OPTIONS
       },

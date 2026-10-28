@@ -26,15 +26,12 @@
 
 #if PBL_DISPLAY_WIDTH >= 200
   #define TEXT_FONT FONT_KEY_GOTHIC_18
-  // Height of the hour number images (see tools/make_numerals.py).
-  #define NUMERAL_HEIGHT 16
-  // Hour numbers drawn as text (the sketched style's, or in a chosen font):
-  // Pebble's font, visible height and the blank space that font leaves
-  // above it. The bundled font styles have their own, in font_styles.h, as
+  // Hour numbers: Pebble's font, visible height and the blank space that font
+  // leaves above it. The bundled font styles have their own, in font_styles.h, as
   // do the text and day fonts below.
-  #define SKETCH_NUMERAL_FONT FONT_KEY_GOTHIC_24
-  #define SKETCH_NUMERAL_HEIGHT 17
-  #define SKETCH_NUMERAL_PAD 7
+  #define NUMERAL_FONT FONT_KEY_GOTHIC_24
+  #define NUMERAL_HEIGHT 17
+  #define NUMERAL_PAD 7
   #define DAY_FONT FONT_KEY_GOTHIC_18_BOLD
   #define DAY_HEIGHT 13
   #define DAY_PAD 5
@@ -49,8 +46,6 @@
   // Radius of the sketched ring the hands start outside of.
   #define CLEAR_RADIUS 52
   #define HOUR_TICK_LENGTH 11
-  // Half the width of an hour marker at the edge of the dial.
-  #define HOUR_MARKER_WIDTH 3
   #define MINUTE_TICK_LENGTH 4
   // Half the width of each hand at its widest point.
   #define HOUR_HAND_WIDTH 5
@@ -58,10 +53,9 @@
   #define HATCH_SPACING 4
 #else
   #define TEXT_FONT FONT_KEY_GOTHIC_14
-  #define NUMERAL_HEIGHT 12
-  #define SKETCH_NUMERAL_FONT FONT_KEY_GOTHIC_18
-  #define SKETCH_NUMERAL_HEIGHT 13
-  #define SKETCH_NUMERAL_PAD 5
+  #define NUMERAL_FONT FONT_KEY_GOTHIC_18
+  #define NUMERAL_HEIGHT 13
+  #define NUMERAL_PAD 5
   #define DAY_FONT FONT_KEY_GOTHIC_14_BOLD
   #define DAY_HEIGHT 10
   #define DAY_PAD 4
@@ -72,7 +66,6 @@
   #define RULE_DROP 10
   #define CLEAR_RADIUS 40
   #define HOUR_TICK_LENGTH 8
-  #define HOUR_MARKER_WIDTH 2
   #define MINUTE_TICK_LENGTH 3
   #define HOUR_HAND_WIDTH 4
   #define MINUTE_HAND_WIDTH 3
@@ -114,15 +107,15 @@ typedef struct {
   // whether the screens change every minute.
   uint8_t screens[SCREEN_COUNT][2];
   bool rotate_screens;
-  // Added in version 4: pencil-sketched hands, markers and ring instead of
-  // the elegant ones.
-  bool sketchy_dial;
+  // Added in version 4. No longer used: the dial is always sketched.
+  bool unused_sketchy_dial;
   // Added in version 5: font styles for the hour numbers and for the
   // widget's text (see font_styles.h).
   uint8_t number_font;
   uint8_t info_font;
-  // Added in version 6: the hands for each dial style (see HandVariation).
-  uint8_t elegant_hands;
+  // Added in version 6: the hands (see HandVariation). The first is no
+  // longer used.
+  uint8_t unused_elegant_hands;
   uint8_t sketchy_hands;
 } Settings;
 
@@ -132,9 +125,9 @@ static int settings_size(uint8_t version) {
   switch (version) {
     case 1: return offsetof(Settings, hour_numbers);
     case 2: return offsetof(Settings, screens);
-    case 3: return offsetof(Settings, sketchy_dial);
+    case 3: return offsetof(Settings, unused_sketchy_dial);
     case 4: return offsetof(Settings, number_font);
-    case 5: return offsetof(Settings, elegant_hands);
+    case 5: return offsetof(Settings, unused_elegant_hands);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -157,7 +150,6 @@ typedef struct {
   GColor charging;
   GColor heart;
   GColor calendar;
-  GColor hand_shade;
 } Palette;
 
 static Palette s_palette;
@@ -179,8 +171,6 @@ typedef enum {
 static Window *s_window;
 static Layer *s_canvas;
 static StyledFont s_text_font;
-// Hour number images, for 1 to 12, matching the background.
-static GBitmap *s_numerals[12];
 static StyledFont s_numeral_font;
 static StyledFont s_day_font;
 
@@ -191,53 +181,6 @@ static char s_condition[16];
 static bool s_daytime = true;
 // The widget screen being shown.
 static int s_screen;
-
-// ---------------------------------------------------------------------------
-// Hour number images, made by tools/make_numerals.py
-
-#define NUMERAL_IDS(prefix) { \
-  prefix##1, prefix##2, prefix##3, prefix##4, prefix##5, prefix##6, \
-  prefix##7, prefix##8, prefix##9, prefix##10, prefix##11, prefix##12, \
-}
-
-#if defined(PBL_BW)
-static const uint32_t NUMERAL_BLACK[12] = NUMERAL_IDS(RESOURCE_ID_NUMERAL_BW_BLACK_);
-static const uint32_t NUMERAL_WHITE[12] = NUMERAL_IDS(RESOURCE_ID_NUMERAL_BW_WHITE_);
-#elif PBL_DISPLAY_WIDTH >= 200
-static const uint32_t NUMERAL_BLACK[12] = NUMERAL_IDS(RESOURCE_ID_NUMERAL_LARGE_BLACK_);
-static const uint32_t NUMERAL_WHITE[12] = NUMERAL_IDS(RESOURCE_ID_NUMERAL_LARGE_WHITE_);
-#else
-static const uint32_t NUMERAL_BLACK[12] = NUMERAL_IDS(RESOURCE_ID_NUMERAL_SMALL_BLACK_);
-static const uint32_t NUMERAL_WHITE[12] = NUMERAL_IDS(RESOURCE_ID_NUMERAL_SMALL_WHITE_);
-#endif
-
-static void unload_numerals(void) {
-  for (int i = 0; i < 12; i++) {
-    if (s_numerals[i]) {
-      gbitmap_destroy(s_numerals[i]);
-      s_numerals[i] = NULL;
-    }
-  }
-}
-
-// Whether the hour numbers are drawn as text: in the sketched style, or when
-// a font has been chosen for them. Otherwise they are the elegant images.
-static bool text_numerals(void) {
-  return s_settings.sketchy_dial || s_settings.number_font != FONT_STYLE_PEBBLE;
-}
-
-// Loads the number images only while they are shown, in the background's
-// colour.
-static void load_numerals(void) {
-  unload_numerals();
-  if (!s_settings.hour_numbers || text_numerals()) {
-    return;
-  }
-  const uint32_t *ids = s_settings.dark_theme ? NUMERAL_WHITE : NUMERAL_BLACK;
-  for (int i = 0; i < 12; i++) {
-    s_numerals[i] = gbitmap_create_with_resource(ids[i]);
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Fonts
@@ -252,8 +195,8 @@ static void unload_fonts(void) {
 // widget's text.
 static void load_fonts(void) {
   unload_fonts();
-  styled_font_load(&s_numeral_font, s_settings.number_font, SKETCH_NUMERAL_FONT,
-                   SKETCH_NUMERAL_PAD, FONTS_NUMERAL);
+  styled_font_load(&s_numeral_font, s_settings.number_font, NUMERAL_FONT,
+                   NUMERAL_PAD, FONTS_NUMERAL);
   styled_font_load(&s_text_font, s_settings.info_font, TEXT_FONT, TEXT_PAD, FONTS_TEXT);
   styled_font_load(&s_day_font, s_settings.info_font, DAY_FONT, DAY_PAD, FONTS_DAY);
 }
@@ -275,7 +218,6 @@ static void settings_set_defaults(Settings *settings) {
       { ITEM_NONE, ITEM_NONE },
     },
     .rotate_screens = false,
-    .sketchy_dial = false,
   };
 }
 
@@ -296,7 +238,6 @@ static void apply_palette(void) {
   s_palette.charging = GColorGreen;
   s_palette.heart = GColorRed;
   s_palette.calendar = GColorRed;
-  s_palette.hand_shade = dark ? GColorLightGray : GColorDarkGray;
 #else
   // Black and white: shapes are left unfilled and the pencil hatching gives
   // the sun and moon their tone.
@@ -312,7 +253,6 @@ static void apply_palette(void) {
   s_palette.charging = s_palette.ink;
   s_palette.heart = s_palette.ink;
   s_palette.calendar = s_palette.ink;
-  s_palette.hand_shade = s_palette.background;
 #endif
 }
 
@@ -742,48 +682,18 @@ static void draw_weather_icon(GContext *ctx, Weather weather) {
 // ---------------------------------------------------------------------------
 // Dial
 
-static void fill_and_outline(GContext *ctx, GPoint *points, uint32_t count, GColor fill) {
-  GPathInfo info = { .num_points = count, .points = points };
-  GPath *path = gpath_create(&info);
-  graphics_context_set_fill_color(ctx, fill);
-  gpath_draw_filled(ctx, path);
-  graphics_context_set_stroke_color(ctx, s_palette.ink);
-  graphics_context_set_stroke_width(ctx, 1);
-  gpath_draw_outline(ctx, path);
-  gpath_destroy(path);
-}
-
-// An hour marker: a slim wedge from the edge of the dial to a point, with one
-// facet solid and the other shaded, like the hands.
-static void draw_hour_marker(GContext *ctx, GPoint centre, int32_t angle, int32_t outer,
-                             int16_t shift) {
-  const int32_t side = angle + TRIG_MAX_ANGLE / 4;
-  const GPoint base = ray_point(ray_point(centre, angle, outer), side, shift);
-  const GPoint tip = ray_point(ray_point(centre, angle, outer - HOUR_TICK_LENGTH), side, shift);
-  GPoint lit[] = { base, ray_point(base, side, HOUR_MARKER_WIDTH), tip };
-  GPoint shaded[] = { base, tip, ray_point(base, side + TRIG_MAX_ANGLE / 2, HOUR_MARKER_WIDTH) };
-  fill_and_outline(ctx, shaded, ARRAY_LENGTH(shaded), s_palette.hand_shade);
-  fill_and_outline(ctx, lit, ARRAY_LENGTH(lit), s_palette.ink);
-}
-
 static NOINLINE void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
   for (int i = 0; i < 60; i++) {
     const bool hour = i % 5 == 0;
     const int32_t angle = TRIG_MAX_ANGLE * i / 60;
     const int32_t outer = edge_distance(bounds, angle);
-    if (hour && s_settings.sketchy_dial) {
+    if (hour) {
       const GPoint a = ray_point(centre, angle, outer - HOUR_TICK_LENGTH);
       const GPoint b = ray_point(centre, angle, outer);
       graphics_context_set_stroke_color(ctx, s_palette.ink);
       graphics_context_set_stroke_width(ctx, 2);
       graphics_draw_line(ctx, a, b);
       sketch_line(ctx, a, b, s_palette.ink);
-    } else if (i == 0) {
-      // A pair of markers at 12 o'clock.
-      draw_hour_marker(ctx, centre, angle, outer, -HOUR_MARKER_WIDTH - 1);
-      draw_hour_marker(ctx, centre, angle, outer, HOUR_MARKER_WIDTH + 1);
-    } else if (hour) {
-      draw_hour_marker(ctx, centre, angle, outer, 0);
     } else {
       graphics_context_set_stroke_color(ctx, s_palette.faint);
       graphics_context_set_stroke_width(ctx, 1);
@@ -801,8 +711,9 @@ static GPoint numeral_centre(GRect bounds, GPoint centre, int32_t angle, GSize s
   return ray_point(centre, angle, edge_distance(bounds, angle) - HOUR_TICK_LENGTH - 3 - reach);
 }
 
-// The hour numbers as text, in the sketched style's font or the chosen one.
-static void draw_text_hour_numbers(GContext *ctx, GRect bounds, GPoint centre) {
+// Hour numbers sit just inside the hour markers, in the watch's font or the
+// chosen one.
+static NOINLINE void draw_hour_numbers(GContext *ctx, GRect bounds, GPoint centre) {
   graphics_context_set_text_color(ctx, s_palette.ink);
   for (int hour = 1; hour <= 12; hour++) {
     char text[3];
@@ -811,36 +722,15 @@ static void draw_text_hour_numbers(GContext *ctx, GRect bounds, GPoint centre) {
       text, s_numeral_font.font, GRect(0, 0, 60, 40), GTextOverflowModeFill,
       GTextAlignmentLeft).w;
     const GPoint at = numeral_centre(bounds, centre, TRIG_MAX_ANGLE * hour / 12,
-                                     GSize(width, SKETCH_NUMERAL_HEIGHT));
+                                     GSize(width, NUMERAL_HEIGHT));
     graphics_draw_text(ctx, text, s_numeral_font.font,
-                       GRect(at.x - width, at.y - SKETCH_NUMERAL_HEIGHT / 2 - s_numeral_font.pad,
-                             width * 2, SKETCH_NUMERAL_HEIGHT + s_numeral_font.pad * 2),
+                       GRect(at.x - width, at.y - NUMERAL_HEIGHT / 2 - s_numeral_font.pad,
+                             width * 2, NUMERAL_HEIGHT + s_numeral_font.pad * 2),
                        GTextOverflowModeFill, GTextAlignmentCenter, NULL);
   }
 }
 
-// Hour numbers sit just inside the hour markers.
-static NOINLINE void draw_hour_numbers(GContext *ctx, GRect bounds, GPoint centre) {
-  if (text_numerals()) {
-    draw_text_hour_numbers(ctx, bounds, centre);
-    return;
-  }
-  graphics_context_set_compositing_mode(ctx, GCompOpSet);
-  for (int hour = 1; hour <= 12; hour++) {
-    GBitmap *image = s_numerals[hour - 1];
-    if (!image) {
-      continue;
-    }
-    const GSize size = gbitmap_get_bounds(image).size;
-    const int32_t angle = TRIG_MAX_ANGLE * hour / 12;
-    const GPoint at = numeral_centre(bounds, centre, angle, size);
-    graphics_draw_bitmap_in_rect(ctx, image, GRect(at.x - size.w / 2, at.y - size.h / 2,
-                                                   size.w, size.h));
-  }
-  graphics_context_set_compositing_mode(ctx, GCompOpAssign);
-}
-
-// The sketched style's hand: a heavy pencil stroke with a lighter one beside it.
+// The usual hand: a heavy pencil stroke with a lighter one beside it.
 static NOINLINE void draw_sketch_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t from,
                              int16_t to, int16_t width) {
   graphics_context_set_stroke_color(ctx, s_palette.ink);
@@ -854,41 +744,18 @@ static NOINLINE void draw_sketch_hand(GContext *ctx, GPoint centre, int32_t angl
                      ray_point(ray_point(centre, angle, to - 2), side, offset - 1));
 }
 
-// A slender dauphine hand: it widens briefly from just outside the ring, then
-// tapers in a long straight line to a fine point. One facet is solid and the
-// other shaded, as if lit from one side.
-static NOINLINE void draw_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t from,
-                      int16_t to, int16_t half_width) {
-  const int32_t side = angle + TRIG_MAX_ANGLE / 4;
-  const int16_t shoulder_at = from + (to - from) * 18 / 100;
-  const GPoint base = ray_point(centre, angle, from);
-  const GPoint shoulder = ray_point(centre, angle, shoulder_at);
-  const GPoint tip = ray_point(centre, angle, to);
-  const int16_t base_half = half_width * 45 / 100 > 0 ? half_width * 45 / 100 : 1;
-
-  GPoint lit[] = {
-    base, ray_point(base, side, base_half), ray_point(shoulder, side, half_width), tip,
-  };
-  GPoint shaded[] = {
-    base, tip, ray_point(shoulder, side + TRIG_MAX_ANGLE / 2, half_width),
-    ray_point(base, side + TRIG_MAX_ANGLE / 2, base_half),
-  };
-  fill_and_outline(ctx, shaded, ARRAY_LENGTH(shaded), s_palette.hand_shade);
-  fill_and_outline(ctx, lit, ARRAY_LENGTH(lit), s_palette.ink);
-}
-
 static void sketch_polygon(GContext *ctx, const GPoint *points, size_t count, GColor color) {
   for (size_t i = 0; i < count; i++) {
     sketch_line(ctx, points[i], points[(i + 1) % count], color);
   }
 }
 
-// Each dial style offers its usual hands and two variations. Values match
-// the options in src/pkjs/config.js.
+// The usual hands and two variations. Values match the options in
+// src/pkjs/config.js.
 typedef enum {
-  HAND_VARIATION_USUAL,  // Dauphine, or a pencil stroke.
-  HAND_VARIATION_FIRST,  // Sword, or a sketched spear.
-  HAND_VARIATION_SECOND, // Breguet, or a sketched arrow.
+  HAND_VARIATION_USUAL,  // A pencil stroke.
+  HAND_VARIATION_FIRST,  // A sketched spear.
+  HAND_VARIATION_SECOND, // A sketched arrow.
   HAND_VARIATION_COUNT,
 } HandVariation;
 
@@ -902,46 +769,6 @@ static GPoint hand_point(GPoint centre, int32_t angle, int32_t across, int32_t a
   const int32_t half = TRIG_MAX_RATIO / 2;
   return GPoint(centre.x + (x >= 0 ? x + half : x - half) / TRIG_MAX_RATIO,
                 centre.y + (y >= 0 ? y + half : y - half) / TRIG_MAX_RATIO);
-}
-
-// An elegant sword hand: a narrow shaded blade that widens to its broadest
-// about two thirds of the way out, then sweeps to a point, with a fine ridge
-// down the middle.
-static NOINLINE void draw_sword_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t from,
-                            int16_t to, int16_t half_width) {
-  const int16_t base = half_width * 4 / 10 > 1 ? half_width * 4 / 10 : 1;
-  const int16_t shoulder = from + (to - from) * 66 / 100;
-  GPoint points[] = {
-    hand_point(centre, angle, -base, from),
-    hand_point(centre, angle, -half_width, shoulder),
-    hand_point(centre, angle, 0, to),
-    hand_point(centre, angle, half_width, shoulder),
-    hand_point(centre, angle, base, from),
-  };
-  fill_and_outline(ctx, points, ARRAY_LENGTH(points), s_palette.hand_shade);
-  graphics_context_set_stroke_color(ctx, s_palette.ink);
-  graphics_context_set_stroke_width(ctx, 1);
-  graphics_draw_line(ctx, hand_point(centre, angle, 0, from),
-                     hand_point(centre, angle, 0, shoulder));
-}
-
-// An elegant Breguet hand: a solid needle tapering to a fine point, through an
-// open ring most of the way out that shows the dial through its middle.
-static NOINLINE void draw_breguet_hand(GContext *ctx, GPoint centre, int32_t angle,
-                              int16_t from, int16_t to, int16_t half_width) {
-  const int16_t base = half_width * 6 / 10 > 2 ? half_width * 6 / 10 : 2;
-  GPoint needle[] = {
-    hand_point(centre, angle, -base, from),
-    hand_point(centre, angle, 0, to),
-    hand_point(centre, angle, base, from),
-  };
-  fill_and_outline(ctx, needle, ARRAY_LENGTH(needle), s_palette.ink);
-  const GPoint ring = hand_point(centre, angle, 0, from + (to - from) * 72 / 100);
-  graphics_context_set_fill_color(ctx, s_palette.background);
-  graphics_fill_circle(ctx, ring, half_width);
-  graphics_context_set_stroke_color(ctx, s_palette.ink);
-  graphics_context_set_stroke_width(ctx, PBL_DISPLAY_WIDTH >= 200 ? 2 : 1);
-  graphics_draw_circle(ctx, ring, half_width);
 }
 
 // A sketched spear: a pencil outline, widest a little way out and tapering to
@@ -985,22 +812,14 @@ static NOINLINE void draw_arrow_hand(GContext *ctx, GPoint centre, int32_t angle
   }
 }
 
-// Draws a hand in the variation chosen for the dial's style.
+// Draws a hand in the chosen variation.
 static void draw_dial_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t from,
                            int16_t to, int16_t half_width, bool minute) {
-  if (s_settings.sketchy_dial) {
-    switch (s_settings.sketchy_hands) {
-      case HAND_VARIATION_FIRST: draw_spear_hand(ctx, centre, angle, from, to, half_width); break;
-      case HAND_VARIATION_SECOND: draw_arrow_hand(ctx, centre, angle, from, to, half_width); break;
-      // The pencil hour hand is a little heavier.
-      default: draw_sketch_hand(ctx, centre, angle, from, to, half_width + (minute ? 0 : 1)); break;
-    }
-  } else {
-    switch (s_settings.elegant_hands) {
-      case HAND_VARIATION_FIRST: draw_sword_hand(ctx, centre, angle, from, to, half_width); break;
-      case HAND_VARIATION_SECOND: draw_breguet_hand(ctx, centre, angle, from, to, half_width); break;
-      default: draw_hand(ctx, centre, angle, from, to, half_width); break;
-    }
+  switch (s_settings.sketchy_hands) {
+    case HAND_VARIATION_FIRST: draw_spear_hand(ctx, centre, angle, from, to, half_width); break;
+    case HAND_VARIATION_SECOND: draw_arrow_hand(ctx, centre, angle, from, to, half_width); break;
+    // The pencil hour hand is a little heavier.
+    default: draw_sketch_hand(ctx, centre, angle, from, to, half_width + (minute ? 0 : 1)); break;
   }
 }
 
@@ -1402,13 +1221,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
                              edge_distance(bounds, corner_left) - inset));
 
   // The widget and the ring that keeps the hands out of it.
-  if (s_settings.sketchy_dial) {
-    sketch_circle(ctx, centre, CLEAR_RADIUS, s_palette.faint, NULL, NULL);
-  } else {
-    graphics_context_set_stroke_color(ctx, s_palette.faint);
-    graphics_context_set_stroke_width(ctx, 1);
-    graphics_draw_circle(ctx, centre, CLEAR_RADIUS);
-  }
+  sketch_circle(ctx, centre, CLEAR_RADIUS, s_palette.faint, NULL, NULL);
   draw_widget(ctx, centre, t);
 
   // The hands run from just outside the ring towards the ticks, following the
@@ -1508,14 +1321,6 @@ static bool read_settings(DictionaryIterator *iterator) {
     s_settings.info_font = tuple_int(tuple) % FONT_STYLE_COUNT;
     changed = true;
   }
-  if ((tuple = dict_find(iterator, MESSAGE_KEY_DIAL_STYLE))) {
-    s_settings.sketchy_dial = tuple_int(tuple) == 1;
-    changed = true;
-  }
-  if ((tuple = dict_find(iterator, MESSAGE_KEY_ELEGANT_HANDS))) {
-    s_settings.elegant_hands = tuple_int(tuple) % HAND_VARIATION_COUNT;
-    changed = true;
-  }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_SKETCHY_HANDS))) {
     s_settings.sketchy_hands = tuple_int(tuple) % HAND_VARIATION_COUNT;
     changed = true;
@@ -1568,7 +1373,6 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
     s_screen = 0;
     persist_write_data(PERSIST_KEY_SETTINGS, &s_settings, sizeof(s_settings));
     apply_palette();
-    load_numerals();
     load_fonts();
     window_set_background_color(s_window, s_palette.background);
   }
@@ -1620,7 +1424,6 @@ static void load_saved_state(void) {
 
 static void init(void) {
   load_saved_state();
-  load_numerals();
   load_fonts();
   s_battery = battery_state_service_peek();
   s_bluetooth_connected = connection_service_peek_pebble_app_connection();
@@ -1661,7 +1464,6 @@ static void deinit(void) {
   health_service_events_unsubscribe();
 #endif
   window_destroy(s_window);
-  unload_numerals();
   unload_fonts();
 }
 
