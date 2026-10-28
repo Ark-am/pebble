@@ -30,6 +30,8 @@
   #define HOUR_HAND_WIDTH 9
   #define MINUTE_HAND_WIDTH 7
   #define HOUR_TICK_LENGTH 12
+  #define HOUR_TICK_WIDTH 5
+  #define CORNER_RADIUS 36
   #define MINUTE_TICK_LENGTH 6
   #define NUMERAL_RADIUS 12
 #else
@@ -43,11 +45,16 @@
   #define HOUR_HAND_WIDTH 7
   #define MINUTE_HAND_WIDTH 5
   #define HOUR_TICK_LENGTH 9
+  #define HOUR_TICK_WIDTH 4
+  #define CORNER_RADIUS 28
   #define MINUTE_TICK_LENGTH 4
   #define NUMERAL_RADIUS 9
 #endif
 
 #define SLOT_WIDE_WIDTH 90
+// How far out from the centre the 12 and 6 o'clock information sits, as a
+// percentage of the distance to the edge.
+#define SLOT_DISTANCE_PERCENT 50
 #define LINE_GAP 2
 #define EDGE_INSET 2
 
@@ -63,8 +70,11 @@ typedef enum {
 // Slot positions, clockwise from 12 o'clock.
 enum { POSITION_TOP, POSITION_RIGHT, POSITION_BOTTOM, POSITION_LEFT, POSITION_COUNT };
 
+// Sizes for the name on the dial: the information's label or value size.
+enum { NAME_SMALL, NAME_LARGE };
+
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 4
+#define SETTINGS_VERSION 5
 typedef struct {
   uint8_t version;
   bool light_theme;
@@ -81,6 +91,10 @@ typedef struct {
   uint8_t info_font;
   // Added in version 4: the name shown below 12 o'clock; empty shows none.
   char dial_name[32];
+  // Added in version 5: light catches the face as the watch moves (see
+  // "Shine"), and the name's size, NAME_SMALL or NAME_LARGE.
+  bool shine;
+  uint8_t name_size;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -90,6 +104,7 @@ static int settings_size(uint8_t version) {
     case 1: return offsetof(Settings, rotation);
     case 2: return offsetof(Settings, number_font);
     case 3: return offsetof(Settings, dial_name);
+    case 4: return offsetof(Settings, shine);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -262,6 +277,8 @@ static void settings_set_defaults(Settings *settings) {
     .disconnect_vibe = true,
     .slots = { SLOT_WEATHER, SLOT_DATE, SLOT_HEALTH, SLOT_BATTERY },
     .dial_name = DEFAULT_DIAL_NAME,
+    .shine = false,
+    .name_size = NAME_SMALL,
   };
 }
 
@@ -290,9 +307,30 @@ static GPoint ray_point(GPoint centre, int32_t angle, int32_t distance) {
   );
 }
 
+#if !defined(PBL_ROUND)
+// The whole-number square root, rounded down.
+static uint32_t square_root(uint64_t value) {
+  uint64_t root = 0;
+  uint64_t bit = (uint64_t)1 << 62;
+  while (bit > value) {
+    bit >>= 2;
+  }
+  while (bit) {
+    if (value >= root + bit) {
+      value -= root + bit;
+      root = (root >> 1) + bit;
+    } else {
+      root >>= 1;
+    }
+    bit >>= 2;
+  }
+  return root;
+}
+#endif
+
 // Distance from the centre to the screen edge along an angle. Round screens
-// use a circle; rectangular ones follow the display's edge so the minute
-// track fills the whole face.
+// use a circle; rectangular ones follow the display's edge with rounded
+// corners, like a cushion case, so the minute track fills the whole face.
 static int32_t edge_distance(GRect bounds, int32_t angle) {
   const int32_t half_w = bounds.size.w / 2 - EDGE_INSET;
   const int32_t half_h = bounds.size.h / 2 - EDGE_INSET;
@@ -304,7 +342,24 @@ static int32_t edge_distance(GRect bounds, int32_t angle) {
   const int32_t cos_abs = abs(cos_lookup(angle));
   const int32_t to_side = sin_abs ? half_w * TRIG_MAX_RATIO / sin_abs : INT32_MAX;
   const int32_t to_top = cos_abs ? half_h * TRIG_MAX_RATIO / cos_abs : INT32_MAX;
-  return to_side < to_top ? to_side : to_top;
+  const int32_t to_edge = to_side < to_top ? to_side : to_top;
+
+  // Where the ray meets a corner, it stops at the corner's quarter circle
+  // instead. Lengths here are in 256ths of a pixel.
+  const int32_t corner_x = half_w - CORNER_RADIUS;
+  const int32_t corner_y = half_h - CORNER_RADIUS;
+  if (to_edge * sin_abs / TRIG_MAX_RATIO <= corner_x
+      || to_edge * cos_abs / TRIG_MAX_RATIO <= corner_y) {
+    return to_edge;
+  }
+  // Along the ray, the nearest point to the circle's centre, then on to the
+  // circle: the root of along² - |centre|² + radius².
+  const int64_t along = ((int64_t)sin_abs * corner_x + (int64_t)cos_abs * corner_y) * 256
+    / TRIG_MAX_RATIO;
+  const int64_t beyond = along * along
+    - ((int64_t)corner_x * corner_x + (int64_t)corner_y * corner_y
+       - CORNER_RADIUS * CORNER_RADIUS) * 65536;
+  return (along + square_root(beyond > 0 ? beyond : 0) + 128) / 256;
 #endif
 }
 
@@ -494,6 +549,134 @@ static void piece_end(GContext *ctx) {
 #endif
 
 // ---------------------------------------------------------------------------
+// Shine
+//
+// While the watch moves, light seems to catch the face: each hand shows a lit
+// side and a shaded side like a polished hand, and the hour marks and the
+// centre sparkle as the light passes over them. The light is an unseen line
+// across the face that follows the tilt of the wrist (see "Motion" below);
+// the face is left as it was once the watch is still.
+//
+// Positions along the light are measured on the diagonal: every pixel at x
+// and y with x + y equal to s_light lies on the light's line.
+//
+// Colour watches only, since black and white watches have no lighter shades.
+
+#if defined(PBL_COLOR)
+#if PBL_DISPLAY_WIDTH >= 200
+  #define SPARKLE_ARM 7
+#else
+  #define SPARKLE_ARM 6
+#endif
+// Something sparkles when the light's line passes this close to it.
+#define SPARKLE_REACH 16
+
+static bool s_shine_visible;
+static int16_t s_light;
+// A colour moved a step lighter (step 1) or darker (step -1) in each channel.
+static uint8_t shifted_argb(uint8_t argb, int step) {
+  uint8_t out = 0xC0;
+  for (int shift = 0; shift <= 4; shift += 2) {
+    int channel = ((argb >> shift) & 3) + step;
+    channel = channel < 0 ? 0 : channel > 3 ? 3 : channel;
+    out |= channel << shift;
+  }
+  return out;
+}
+
+// A star of light, larger the nearer the light's line is: four long
+// rays and four short diagonal ones around a bright middle. The rays fade
+// from white to light grey at their tips.
+static void draw_sparkle(GContext *ctx, GPoint at) {
+  const int16_t distance = abs(at.x + at.y - s_light);
+  if (distance >= SPARKLE_REACH) {
+    return;
+  }
+  const int16_t arm = 2 + SPARKLE_ARM * (SPARKLE_REACH - distance) / SPARKLE_REACH;
+  const int16_t inner = arm / 2;
+  const int16_t diagonal = arm / 3;
+  graphics_context_set_stroke_width(ctx, 1);
+  graphics_context_set_stroke_color(ctx, GColorLightGray);
+  graphics_draw_line(ctx, GPoint(at.x - arm, at.y), GPoint(at.x + arm, at.y));
+  graphics_draw_line(ctx, GPoint(at.x, at.y - arm), GPoint(at.x, at.y + arm));
+  graphics_draw_line(ctx, GPoint(at.x - diagonal, at.y - diagonal),
+                     GPoint(at.x + diagonal, at.y + diagonal));
+  graphics_draw_line(ctx, GPoint(at.x - diagonal, at.y + diagonal),
+                     GPoint(at.x + diagonal, at.y - diagonal));
+  graphics_context_set_stroke_color(ctx, GColorWhite);
+  graphics_draw_line(ctx, GPoint(at.x - inner, at.y), GPoint(at.x + inner, at.y));
+  graphics_draw_line(ctx, GPoint(at.x, at.y - inner), GPoint(at.x, at.y + inner));
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_fill_rect(ctx, GRect(at.x - 1, at.y - 1, 3, 3), 0, GCornerNone);
+}
+
+// The hour marks catch the light where the light's line crosses them.
+// On the dark face each one sparkles, as does the centre. A white sparkle
+// would vanish on the light face and cut the black marks, so there the mark
+// itself washes out to light grey instead.
+static void draw_sparkles(GContext *ctx, GRect bounds, GPoint centre) {
+  for (int hour = 0; hour < 12; hour++) {
+    const int32_t angle = dial_angle(TRIG_MAX_ANGLE * hour / 12);
+    const int32_t outer = edge_distance(bounds, angle);
+    const GPoint middle = ray_point(centre, angle, outer - HOUR_TICK_LENGTH / 2);
+    if (!s_settings.light_theme) {
+      draw_sparkle(ctx, middle);
+    } else if (abs(middle.x + middle.y - s_light) < SPARKLE_REACH / 2) {
+      graphics_context_set_stroke_color(ctx, GColorLightGray);
+      graphics_context_set_stroke_width(ctx, HOUR_TICK_WIDTH);
+      graphics_draw_line(ctx, ray_point(centre, angle, outer - HOUR_TICK_LENGTH),
+                         ray_point(centre, angle, outer));
+    }
+  }
+  if (!s_settings.light_theme) {
+    draw_sparkle(ctx, centre);
+  }
+}
+
+// One side of a polished hand: the spine from `back` to `tip`, and the outer
+// edge through `back_side` and `middle_side`. The outer edge is also stroked
+// so the narrow tip fills in.
+static void draw_facet(GContext *ctx, GPoint back, GPoint back_side, GPoint middle_side,
+                       GPoint tip, GColor colour) {
+  GPoint points[] = { back, back_side, middle_side, tip };
+  GPathInfo info = { .num_points = ARRAY_LENGTH(points), .points = points };
+  GPath *facet = gpath_create(&info);
+  graphics_context_set_fill_color(ctx, colour);
+  gpath_draw_filled(ctx, facet);
+  gpath_destroy(facet);
+  graphics_context_set_stroke_color(ctx, colour);
+  graphics_context_set_stroke_width(ctx, 2);
+  graphics_draw_line(ctx, back_side, middle_side);
+  graphics_draw_line(ctx, middle_side, tip);
+}
+
+// Draws a hand as two facets either side of its spine. The facet turned
+// towards the light is a shade lighter and the other a shade darker, so they
+// swap over as the light crosses the hand. A hand lying along the light is
+// lit evenly. `points` are the hand's outline from draw_hand().
+static void draw_facets(GContext *ctx, GPoint centre, int32_t angle, int16_t length,
+                        GPoint back, const GPoint points[5]) {
+  const int32_t side = angle + TRIG_MAX_ANGLE / 4;
+  // How squarely the first facet faces down the diagonal, towards larger x + y.
+  const int32_t facing = sin_lookup(side) - cos_lookup(side);
+  const GPoint middle = ray_point(centre, angle, length / 2);
+  const bool light_ahead = s_light > middle.x + middle.y;
+  const GColor base = s_palette.foreground;
+  GColor first = base;
+  GColor second = base;
+  if (abs(facing) > TRIG_MAX_RATIO / 4) {
+    const GColor lit = (GColor) { .argb = shifted_argb(base.argb, 1) };
+    const GColor shaded = (GColor) { .argb = shifted_argb(base.argb, -1) };
+    const bool first_lit = (facing > 0) == light_ahead;
+    first = first_lit ? lit : shaded;
+    second = first_lit ? shaded : lit;
+  }
+  draw_facet(ctx, back, points[0], points[1], points[2], first);
+  draw_facet(ctx, back, points[4], points[3], points[2], second);
+}
+#endif
+
+// ---------------------------------------------------------------------------
 // Drawing
 
 static void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
@@ -503,7 +686,7 @@ static void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
     const int32_t outer = edge_distance(bounds, angle);
     const int32_t length = hour ? HOUR_TICK_LENGTH : MINUTE_TICK_LENGTH;
     graphics_context_set_stroke_color(ctx, hour ? s_palette.foreground : s_palette.minor_tick);
-    graphics_context_set_stroke_width(ctx, hour ? 3 : 1);
+    graphics_context_set_stroke_width(ctx, hour ? HOUR_TICK_WIDTH : 1);
     graphics_draw_line(ctx, ray_point(centre, angle, outer - length),
                        ray_point(centre, angle, outer));
   }
@@ -647,6 +830,13 @@ static void draw_hand(GContext *ctx, GPoint centre, int32_t angle,
   graphics_context_set_stroke_color(ctx, s_palette.background);
   graphics_context_set_stroke_width(ctx, 4);
   gpath_draw_outline(ctx, hand);
+#if defined(PBL_COLOR)
+  if (s_shine_visible) {
+    gpath_destroy(hand);
+    draw_facets(ctx, centre, angle, length, back, points);
+    return;
+  }
+#endif
   graphics_context_set_fill_color(ctx, s_palette.foreground);
   gpath_draw_filled(ctx, hand);
   graphics_context_set_stroke_color(ctx, s_palette.foreground);
@@ -690,9 +880,13 @@ static void draw_dial_name(GContext *ctx, GRect bounds, GPoint centre) {
   if (!name[0]) {
     return;
   }
+  // Drawn in the information font, at the size of its labels or its values.
+  const bool large = s_settings.name_size == NAME_LARGE;
+  const StyledFont *font = large ? &s_value_font : &s_label_font;
+  const int16_t height = large ? VALUE_HEIGHT : LABEL_HEIGHT;
   const int32_t angle = dial_angle(0);
   const GSize text = graphics_text_layout_get_content_size(
-    name, s_label_font.font, GRect(0, 0, SLOT_WIDE_WIDTH, LABEL_HEIGHT + s_label_font.pad * 2),
+    name, font->font, GRect(0, 0, SLOT_WIDE_WIDTH, height + font->pad * 2),
     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter);
   int32_t distance = edge_distance(bounds, angle) - HOUR_TICK_LENGTH - 3;
   if (s_settings.hour_numbers && s_settings.slots[POSITION_TOP] == SLOT_NONE) {
@@ -702,20 +896,24 @@ static void draw_dial_name(GContext *ctx, GRect bounds, GPoint centre) {
   // the dial, and on rectangular ones it stays upright, so it reaches further
   // along the ray when the dial is turned to the side.
 #if defined(PBL_ROUND)
-  const int32_t reach = LABEL_HEIGHT / 2;
+  const int32_t reach = height / 2;
 #else
   const int32_t reach = (abs(sin_lookup(angle)) * text.w / 2
-    + abs(cos_lookup(angle)) * LABEL_HEIGHT / 2) / TRIG_MAX_RATIO;
+    + abs(cos_lookup(angle)) * height / 2) / TRIG_MAX_RATIO;
 #endif
   distance -= 3 + reach;
+  // With nothing shown at 12 o'clock, the name moves down into that space.
+  if (s_settings.slots[POSITION_TOP] == SLOT_NONE) {
+    distance = edge_distance(bounds, angle) * SLOT_DISTANCE_PERCENT / 100;
+  }
 
   const int16_t width = text.w + 8;
   const GPoint at = piece_begin(ray_point(centre, angle, distance),
-                                GSize(width, LABEL_HEIGHT + 8));
-  const int16_t top = at.y - LABEL_HEIGHT / 2 - s_label_font.pad;
+                                GSize(width, height + 8));
+  const int16_t top = at.y - height / 2 - font->pad;
   graphics_context_set_text_color(ctx, s_palette.label);
-  graphics_draw_text(ctx, name, s_label_font.font,
-                     GRect(at.x - width / 2, top, width, LABEL_HEIGHT + s_label_font.pad * 2),
+  graphics_draw_text(ctx, name, font->font,
+                     GRect(at.x - width / 2, top, width, height + font->pad * 2),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
   piece_end(ctx);
 }
@@ -826,7 +1024,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
       continue;
     }
     const int32_t angle = dial_angle(TRIG_MAX_ANGLE * position / POSITION_COUNT);
-    const int32_t percent = position % 2 ? 52 : 50;
+    const int32_t percent = position % 2 ? 52 : SLOT_DISTANCE_PERCENT;
     const int16_t width = position % 2 ? SLOT_SIDE_WIDTH : SLOT_WIDE_WIDTH;
     // Tall enough for the battery's icons above and gauge below its value.
     const GPoint at = piece_begin(
@@ -864,6 +1062,13 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   graphics_fill_circle(ctx, centre, HOUR_HAND_WIDTH / 2 + 2);
   graphics_context_set_fill_color(ctx, s_palette.background);
   graphics_fill_circle(ctx, centre, 2);
+
+#if defined(PBL_COLOR)
+  // Sparkles go over everything.
+  if (s_shine_visible) {
+    draw_sparkles(ctx, bounds, centre);
+  }
+#endif
 }
 
 
@@ -892,6 +1097,169 @@ static void subscribe_ticks(void) {
   tick_timer_service_subscribe(s_settings.second_hand ? SECOND_UNIT : MINUTE_UNIT,
                                tick_handler);
 }
+
+// ---------------------------------------------------------------------------
+// Motion
+//
+// With the shine turned on, the accelerometer is read ten times a second and
+// checked once a second, which costs little. Moving the watch while its face
+// is turned up switches to quick updates so the light can follow the wrist;
+// a few still seconds, or turning the face away, switch back and clear it.
+//
+// Readings follow the pull of gravity, in thousandths of g: lowering 3
+// o'clock makes x positive, lowering 12 o'clock makes y positive, and the
+// watch lying face up reads a z of about -1000.
+
+#if defined(PBL_COLOR)
+#define SHINE_IDLE_SAMPLES 10     // per update at 10 a second: once a second
+#define SHINE_MOVING_SAMPLES 3    // per update at 25 a second: about 8 a second
+#define SHINE_START_MG 80         // a movement this large starts the shine
+#define SHINE_STILL_MG 40         // drifting less than this counts as still
+#define SHINE_STILL_UPDATES 25    // about 3 seconds still clears the shine
+#define SHINE_FACE_UP_MG -400     // z below this: the face is turned upwards
+#define SHINE_TILT_MG 400         // tilt that takes the light off the screen
+#define SHINE_SETTLE 40           // how slowly the resting tilt catches up
+#define SHINE_REDRAW_PIXELS 2     // light movement worth redrawing for
+
+static bool s_shine_subscribed;
+static bool s_shine_moving;
+static bool s_have_tilt;
+static int16_t s_still_updates;
+// Where the watch was when it last stopped moving. Comparing with this rather
+// than the previous update lets a slow, steady turn count as movement.
+static int32_t s_still_x, s_still_y;
+// The last averaged reading, and the tilt the wrist is settling at. The light
+// sits in the middle at the settled tilt and moves as the wrist turns from it.
+static int32_t s_tilt_x, s_tilt_y;
+static int32_t s_rest_x, s_rest_y;
+static int32_t s_shine_tilt;
+
+static void apply_shine_sampling(void *context) {
+  if (!s_shine_subscribed) {
+    return;
+  }
+  accel_service_set_sampling_rate(s_shine_moving ? ACCEL_SAMPLING_25HZ : ACCEL_SAMPLING_10HZ);
+  accel_service_set_samples_per_update(s_shine_moving ? SHINE_MOVING_SAMPLES
+                                                      : SHINE_IDLE_SAMPLES);
+}
+
+static void shine_set_moving(bool moving) {
+  s_shine_moving = moving;
+  s_still_updates = 0;
+  // Changing the accelerometer's rate from inside its own handler crashes the
+  // app, so the change waits until the handler has returned.
+  app_timer_register(0, apply_shine_sampling, NULL);
+  if (!moving && s_shine_visible) {
+    s_shine_visible = false;
+    layer_mark_dirty(s_canvas);
+  }
+}
+
+// Where the light's line sits for the current tilt. Tilting the watch
+// moves the light towards the lower side, like light running downhill, from
+// one corner off the screen to the opposite one.
+static int16_t light_for_tilt(void) {
+  const GRect bounds = layer_get_bounds(s_canvas);
+  const int32_t middle = (bounds.size.w + bounds.size.h) / 2;
+  const int32_t travel = middle + SPARKLE_REACH;
+  int32_t tilt = s_shine_tilt;
+  tilt = tilt < -SHINE_TILT_MG ? -SHINE_TILT_MG : tilt > SHINE_TILT_MG ? SHINE_TILT_MG : tilt;
+  return middle + tilt * travel / SHINE_TILT_MG;
+}
+
+static void shine_accel_handler(AccelData *data, uint32_t count) {
+  int32_t sum_x = 0, sum_y = 0, sum_z = 0, readings = 0, swing = 0;
+  for (uint32_t i = 0; i < count; i++) {
+    // The vibration motor shakes the readings.
+    if (data[i].did_vibrate) {
+      continue;
+    }
+    sum_x += data[i].x;
+    sum_y += data[i].y;
+    sum_z += data[i].z;
+    readings++;
+    const int32_t moved = abs(data[i].x - s_tilt_x) + abs(data[i].y - s_tilt_y);
+    swing = moved > swing ? moved : swing;
+  }
+  if (readings == 0) {
+    return;
+  }
+  const int32_t x = sum_x / readings;
+  const int32_t y = sum_y / readings;
+  const bool face_up = sum_z / readings < SHINE_FACE_UP_MG;
+  if (!s_have_tilt) {
+    s_have_tilt = true;
+    s_tilt_x = s_rest_x = x;
+    s_tilt_y = s_rest_y = y;
+    return;
+  }
+
+  if (!s_shine_moving) {
+    if (swing < SHINE_START_MG || !face_up) {
+      s_tilt_x = s_rest_x = x;
+      s_tilt_y = s_rest_y = y;
+      return;
+    }
+    // The resting tilt stays where the watch was before it moved.
+    shine_set_moving(true);
+    s_still_x = x;
+    s_still_y = y;
+    s_shine_tilt = (x - s_rest_x) - (y - s_rest_y);
+  } else {
+    if (abs(x - s_still_x) + abs(y - s_still_y) < SHINE_STILL_MG) {
+      s_still_updates++;
+    } else {
+      s_still_updates = 0;
+      s_still_x = x;
+      s_still_y = y;
+    }
+    if (s_still_updates >= SHINE_STILL_UPDATES || !face_up) {
+      shine_set_moving(false);
+      s_tilt_x = s_rest_x = x;
+      s_tilt_y = s_rest_y = y;
+      return;
+    }
+  }
+  s_tilt_x = x;
+  s_tilt_y = y;
+  s_rest_x += (x - s_rest_x) / SHINE_SETTLE;
+  s_rest_y += (y - s_rest_y) / SHINE_SETTLE;
+  // Screen x runs with the accelerometer's x and screen y against its y, so
+  // the downhill direction along the diagonal is x - y. Halving the change
+  // each update smooths out a shaky hand.
+  s_shine_tilt += ((x - s_rest_x) - (y - s_rest_y) - s_shine_tilt) / 2;
+
+  const int16_t light = light_for_tilt();
+  if (!s_shine_visible || abs(light - s_light) >= SHINE_REDRAW_PIXELS) {
+    s_light = light;
+    s_shine_visible = true;
+    layer_mark_dirty(s_canvas);
+  }
+}
+
+// Reads the accelerometer only while the shine is turned on.
+static void update_shine_subscription(void) {
+  if (s_settings.shine == s_shine_subscribed) {
+    return;
+  }
+  s_shine_subscribed = s_settings.shine;
+  s_have_tilt = false;
+  s_shine_moving = false;
+  if (s_shine_visible) {
+    s_shine_visible = false;
+    layer_mark_dirty(s_canvas);
+  }
+  if (s_shine_subscribed) {
+    accel_data_service_subscribe(SHINE_IDLE_SAMPLES, shine_accel_handler);
+    accel_service_set_sampling_rate(ACCEL_SAMPLING_10HZ);
+  } else {
+    accel_data_service_unsubscribe();
+  }
+}
+#else
+static void update_shine_subscription(void) {
+}
+#endif
 
 static void battery_handler(BatteryChargeState state) {
   s_battery = state;
@@ -951,6 +1319,14 @@ static bool read_settings(DictionaryIterator *iterator) {
     s_settings.second_hand = tuple_int(tuple) != 0;
     changed = true;
   }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_NAME_SIZE))) {
+    s_settings.name_size = tuple_int(tuple) == NAME_LARGE ? NAME_LARGE : NAME_SMALL;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_SHINE))) {
+    s_settings.shine = tuple_int(tuple) != 0;
+    changed = true;
+  }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_DISCONNECT_VIBE))) {
     s_settings.disconnect_vibe = tuple_int(tuple) != 0;
     changed = true;
@@ -1002,6 +1378,7 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
     load_fonts();
     window_set_background_color(s_window, s_palette.background);
     subscribe_ticks();
+    update_shine_subscription();
   }
   layer_mark_dirty(s_canvas);
 }
@@ -1083,6 +1460,8 @@ static void init(void) {
   }, NULL);
 #endif
 
+  update_shine_subscription();
+
   // Settings from the phone arrive as one message with every option.
   app_message_register_inbox_received(inbox_received);
   app_message_open(256, 32);
@@ -1095,6 +1474,11 @@ static void deinit(void) {
 #if defined(PBL_HEALTH)
   health_service_events_unsubscribe();
   accel_tap_service_unsubscribe();
+#endif
+#if defined(PBL_COLOR)
+  if (s_shine_subscribed) {
+    accel_data_service_unsubscribe();
+  }
 #endif
   window_destroy(s_window);
   unload_fonts();

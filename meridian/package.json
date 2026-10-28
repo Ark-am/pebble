@@ -45,7 +45,9 @@
       "ROTATION",
       "NUMBER_FONT",
       "INFO_FONT",
-      "DIAL_NAME"
+      "DIAL_NAME",
+      "SHINE",
+      "NAME_SIZE"
     ],
     "resources": {
       "media": [

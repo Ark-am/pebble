@@ -89,6 +89,15 @@ module.exports = [
         defaultValue: false
       },
       {
+        type: 'toggle',
+        messageKey: 'SHINE',
+        label: 'Shine',
+        description: 'Light glints across the hands and the hour marks as you turn ' +
+          'your wrist. Uses more battery while the watch is moving.',
+        defaultValue: false,
+        capabilities: ['COLOR']
+      },
+      {
         type: 'input',
         messageKey: 'DIAL_NAME',
         label: 'Name on the dial',
@@ -97,6 +106,17 @@ module.exports = [
         attributes: {
           maxlength: 20
         }
+      },
+      {
+        type: 'select',
+        messageKey: 'NAME_SIZE',
+        label: 'Name size',
+        description: 'Small matches the information\'s labels; large matches its values.',
+        defaultValue: '0',
+        options: [
+          { label: 'Small', value: '0' },
+          { label: 'Large', value: '1' }
+        ]
       },
       {
         type: 'slider',

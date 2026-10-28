@@ -16,7 +16,9 @@ Aplite has no health data, so its health position shows the month and year.
 
 Below the 12 o'clock marker the dial shows a name, "PEBBLE" by default. Set
 any text under **Name on the dial** in the settings, or leave it empty to show
-no name. Long names are cut off with "…".
+no name. Long names are cut off with "…". When nothing is shown at 12
+o'clock, the name moves down into that space. **Name size** shows it small,
+like the information's labels, or large, like its values.
 
 On rectangular watches the minute track follows the edge of the screen; on
 round watches it follows the circle. When a Timeline Quick View covers part of
@@ -72,6 +74,26 @@ Drawing text in a bundled font needs more of the watch's small app stack
 than Pebble's own fonts, so keep large local variables out of the drawing
 code's path to the text.
 
+## Shine
+
+Turn on **Shine** in the settings and light seems to catch the face as the
+wrist turns. Each hand shows a lit side and a shaded side, which swap over
+as the light moves across it towards whichever side of the watch is lower,
+and the hour marks and the centre sparkle as it passes them. On the light
+background the hour marks turn light grey instead of sparkling. Once the
+watch has been still for about three seconds, or is turned away from face
+up, the face looks exactly as it does with Shine off.
+
+While the watch is still, the face reads the accelerometer once a second.
+Movement switches it to about eight updates a second until the watch is
+still again, so Shine mostly costs battery while the wrist is moving with
+the face turned up. It is off by default, and only colour watches have it;
+the setting is hidden on black and white ones.
+
+How readily the shine starts, how far the light moves for a given tilt and how soon
+it clears are set by the `SHINE_*` constants in the "Motion" section of
+`src/c/main.c`.
+
 ## Build
 
 From this directory:
@@ -101,7 +123,13 @@ pebble emu-steps --emulator basalt 8432                    # set today's steps
 pebble emu-heart-rate --emulator emery 72                  # heart rate (emery)
 pebble emu-tap --emulator basalt                           # cycle health metric
 pebble emu-set-timeline-quick-view --emulator basalt on    # Quick View layout
+pebble emu-accel --emulator basalt custom swivel.txt       # move the light (Shine on)
 ```
+
+For Shine, `swivel.txt` holds one accelerometer reading per line as `x,y,z`
+in thousandths of g, for example `0,0,-1000` for face up, then readings that
+swing x between about -300 and 300. The face only shines while the
+readings keep changing, so take screenshots while they play.
 
 The emulator's location lookup may fail, in which case the weather shows
 `--°` until a location is available.
