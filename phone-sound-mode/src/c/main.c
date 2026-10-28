@@ -43,6 +43,22 @@ static const GPathInfo SPEAKER_CONE_INFO = {
   .points = (GPoint[]) { {7, 8}, {13, 3}, {13, 21}, {7, 16} },
 };
 
+// On colour screens each mode has its own colour: the icon is drawn in it,
+// and the row and the status bar fill with it when selected or confirmed.
+// Black-and-white screens keep the plain black and white.
+static GColor mode_colour(int32_t mode) {
+  switch (mode) {
+    case MODE_SILENT:
+      return COLOR_FALLBACK(GColorBlue, GColorBlack);
+    case MODE_VIBRATE:
+      return COLOR_FALLBACK(GColorDarkGray, GColorBlack);
+    case MODE_NORMAL:
+      return COLOR_FALLBACK(GColorIslamicGreen, GColorBlack);
+    default:
+      return GColorBlack;
+  }
+}
+
 static const char *mode_name(int32_t mode) {
   switch (mode) {
     case MODE_SILENT:
@@ -56,8 +72,22 @@ static const char *mode_name(int32_t mode) {
   }
 }
 
-static void set_status(const char *text) {
+// The status bar is black while working, takes the mode's colour once the
+// phone confirms, and turns red when something goes wrong.
+#define STATUS_COLOUR GColorBlack
+#define ERROR_COLOUR COLOR_FALLBACK(GColorRed, GColorBlack)
+
+static void set_status_in(const char *text, GColor background) {
+  text_layer_set_background_color(s_status_layer, background);
   text_layer_set_text(s_status_layer, text);
+}
+
+static void set_status(const char *text) {
+  set_status_in(text, STATUS_COLOUR);
+}
+
+static void set_error(const char *text) {
+  set_status_in(text, ERROR_COLOUR);
 }
 
 static void cancel_response_timer(void) {
@@ -83,7 +113,7 @@ static void exit_to_watchface(void *context) {
 static void response_timeout(void *context) {
   s_response_timer = NULL;
   s_pending_mode = -1;
-  set_status("No response; select again");
+  set_error("No response; select again");
 }
 
 static void send_mode(int32_t mode) {
@@ -100,7 +130,7 @@ static void send_mode(int32_t mode) {
   s_pending_mode = -1;
 
   if (result != APP_MSG_OK) {
-    set_status("Phone unavailable");
+    set_error("Phone unavailable");
     return;
   }
 
@@ -110,7 +140,7 @@ static void send_mode(int32_t mode) {
 
   if (app_message_outbox_send() != APP_MSG_OK) {
     s_pending_mode = -1;
-    set_status("Send failed");
+    set_error("Send failed");
     return;
   }
 
@@ -201,12 +231,22 @@ static void menu_draw_row(GContext *ctx,
 #endif
   const int16_t middle = bounds.size.h / 2;
 
-  // Match the colours set in window_load so icons invert with the text.
-  const GColor foreground = menu_cell_layer_is_highlighted(cell_layer)
-    ? GColorWhite
-    : GColorBlack;
-  graphics_context_set_fill_color(ctx, foreground);
-  graphics_context_set_stroke_color(ctx, foreground);
+  // Match the colours set in window_load so icons invert with the text. On
+  // colour screens the selected row fills with the mode's colour, and the
+  // others show their icon in it.
+  const bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
+  const GColor foreground = highlighted ? GColorWhite : GColorBlack;
+#if defined(PBL_COLOR)
+  if (highlighted) {
+    graphics_context_set_fill_color(ctx, mode_colour(mode));
+    graphics_fill_rect(ctx, bounds, 0, GCornerNone);
+  }
+  const GColor icon = highlighted ? GColorWhite : mode_colour(mode);
+#else
+  const GColor icon = foreground;
+#endif
+  graphics_context_set_fill_color(ctx, icon);
+  graphics_context_set_stroke_color(ctx, icon);
   graphics_context_set_stroke_width(ctx, 2);
   draw_mode_icon(ctx, mode, GPoint(left, middle - ICON_SIZE / 2));
 
@@ -231,25 +271,25 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
   const Tuple *mode_tuple = dict_find(iterator, MESSAGE_KEY_CURRENT_MODE);
 
   if (!result_tuple) {
-    set_status("Invalid phone response");
+    set_error("Invalid phone response");
     return;
   }
 
   const int32_t result = result_tuple->value->int32;
   if (result == RESULT_PERMISSION_REQUIRED) {
-    set_status("Grant access on phone");
+    set_error("Grant access on phone");
     return;
   }
 
   if (result != RESULT_OK) {
-    set_status("Could not change mode");
+    set_error("Could not change mode");
     return;
   }
 
   const int32_t mode = mode_tuple ? mode_tuple->value->int32 : s_pending_mode;
   static char status[24];
   snprintf(status, sizeof(status), "%s enabled", mode_name(mode));
-  set_status(status);
+  set_status_in(status, mode_colour(mode));
   vibes_short_pulse();
   s_pending_mode = -1;
 
@@ -261,7 +301,7 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
 static void inbox_dropped(AppMessageResult reason, void *context) {
   cancel_response_timer();
   s_pending_mode = -1;
-  set_status("Phone response lost");
+  set_error("Phone response lost");
 }
 
 static void outbox_failed(DictionaryIterator *iterator,
@@ -269,7 +309,7 @@ static void outbox_failed(DictionaryIterator *iterator,
                           void *context) {
   cancel_response_timer();
   s_pending_mode = -1;
-  set_status("Phone unavailable");
+  set_error("Phone unavailable");
 }
 
 static void window_load(Window *window) {
