@@ -122,10 +122,7 @@ module.exports = [
         type: 'slider',
         messageKey: 'ROTATION',
         label: 'Rotate the dial',
-        description: 'Turns the whole face clockwise by this many degrees, for wearing ' +
-          'the watch at an angle. Negative values turn it anticlockwise. On round ' +
-          'watches everything turns, the numbers and information included; on ' +
-          'rectangular watches the text stays upright.',
+        description: 'Turns the whole face by the amount of degrees. Negative values turn it anticlockwise. Only works fully on the Pebble Round 2, where everything turns, the numbers and information included. On other watches, only the text stays upright.',
         defaultValue: 0,
         min: -180,
         max: 180,
