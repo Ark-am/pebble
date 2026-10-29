@@ -1,7 +1,8 @@
 # World Clock
 
-A digital watchface that shows the time where you are and in two other
-cities. Your own time is large at the top, with the day and date beside it.
+A watchface that shows the time where you are and in two other cities, in a
+digital or an analog style. In the digital style, your own time is large at
+the top, with the day and date beside it.
 Below it, each city shows its name, its time, and how it relates to yours:
 `Today +5h`, or the day's name when it is already another day there
 (`Sun +13h`). Half-hour and 45-minute time zones show as, for example,
@@ -9,10 +10,20 @@ Below it, each city shows its name, its time, and how it relates to yours:
 
 In 12-hour mode, AM or PM appears under the date and under each city's time.
 
+The analog style shows your time on a large dial with the day and date on
+it, and each city on a small dial of its own with its name and the same
+`Today +5h` detail below. A city's small dial is dark from 6 pm to 6 am and
+light during the day, so you can tell night from day at a glance. On round
+watches the cities' dials sit inside the large dial, left and right of the
+middle; on rectangular ones they sit in the bottom corners, and the large
+dial fills the rest of the screen.
+
 ## Settings
 
+- **Style:** Digital (the default) or Analog
 - **Time font** and **Text font:** see Font styles below
 - **Time format:** the same as the watch (the default), 12-hour or 24-hour
+  (digital style)
 - **Background colour:** white, cream, light or dark grey, black, navy, dark
   green, burgundy or purple. The date, details and dividers turn black or
   white, whichever suits it. Black-and-white watches offer light or dark.

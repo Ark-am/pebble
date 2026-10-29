@@ -78,6 +78,17 @@ module.exports = [
       },
       {
         type: 'select',
+        messageKey: 'STYLE',
+        label: 'Style',
+        description: 'Analog shows your time on a large dial and each city on a small one.',
+        defaultValue: '0',
+        options: [
+          { label: 'Digital', value: '0' },
+          { label: 'Analog', value: '1' }
+        ]
+      },
+      {
+        type: 'select',
         messageKey: 'TIME_FORMAT',
         label: 'Time format',
         defaultValue: '0',

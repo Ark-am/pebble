@@ -42,7 +42,8 @@
       "CITY_1_OFFSET",
       "CITY_2_LABEL",
       "CITY_2_OFFSET",
-      "REQUEST_OFFSETS"
+      "REQUEST_OFFSETS",
+      "STYLE"
     ],
     "resources": {
       "media": [

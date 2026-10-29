@@ -7,8 +7,10 @@
 // are kept separate; each one's stack is then only in use while it runs.
 #define NOINLINE __attribute__((noinline))
 
-// A digital world clock. The watch's own time is shown large at the top, with
-// the date beside it, and the times in two other cities are listed below.
+// A world clock, digital or analog. The digital style shows the watch's own
+// time large at the top, with the date beside it, and lists the times in two
+// other cities below. The analog style shows the watch's time on a large dial
+// and each city's on a small dial of its own.
 // The phone works out each city's offset from UTC (see src/pkjs) and the watch
 // keeps the last offsets it was given, so the times stay right without the
 // phone.
@@ -63,7 +65,13 @@
 #define LINE_GAP 3
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 3
+#define SETTINGS_VERSION 4
+
+// Values match the STYLE options in src/pkjs/config.js.
+typedef enum {
+  STYLE_DIGITAL,
+  STYLE_ANALOG,
+} Style;
 
 // Values match the TIME_FORMAT options in src/pkjs/config.js.
 typedef enum {
@@ -91,6 +99,8 @@ typedef struct {
   // (see font_styles.h).
   uint8_t number_font;
   uint8_t info_font;
+  // Added in version 4: digital or analog (see Style).
+  uint8_t style;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -99,6 +109,7 @@ static int settings_size(uint8_t version) {
   switch (version) {
     case 1: return offsetof(Settings, time_format);
     case 2: return offsetof(Settings, number_font);
+    case 3: return offsetof(Settings, style);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -140,6 +151,7 @@ static void settings_set_defaults(Settings *settings) {
     .time_argb = GColorBlackARGB8,
     .number_font = FONT_STYLE_PEBBLE,
     .info_font = FONT_STYLE_PEBBLE,
+    .style = STYLE_DIGITAL,
   };
 }
 
@@ -335,6 +347,167 @@ static void draw_divider(GContext *ctx, GRect area, int16_t y, GColor color) {
   graphics_draw_line(ctx, GPoint(area.origin.x, y), GPoint(area.origin.x + area.size.w - 1, y));
 }
 
+// ---------------------------------------------------------------------------
+// Analog
+
+static GPoint ray_point(GPoint centre, int32_t angle, int32_t distance) {
+  return GPoint(centre.x + sin_lookup(angle) * distance / TRIG_MAX_RATIO,
+                centre.y - cos_lookup(angle) * distance / TRIG_MAX_RATIO);
+}
+
+static void draw_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t length,
+                      int16_t width) {
+  graphics_context_set_stroke_color(ctx, s_palette.time);
+  graphics_context_set_stroke_width(ctx, width);
+  graphics_draw_line(ctx, centre, ray_point(centre, angle, length));
+}
+
+// A dial's ticks, just inside its radius: an hour tick every 30 degrees, the
+// one at 12 o'clock in the accent colour, and on large dials a fine tick for
+// every minute.
+static void draw_ticks(GContext *ctx, GPoint centre, int16_t radius, bool minutes) {
+  const int16_t hour_tick = radius / 7 > 3 ? radius / 7 : 3;
+  for (int i = 0; i < 60; i++) {
+    const bool hour = i % 5 == 0;
+    if (!hour && !minutes) {
+      continue;
+    }
+    const int32_t angle = TRIG_MAX_ANGLE * i / 60;
+    int16_t length = hour ? hour_tick : 2;
+    int16_t width = hour ? 3 : 1;
+    if (!minutes) {
+      // Small dials have only hour ticks: longer at 12, 3, 6 and 9, so the
+      // hands are easy to read against them.
+      const bool quarter = i % 15 == 0;
+      length = quarter ? radius / 4 : radius / 8 > 2 ? radius / 8 : 2;
+      width = quarter ? 2 : 1;
+    }
+    graphics_context_set_stroke_color(ctx, i == 0 ? s_palette.accent
+                                           : hour ? s_palette.foreground : s_palette.detail);
+    graphics_context_set_stroke_width(ctx, width);
+    graphics_draw_line(ctx, ray_point(centre, angle, radius - length),
+                       ray_point(centre, angle, radius));
+  }
+}
+
+// The hour and minute hands for a time, and a dot over the middle. The
+// hands are heavier on larger dials.
+static void draw_hands(GContext *ctx, GPoint centre, int16_t radius, const struct tm *t) {
+  const int32_t minute_angle = TRIG_MAX_ANGLE * t->tm_min / 60;
+  const int32_t hour_angle = TRIG_MAX_ANGLE * ((t->tm_hour % 12) * 60 + t->tm_min) / 720;
+  const int16_t width = radius >= 50 ? 5 : radius >= 26 ? 4 : 3;
+  draw_hand(ctx, centre, hour_angle, radius * 55 / 100, width);
+  draw_hand(ctx, centre, minute_angle, radius * 82 / 100, width - 1);
+  graphics_context_set_fill_color(ctx, s_palette.accent);
+  graphics_fill_circle(ctx, centre, width - 1);
+}
+
+// The day and date on the large dial, centred on x with its top at a height.
+static NOINLINE void draw_dial_date(GContext *ctx, int16_t x, int16_t top, const struct tm *t) {
+  char day[8];
+  strftime(day, sizeof(day), "%a", t);
+  uppercase(day);
+  char date[4];
+  snprintf(date, sizeof(date), "%d", t->tm_mday);
+  const int16_t day_w = text_width(day, s_date_font.font);
+  const int16_t date_w = text_width(date, s_date_font.font);
+  const int16_t space = 4;
+  const int16_t left = x - (day_w + space + date_w) / 2;
+  draw_text(ctx, day, s_date_font.font, s_palette.accent,
+            GRect(left, top, day_w + 2, DATE_HEIGHT), s_date_font.pad, GTextAlignmentLeft);
+  draw_text(ctx, date, s_date_font.font, s_palette.foreground,
+            GRect(left + day_w + space, top, date_w + 2, DATE_HEIGHT), s_date_font.pad,
+            GTextAlignmentLeft);
+}
+
+// One city on a small dial of its own, dark from 6 pm to 6 am and light
+// otherwise, so night and day show at a glance, with its name and how its
+// time relates to the watch's below. On a light background the night dial is
+// filled in; on a dark one the day dial is.
+static NOINLINE void draw_city_dial(GContext *ctx, GPoint centre, int16_t radius, int city,
+                                    time_t now, const struct tm *here, int32_t here_offset,
+                                    int16_t label_w) {
+  const int32_t offset = s_settings.offsets[city];
+  const time_t shifted = now + offset * 60;
+  const struct tm there = *gmtime(&shifted);
+  char detail[24];
+  format_detail(here, &there, offset - here_offset, detail, sizeof(detail));
+
+  const bool night = there.tm_hour < 6 || there.tm_hour >= 18;
+  const bool light_background = PBL_IF_COLOR_ELSE(is_light(s_palette.background),
+                                                   !s_settings.dark_theme);
+  const Palette usual = s_palette;
+  if (night == light_background) {
+    // The dial is filled and its ticks and hands drawn in the background's
+    // colour; the accent stays.
+    graphics_context_set_fill_color(ctx, s_palette.foreground);
+    graphics_fill_circle(ctx, centre, radius);
+    s_palette.foreground = s_palette.time = s_palette.detail = usual.background;
+  }
+  graphics_context_set_stroke_color(ctx, usual.detail);
+  graphics_context_set_stroke_width(ctx, 1);
+  graphics_draw_circle(ctx, centre, radius);
+  draw_ticks(ctx, centre, radius - 2, false);
+  draw_hands(ctx, centre, radius - 2, &there);
+  s_palette = usual;
+
+  const int16_t name_top = centre.y + radius + LINE_GAP + 1;
+  const GRect name = GRect(centre.x - label_w / 2, name_top, label_w, CITY_HEIGHT);
+  draw_text(ctx, s_settings.labels[city], s_city_font.font, s_palette.accent, name,
+            s_city_font.pad, GTextAlignmentCenter);
+  draw_text(ctx, detail, s_detail_font.font, s_palette.detail,
+            GRect(name.origin.x, name_top + CITY_HEIGHT + LINE_GAP, label_w, DETAIL_HEIGHT),
+            s_detail_font.pad, GTextAlignmentCenter);
+}
+
+// The watch's time on a large dial with the date on it. On rectangular
+// watches the cities' dials sit side by side below it; on round ones they sit
+// inside it, left and right of the middle, under its hands.
+static NOINLINE void draw_analog(GContext *ctx, GRect bounds, time_t now, const struct tm *here,
+                                 int32_t here_offset) {
+  const GPoint middle = grect_center_point(&bounds);
+#if defined(PBL_ROUND)
+  const int16_t radius = bounds.size.w / 2 - 3;
+  const GPoint centre = middle;
+  const int16_t city_r = radius * 27 / 100;
+  const int16_t city_y = centre.y + radius * 8 / 100;
+  const int16_t city_dx = radius * 47 / 100;
+  const int16_t label_w = radius * 72 / 100;
+  // Above the middle, clear of the cities.
+  const int16_t date_top = centre.y - radius * 55 / 100;
+#else
+  // The cities' dials sit in the bottom corners, with their names and details
+  // below them, and the large dial fills the rest of the screen, as large as
+  // it can be without touching them.
+  const int16_t w = bounds.size.w;
+  const int16_t top = bounds.origin.y;
+  const int16_t city_r = w * 16 / 100;
+  const int16_t city_dx = w / 4;
+  const int16_t labels_h = LINE_GAP + 1 + CITY_HEIGHT + LINE_GAP + DETAIL_HEIGHT;
+  const int16_t city_y = top + bounds.size.h - labels_h - city_r - 1;
+  const int16_t label_w = w / 2 - 4;
+  int16_t radius = w * 33 / 100;
+  GPoint centre = GPoint(middle.x, top + 3 + radius);
+  for (;;) {
+    const int32_t dy = city_y - centre.y;
+    const int32_t reach = radius + city_r + 2;
+    if (radius <= 12 || city_dx * city_dx + dy * dy >= reach * reach) {
+      break;
+    }
+    radius--;
+    centre.y = top + 3 + radius;
+  }
+  const int16_t date_top = centre.y + radius * 40 / 100;
+#endif
+  draw_ticks(ctx, centre, radius, true);
+  draw_dial_date(ctx, centre.x, date_top, here);
+  for (int city = 0; city < CITY_COUNT; city++) {
+    const int16_t x = middle.x + (city ? city_dx : -city_dx);
+    draw_city_dial(ctx, GPoint(x, city_y), city_r, city, now, here, here_offset, label_w);
+  }
+  draw_hands(ctx, centre, radius, here);
+}
+
 static void canvas_update_proc(Layer *layer, GContext *ctx) {
   // The unobstructed area shrinks when a Timeline Quick View is showing.
   const GRect bounds = layer_get_unobstructed_bounds(layer);
@@ -345,6 +518,12 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
 
   graphics_context_set_fill_color(ctx, s_palette.background);
   graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
+
+  if (s_settings.style == STYLE_ANALOG) {
+    graphics_context_set_antialiased(ctx, true);
+    draw_analog(ctx, bounds, now, &here, here_offset);
+    return;
+  }
 
   // Everything is stacked and centred vertically: the local time, a divider,
   // then each city with a fainter divider between them.
@@ -427,6 +606,10 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
 
   if ((tuple = dict_find(iterator, MESSAGE_KEY_THEME))) {
     s_settings.dark_theme = tuple_int(tuple) == 1;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_STYLE))) {
+    s_settings.style = tuple_int(tuple) == STYLE_ANALOG ? STYLE_ANALOG : STYLE_DIGITAL;
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_NUMBER_FONT))) {
