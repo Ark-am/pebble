@@ -36,7 +36,7 @@ phone's location and internet access; no weather account or API key is needed.
 Health data is unavailable on Aplite, and heart rate requires a supported
 sensor. Not affiliated with or endorsed by Casio.
 
-The full text is in `STORE_DESCRIPTION.txt`.
+The full text is in `store/screenshots/STORE_DESCRIPTION.txt`.
 
 ## Verification and submission
 
