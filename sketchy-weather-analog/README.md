@@ -2,15 +2,15 @@
 
 An analog watchface drawn in a pencil-sketch style. A large hand-drawn widget
 fills most of the dial: a picture with one or two values underneath, such as
-the weather icon above the temperature and date. The hour and minute hands
-are short pointers between the widget and the ticks, so they never cover it:
-the minute hand reaches in among the hour ticks, and the hour hand stops just
-short of them.
+the weather icon above the temperature and date. There is no hour hand: the
+current hour's number shows instead, larger and in its own colour (red by
+default). The minute hand is a short pointer between the widget and the
+ticks, reaching in among the hour ticks, so it never covers the widget.
 
 On rectangular watches the screen has heavily rounded corners, and the ticks
 and hour numbers follow the rounded edge. Round watches use the full circle.
 
-The hands and hour markers are pencil strokes, and the hour numbers
+The minute hand and hour markers are pencil strokes, and the hour numbers
 and all the text are handwritten, in Patrick Hand, unless another font is
 chosen. The Pebble Time 2 (Emery), with the most room, has the largest
 picture and text.
@@ -65,13 +65,16 @@ battery, choose it as one of the centre screen items.
 
 - **Background:** Paper (light) or Chalkboard (dark)
 - **Centre circle:** the four screens and whether they change every minute (see above)
-- **Hands:** Pencil stroke (default), Sketched spear (a pencil outline with
+- **Minute hand:** Pencil stroke (default), Sketched spear (a pencil outline with
   a line down the middle) or Sketched arrow (a pencil shaft with an open
   arrowhead and fletching)
 - **Name under the information:** any text, PEBBLE by default; leave it empty
   to show none. A name too wide for the space ends in an ellipsis.
 - **Number font** and **Information font:** see Font styles below
-- **Show hour numbers:** off by default; when on, 1 to 12 sit just inside the hour ticks
+- **Show hour numbers:** off by default; when on, the other hours' numbers
+  sit just inside the hour ticks too
+- **Current hour colour:** the colour of the current hour's number (colour
+  watches only; red by default)
 - **Temperature:** Celsius or Fahrenheit
 - **Vibrate when the phone disconnects**
 

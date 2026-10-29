@@ -49,7 +49,8 @@
       "SCREEN_4_SECOND",
       "ROTATE_SCREENS",
       "DISCONNECT_VIBE",
-      "DIAL_NAME"
+      "DIAL_NAME",
+      "HOUR_COLOR"
     ],
     "resources": {
       "media": [
@@ -141,6 +142,98 @@
         {
           "type": "font",
           "name": "FONT_SKETCH_NUMERAL_SMALL_19",
+          "file": "fonts/PatrickHand-Regular.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_SERIF_HOUR_LARGE_29",
+          "file": "fonts/IBMPlexSerif-SemiBold.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_ROUNDED_HOUR_LARGE_28",
+          "file": "fonts/VarelaRound-Regular.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_MONO_HOUR_LARGE_29",
+          "file": "fonts/DMMono-Medium.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_SKETCH_HOUR_LARGE_37",
+          "file": "fonts/PatrickHand-Regular.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_SERIF_HOUR_SMALL_19",
+          "file": "fonts/IBMPlexSerif-SemiBold.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_ROUNDED_HOUR_SMALL_18",
+          "file": "fonts/VarelaRound-Regular.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_MONO_HOUR_SMALL_19",
+          "file": "fonts/DMMono-Medium.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_SKETCH_HOUR_SMALL_27",
           "file": "fonts/PatrickHand-Regular.ttf",
           "characterRegex": "[0-9]",
           "targetPlatforms": [

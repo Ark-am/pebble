@@ -5,6 +5,11 @@
       "large": { "height": 17, "like": "GOTHIC_24" },
       "small": { "height": 13, "like": "GOTHIC_18" }
     },
+    "HOUR": {
+      "kind": "numbers", "bold": true, "characters": "[0-9]",
+      "large": { "height": 24, "like": "GOTHIC_28_BOLD", "width_allowance": 1.6 },
+      "small": { "height": 18, "like": "GOTHIC_24_BOLD" }
+    },
     "TEXT": {
       "kind": "info", "characters": "[ -~°]",
       "large": { "height": 20, "like": "GOTHIC_28_BOLD", "width_allowance": 1.1 },

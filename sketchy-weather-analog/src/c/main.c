@@ -36,6 +36,11 @@
   #define NUMERAL_FONT FONT_KEY_GOTHIC_24
   #define NUMERAL_HEIGHT 17
   #define NUMERAL_PAD 7
+  // The current hour's number, larger: Pebble's font, and the visible height
+  // the bundled fonts are sized to (see font_styles.h).
+  #define HOUR_FONT FONT_KEY_GOTHIC_28_BOLD
+  #define HOUR_HEIGHT 24
+  #define HOUR_PAD 6
   #define DAY_FONT FONT_KEY_GOTHIC_28_BOLD
   #define DAY_HEIGHT 20
   #define DAY_PAD 8
@@ -53,7 +58,6 @@
   #define HOUR_TICK_LENGTH 11
   #define MINUTE_TICK_LENGTH 4
   // Half the width of each hand at its widest point.
-  #define HOUR_HAND_WIDTH 5
   #define MINUTE_HAND_WIDTH 4
   #define HATCH_SPACING 4
 #else
@@ -64,6 +68,9 @@
   #define NUMERAL_FONT FONT_KEY_GOTHIC_18
   #define NUMERAL_HEIGHT 13
   #define NUMERAL_PAD 5
+  #define HOUR_FONT FONT_KEY_GOTHIC_24_BOLD
+  #define HOUR_HEIGHT 18
+  #define HOUR_PAD 7
   #define DAY_FONT FONT_KEY_GOTHIC_18_BOLD
   #define DAY_HEIGHT 13
   #define DAY_PAD 5
@@ -75,7 +82,6 @@
   #define CLEAR_RADIUS 46
   #define HOUR_TICK_LENGTH 8
   #define MINUTE_TICK_LENGTH 3
-  #define HOUR_HAND_WIDTH 4
   #define MINUTE_HAND_WIDTH 3
   #define HATCH_SPACING 3
 #endif
@@ -88,8 +94,9 @@
 #define CORNER_PERCENT 55
 #define HAND_GAP 3
 #define TEXT_GAP 4
-// Space between the values and the name under them.
-#define NAME_GAP 20
+// Space between the values and the name under them, as a percentage of the
+// radius of the information's round area, so it scales with the screen.
+#define NAME_GAP_PERCENT 22
 
 // What the centre widget can show. Values match the options in src/pkjs/config.js.
 typedef enum {
@@ -103,7 +110,7 @@ typedef enum {
 } Item;
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 7
+#define SETTINGS_VERSION 8
 typedef struct {
   uint8_t version;
   bool dark_theme;
@@ -129,6 +136,9 @@ typedef struct {
   uint8_t sketchy_hands;
   // Added in version 7: the name under the information; empty shows none.
   char dial_name[24];
+  // Added in version 8: the colour of the current hour's number, which
+  // stands in for the hour hand.
+  uint8_t hour_argb;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -141,6 +151,7 @@ static int settings_size(uint8_t version) {
     case 4: return offsetof(Settings, number_font);
     case 5: return offsetof(Settings, unused_elegant_hands);
     case 6: return offsetof(Settings, dial_name);
+    case 7: return offsetof(Settings, hour_argb);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -185,6 +196,7 @@ static Window *s_window;
 static Layer *s_canvas;
 static StyledFont s_text_font;
 static StyledFont s_numeral_font;
+static StyledFont s_hour_font;
 static StyledFont s_day_font;
 static StyledFont s_name_font;
 
@@ -201,6 +213,7 @@ static int s_screen;
 
 static void unload_fonts(void) {
   styled_font_unload(&s_numeral_font);
+  styled_font_unload(&s_hour_font);
   styled_font_unload(&s_text_font);
   styled_font_unload(&s_day_font);
   styled_font_unload(&s_name_font);
@@ -212,6 +225,7 @@ static void load_fonts(void) {
   unload_fonts();
   styled_font_load(&s_numeral_font, s_settings.number_font, NUMERAL_FONT,
                    NUMERAL_PAD, FONTS_NUMERAL);
+  styled_font_load(&s_hour_font, s_settings.number_font, HOUR_FONT, HOUR_PAD, FONTS_HOUR);
   styled_font_load(&s_text_font, s_settings.info_font, TEXT_FONT, TEXT_PAD, FONTS_TEXT);
   styled_font_load(&s_day_font, s_settings.info_font, DAY_FONT, DAY_PAD, FONTS_DAY);
   styled_font_load(&s_name_font, s_settings.info_font, NAME_FONT, NAME_PAD, FONTS_NAME);
@@ -224,6 +238,7 @@ static void settings_set_defaults(Settings *settings) {
   *settings = (Settings) {
     .version = SETTINGS_VERSION,
     .dial_name = "PEBBLE",
+    .hour_argb = GColorRedARGB8,
     .dark_theme = false,
     .number_font = FONT_STYLE_SKETCH,
     .info_font = FONT_STYLE_SKETCH,
@@ -730,23 +745,38 @@ static GPoint numeral_centre(GRect bounds, GPoint centre, int32_t angle, GSize s
   return ray_point(centre, angle, edge_distance(bounds, angle) - HOUR_TICK_LENGTH - 3 - reach);
 }
 
-// Hour numbers sit just inside the hour markers, in the watch's font or the
-// chosen one.
-static NOINLINE void draw_hour_numbers(GContext *ctx, GRect bounds, GPoint centre) {
-  graphics_context_set_text_color(ctx, s_palette.ink);
-  for (int hour = 1; hour <= 12; hour++) {
-    char text[3];
-    snprintf(text, sizeof(text), "%d", hour);
-    const int16_t width = graphics_text_layout_get_content_size(
-      text, s_numeral_font.font, GRect(0, 0, 60, 40), GTextOverflowModeFill,
-      GTextAlignmentLeft).w;
-    const GPoint at = numeral_centre(bounds, centre, TRIG_MAX_ANGLE * hour / 12,
-                                     GSize(width, NUMERAL_HEIGHT));
-    graphics_draw_text(ctx, text, s_numeral_font.font,
-                       GRect(at.x - width, at.y - NUMERAL_HEIGHT / 2 - s_numeral_font.pad,
-                             width * 2, NUMERAL_HEIGHT + s_numeral_font.pad * 2),
-                       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+// One hour's number, just inside its hour marker.
+static void draw_hour_number(GContext *ctx, GRect bounds, GPoint centre, int hour,
+                             const StyledFont *font, int16_t height) {
+  char text[3];
+  snprintf(text, sizeof(text), "%d", hour);
+  const int16_t width = graphics_text_layout_get_content_size(
+    text, font->font, GRect(0, 0, 60, 40), GTextOverflowModeFill, GTextAlignmentLeft).w;
+  const GPoint at = numeral_centre(bounds, centre, TRIG_MAX_ANGLE * hour / 12,
+                                   GSize(width, height));
+  graphics_draw_text(ctx, text, font->font,
+                     GRect(at.x - width, at.y - height / 2 - font->pad, width * 2,
+                           height + font->pad * 2),
+                     GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+}
+
+// There is no hour hand: the current hour's number shows instead, larger and
+// in its own colour. The other numbers show only when turned on, in the
+// watch's font or the chosen one.
+static NOINLINE void draw_hour_numbers(GContext *ctx, GRect bounds, GPoint centre,
+                                       const struct tm *t) {
+  const int current = t->tm_hour % 12 ? t->tm_hour % 12 : 12;
+  if (s_settings.hour_numbers) {
+    graphics_context_set_text_color(ctx, s_palette.ink);
+    for (int hour = 1; hour <= 12; hour++) {
+      if (hour != current) {
+        draw_hour_number(ctx, bounds, centre, hour, &s_numeral_font, NUMERAL_HEIGHT);
+      }
+    }
   }
+  graphics_context_set_text_color(ctx, PBL_IF_COLOR_ELSE((GColor) { .argb = s_settings.hour_argb },
+                                                         s_palette.ink));
+  draw_hour_number(ctx, bounds, centre, current, &s_hour_font, HOUR_HEIGHT);
 }
 
 // The usual hand: a heavy pencil stroke with a lighter one beside it.
@@ -831,14 +861,13 @@ static NOINLINE void draw_arrow_hand(GContext *ctx, GPoint centre, int32_t angle
   }
 }
 
-// Draws a hand in the chosen variation.
+// Draws the hand in the chosen variation.
 static void draw_dial_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t from,
-                           int16_t to, int16_t half_width, bool minute) {
+                           int16_t to, int16_t half_width) {
   switch (s_settings.sketchy_hands) {
     case HAND_VARIATION_FIRST: draw_spear_hand(ctx, centre, angle, from, to, half_width); break;
     case HAND_VARIATION_SECOND: draw_arrow_hand(ctx, centre, angle, from, to, half_width); break;
-    // The pencil hour hand is a little heavier.
-    default: draw_sketch_hand(ctx, centre, angle, from, to, half_width + (minute ? 0 : 1)); break;
+    default: draw_sketch_hand(ctx, centre, angle, from, to, half_width); break;
   }
 }
 
@@ -1116,13 +1145,16 @@ static NOINLINE void draw_values(GContext *ctx, GPoint centre, Item main, Item s
 }
 
 // The wearer's name for the watch, centred under the values, cut short if it
-// is too wide for the information's round area there.
+// is too wide for the information's round area there. A large
+// NAME_GAP_PERCENT can put the name below that area, so it always has some
+// width.
 static NOINLINE void draw_name(GContext *ctx, GPoint centre) {
   if (!s_settings.dial_name[0]) {
     return;
   }
-  const int16_t below = RULE_DROP + 3 + TEXT_HEIGHT + NAME_GAP;
-  const int16_t room = ring_half_width(below) * 2 - 6;
+  const int16_t below = RULE_DROP + 3 + TEXT_HEIGHT + CLEAR_RADIUS * NAME_GAP_PERCENT / 100;
+  const int16_t fitted = ring_half_width(below) * 2 - 6;
+  const int16_t room = fitted > CLEAR_RADIUS ? fitted : CLEAR_RADIUS;
   graphics_context_set_text_color(ctx, s_palette.ink);
   graphics_draw_text(ctx, s_settings.dial_name, s_name_font.font,
                      GRect(centre.x - room / 2, centre.y + below - s_name_font.pad, room,
@@ -1246,9 +1278,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   draw_corners(ctx, layer_get_bounds(layer));
 
   draw_ticks(ctx, bounds, centre);
-  if (s_settings.hour_numbers) {
-    draw_hour_numbers(ctx, bounds, centre);
-  }
+  draw_hour_numbers(ctx, bounds, centre, t);
 
   // The alerts move further in when hour numbers are shown, to clear them.
   const int32_t corner_left = -TRIG_MAX_ANGLE / 8;
@@ -1260,17 +1290,14 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   // The information fills the middle of the face.
   draw_widget(ctx, centre, t);
 
-  // The hands are short pointers from just outside the information towards
-  // the ticks, following the shape of the dial, so they are longest towards
-  // the corners. The minute hand reaches in among the hour ticks to the
-  // minute ticks; the hour hand stops short of the hour ticks.
+  // The minute hand is a short pointer from just outside the information,
+  // reaching in among the hour ticks to the minute ticks, following the shape
+  // of the dial, so it is longest towards the corners. The current hour's
+  // number stands in for the hour hand.
   const int16_t start = CLEAR_RADIUS + HAND_GAP;
   const int32_t minute_angle = TRIG_MAX_ANGLE * t->tm_min / 60;
-  const int32_t hour_angle = TRIG_MAX_ANGLE * ((t->tm_hour % 12) * 60 + t->tm_min) / 720;
   const int16_t minute_end = edge_distance(bounds, minute_angle) - MINUTE_TICK_LENGTH - 1;
-  const int16_t hour_end = edge_distance(bounds, hour_angle) - HOUR_TICK_LENGTH - 3;
-  draw_dial_hand(ctx, centre, hour_angle, start, hour_end, HOUR_HAND_WIDTH, false);
-  draw_dial_hand(ctx, centre, minute_angle, start, minute_end, MINUTE_HAND_WIDTH, true);
+  draw_dial_hand(ctx, centre, minute_angle, start, minute_end, MINUTE_HAND_WIDTH);
 }
 
 // ---------------------------------------------------------------------------
@@ -1356,6 +1383,10 @@ static bool read_settings(DictionaryIterator *iterator) {
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_INFO_FONT))) {
     s_settings.info_font = tuple_int(tuple) % FONT_STYLE_COUNT;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_HOUR_COLOR))) {
+    s_settings.hour_argb = GColorFromHEX(tuple_int(tuple)).argb;
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_DIAL_NAME)) && tuple->type == TUPLE_CSTRING) {

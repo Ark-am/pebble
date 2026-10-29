@@ -78,7 +78,7 @@ module.exports = [
       {
         type: 'select',
         messageKey: 'SKETCHY_HANDS',
-        label: 'Hands',
+        label: 'Minute hand',
         defaultValue: '0',
         options: [
           { label: 'Pencil stroke', value: '0' },
@@ -90,7 +90,16 @@ module.exports = [
         type: 'toggle',
         messageKey: 'HOUR_NUMBERS',
         label: 'Show hour numbers',
+        description: 'The current hour\'s number always shows, larger, in place of an hour hand.',
         defaultValue: false
+      },
+      {
+        type: 'color',
+        messageKey: 'HOUR_COLOR',
+        label: 'Current hour colour',
+        defaultValue: 'FF0000',
+        sunlight: false,
+        capabilities: ['COLOR']
       },
       {
         type: 'select',
