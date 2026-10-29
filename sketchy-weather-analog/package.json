@@ -50,7 +50,8 @@
       "ROTATE_SCREENS",
       "DISCONNECT_VIBE",
       "DIAL_NAME",
-      "HOUR_COLOR"
+      "HOUR_COLOR",
+      "MINUTE_STYLE"
     ],
     "resources": {
       "media": [

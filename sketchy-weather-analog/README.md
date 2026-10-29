@@ -65,7 +65,14 @@ battery, choose it as one of the centre screen items.
 
 - **Background:** Paper (light) or Chalkboard (dark)
 - **Centre circle:** the four screens and whether they change every minute (see above)
-- **Minute hand:** Pencil stroke (default), Sketched spear (a pencil outline with
+- **Minutes:** how the minutes show: Hand (default), Highlighted tick (the
+  current minute's tick as a bold coloured stroke), Minute number (the
+  minutes as a number round the edge, taking the place of any hour number it
+  lands on and moving aside from the current hour's), Progress arc (pencil
+  strokes along the edge from 12 o'clock to the minute), Sketched bead,
+  Edge pointer (a small triangle at the edge), Progress arc and bead, or
+  Minute number and tick. All but the hand use the current hour's colour.
+- **Minute hand** (when the minutes show as a hand): Pencil stroke (default), Sketched spear (a pencil outline with
   a line down the middle) or Sketched arrow (a pencil shaft with an open
   arrowhead and fletching)
 - **Name under the information:** any text, PEBBLE by default; leave it empty

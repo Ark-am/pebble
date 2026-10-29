@@ -59,6 +59,11 @@
   #define MINUTE_TICK_LENGTH 4
   // Half the width of each hand at its widest point.
   #define MINUTE_HAND_WIDTH 4
+  // The other ways of showing the minutes (see MinuteStyle): the width of the
+  // highlighted tick, the bead's radius and half the edge pointer's base.
+  #define MINUTE_MARK_WIDTH 4
+  #define BEAD_RADIUS 6
+  #define EDGE_POINTER_HALF 7
   #define HATCH_SPACING 4
 #else
   #define TEXT_FONT FONT_KEY_GOTHIC_18
@@ -83,6 +88,9 @@
   #define HOUR_TICK_LENGTH 8
   #define MINUTE_TICK_LENGTH 3
   #define MINUTE_HAND_WIDTH 3
+  #define MINUTE_MARK_WIDTH 3
+  #define BEAD_RADIUS 4
+  #define EDGE_POINTER_HALF 5
   #define HATCH_SPACING 3
 #endif
 
@@ -110,7 +118,7 @@ typedef enum {
 } Item;
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 8
+#define SETTINGS_VERSION 9
 typedef struct {
   uint8_t version;
   bool dark_theme;
@@ -139,6 +147,8 @@ typedef struct {
   // Added in version 8: the colour of the current hour's number, which
   // stands in for the hour hand.
   uint8_t hour_argb;
+  // Added in version 9: how the minutes are shown (see MinuteStyle).
+  uint8_t minute_style;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -152,6 +162,7 @@ static int settings_size(uint8_t version) {
     case 5: return offsetof(Settings, unused_elegant_hands);
     case 6: return offsetof(Settings, dial_name);
     case 7: return offsetof(Settings, hour_argb);
+    case 8: return offsetof(Settings, minute_style);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -745,6 +756,26 @@ static GPoint numeral_centre(GRect bounds, GPoint centre, int32_t angle, GSize s
   return ray_point(centre, angle, edge_distance(bounds, angle) - HOUR_TICK_LENGTH - 3 - reach);
 }
 
+// Whether the minutes show as a number (see MinuteStyle).
+static bool minute_number_shown(void);
+
+// Where round the dial, in minutes, the minute number sits: at its minute,
+// unless that is beside the current hour's number, when it moves a little
+// round the dial to keep clear of it.
+static int minute_number_place(const struct tm *t) {
+  const int hour_place = (t->tm_hour % 12) * 5;
+  const int from_hour = (t->tm_min - hour_place + 90) % 60 - 30;
+  if (abs(from_hour) <= 3) {
+    return (hour_place + (from_hour < 0 ? -4 : 4) + 60) % 60;
+  }
+  return t->tm_min;
+}
+
+// The colour chosen for the current hour, which the minutes share.
+static GColor hour_colour(void) {
+  return PBL_IF_COLOR_ELSE((GColor) { .argb = s_settings.hour_argb }, s_palette.ink);
+}
+
 // One hour's number, just inside its hour marker.
 static void draw_hour_number(GContext *ctx, GRect bounds, GPoint centre, int hour,
                              const StyledFont *font, int16_t height) {
@@ -762,20 +793,22 @@ static void draw_hour_number(GContext *ctx, GRect bounds, GPoint centre, int hou
 
 // There is no hour hand: the current hour's number shows instead, larger and
 // in its own colour. The other numbers show only when turned on, in the
-// watch's font or the chosen one.
+// watch's font or the chosen one, and the minute number takes the place of
+// any it lands on.
 static NOINLINE void draw_hour_numbers(GContext *ctx, GRect bounds, GPoint centre,
                                        const struct tm *t) {
   const int current = t->tm_hour % 12 ? t->tm_hour % 12 : 12;
   if (s_settings.hour_numbers) {
+    const int place = minute_number_place(t);
     graphics_context_set_text_color(ctx, s_palette.ink);
     for (int hour = 1; hour <= 12; hour++) {
-      if (hour != current) {
+      const int from_minutes = (place - hour * 5 + 90) % 60 - 30;
+      if (hour != current && !(minute_number_shown() && abs(from_minutes) <= 2)) {
         draw_hour_number(ctx, bounds, centre, hour, &s_numeral_font, NUMERAL_HEIGHT);
       }
     }
   }
-  graphics_context_set_text_color(ctx, PBL_IF_COLOR_ELSE((GColor) { .argb = s_settings.hour_argb },
-                                                         s_palette.ink));
+  graphics_context_set_text_color(ctx, hour_colour());
   draw_hour_number(ctx, bounds, centre, current, &s_hour_font, HOUR_HEIGHT);
 }
 
@@ -868,6 +901,142 @@ static void draw_dial_hand(GContext *ctx, GPoint centre, int32_t angle, int16_t 
     case HAND_VARIATION_FIRST: draw_spear_hand(ctx, centre, angle, from, to, half_width); break;
     case HAND_VARIATION_SECOND: draw_arrow_hand(ctx, centre, angle, from, to, half_width); break;
     default: draw_sketch_hand(ctx, centre, angle, from, to, half_width); break;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Minutes
+//
+// The minutes show as the hand above, or in the current hour's colour as a
+// highlighted tick, a number, a pencil arc, a bead or a pointer at the edge,
+// or two of those together. Values match the options in src/pkjs/config.js.
+
+typedef enum {
+  MINUTE_HAND,
+  MINUTE_TICK,
+  MINUTE_NUMBER,
+  MINUTE_ARC,
+  MINUTE_BEAD,
+  MINUTE_EDGE_POINTER,
+  MINUTE_ARC_AND_BEAD,
+  MINUTE_NUMBER_AND_TICK,
+  MINUTE_STYLE_COUNT,
+} MinuteStyle;
+
+static int32_t minute_angle(int minute) {
+  return TRIG_MAX_ANGLE * minute / 60;
+}
+
+// The current minute's tick, as a bold pencil stroke reaching in past the
+// hour ticks, or only as far as them beside the current hour's number or
+// with the minute number inside it.
+static void draw_minute_tick(GContext *ctx, GRect bounds, GPoint centre, const struct tm *t,
+                             bool with_number) {
+  const int minute = t->tm_min;
+  const int32_t angle = minute_angle(minute);
+  const int32_t outer = edge_distance(bounds, angle);
+  const int from_hour = (minute - (t->tm_hour % 12) * 5 + 90) % 60 - 30;
+  const int16_t reach = HOUR_TICK_LENGTH + (abs(from_hour) <= 2 || with_number ? 0 : 6);
+  const GPoint a = ray_point(centre, angle, outer - reach);
+  const GPoint b = ray_point(centre, angle, outer);
+  graphics_context_set_stroke_color(ctx, hour_colour());
+  graphics_context_set_stroke_width(ctx, MINUTE_MARK_WIDTH);
+  graphics_draw_line(ctx, a, b);
+  sketch_line(ctx, a, b, hour_colour());
+}
+
+static bool minute_number_shown(void) {
+  return s_settings.minute_style == MINUTE_NUMBER
+    || s_settings.minute_style == MINUTE_NUMBER_AND_TICK;
+}
+
+// The minutes as a number at their place round the edge, among the hour
+// numbers (see minute_number_place).
+static NOINLINE void draw_minute_number(GContext *ctx, GRect bounds, GPoint centre,
+                                        const struct tm *t) {
+  char text[3];
+  snprintf(text, sizeof(text), "%02d", t->tm_min);
+  const int32_t angle = minute_angle(minute_number_place(t));
+  const int16_t width = graphics_text_layout_get_content_size(
+    text, s_numeral_font.font, GRect(0, 0, 60, 40), GTextOverflowModeFill,
+    GTextAlignmentLeft).w;
+  const GPoint at = numeral_centre(bounds, centre, angle, GSize(width, NUMERAL_HEIGHT));
+  graphics_context_set_text_color(ctx, hour_colour());
+  graphics_draw_text(ctx, text, s_numeral_font.font,
+                     GRect(at.x - width, at.y - NUMERAL_HEIGHT / 2 - s_numeral_font.pad,
+                           width * 2, NUMERAL_HEIGHT + s_numeral_font.pad * 2),
+                     GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+}
+
+// Slanted pencil strokes along the edge, every half minute from 12 o'clock
+// round to the current minute.
+static void draw_minute_arc(GContext *ctx, GRect bounds, GPoint centre, int minute) {
+  graphics_context_set_stroke_color(ctx, hour_colour());
+  graphics_context_set_stroke_width(ctx, 1);
+  for (int half = 0; half < minute * 2; half++) {
+    const int32_t angle = TRIG_MAX_ANGLE * half / 120;
+    const int32_t outer = edge_distance(bounds, angle);
+    graphics_draw_line(ctx, ray_point(centre, angle - TRIG_MAX_ANGLE / 180, outer - 1),
+                       ray_point(centre, angle + TRIG_MAX_ANGLE / 120,
+                                 outer - MINUTE_TICK_LENGTH - 4));
+  }
+}
+
+// A small filled circle with a pencil outline, just inside the ticks.
+static void draw_minute_bead(GContext *ctx, GRect bounds, GPoint centre, int minute) {
+  const int32_t angle = minute_angle(minute);
+  const GPoint at = ray_point(centre, angle,
+                              edge_distance(bounds, angle) - MINUTE_TICK_LENGTH - BEAD_RADIUS);
+  graphics_context_set_fill_color(ctx, hour_colour());
+  graphics_fill_circle(ctx, at, BEAD_RADIUS);
+  sketch_circle(ctx, at, BEAD_RADIUS, s_palette.ink, NULL, NULL);
+}
+
+// A small triangle at the very edge, pointing in at the minute.
+static void draw_minute_edge_pointer(GContext *ctx, GRect bounds, GPoint centre, int minute) {
+  const int32_t angle = minute_angle(minute);
+  const int32_t outer = edge_distance(bounds, angle);
+  const int32_t side = angle + TRIG_MAX_ANGLE / 4;
+  const GPoint tip = ray_point(centre, angle, outer - HOUR_TICK_LENGTH - 2);
+  const GPoint base = ray_point(centre, angle, outer + 1);
+  GPoint points[] = {
+    tip, ray_point(base, side, EDGE_POINTER_HALF),
+    ray_point(base, side + TRIG_MAX_ANGLE / 2, EDGE_POINTER_HALF),
+  };
+  GPathInfo info = { .num_points = ARRAY_LENGTH(points), .points = points };
+  GPath *path = gpath_create(&info);
+  graphics_context_set_fill_color(ctx, hour_colour());
+  gpath_draw_filled(ctx, path);
+  gpath_destroy(path);
+  sketch_polygon(ctx, points, ARRAY_LENGTH(points), s_palette.ink);
+}
+
+static NOINLINE void draw_minutes(GContext *ctx, GRect bounds, GPoint centre,
+                                  const struct tm *t) {
+  const int minute = t->tm_min;
+  switch (s_settings.minute_style) {
+    case MINUTE_TICK: draw_minute_tick(ctx, bounds, centre, t, false); break;
+    case MINUTE_NUMBER: draw_minute_number(ctx, bounds, centre, t); break;
+    case MINUTE_ARC: draw_minute_arc(ctx, bounds, centre, minute); break;
+    case MINUTE_BEAD: draw_minute_bead(ctx, bounds, centre, minute); break;
+    case MINUTE_EDGE_POINTER: draw_minute_edge_pointer(ctx, bounds, centre, minute); break;
+    case MINUTE_ARC_AND_BEAD:
+      draw_minute_arc(ctx, bounds, centre, minute);
+      draw_minute_bead(ctx, bounds, centre, minute);
+      break;
+    case MINUTE_NUMBER_AND_TICK:
+      draw_minute_tick(ctx, bounds, centre, t, true);
+      draw_minute_number(ctx, bounds, centre, t);
+      break;
+    default: {
+      // A short pointer from just outside the information, reaching in
+      // among the hour ticks to the minute ticks, following the shape of the
+      // dial, so it is longest towards the corners.
+      const int32_t angle = minute_angle(minute);
+      draw_dial_hand(ctx, centre, angle, CLEAR_RADIUS + HAND_GAP,
+                     edge_distance(bounds, angle) - MINUTE_TICK_LENGTH - 1, MINUTE_HAND_WIDTH);
+      break;
+    }
   }
 }
 
@@ -1290,14 +1459,8 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   // The information fills the middle of the face.
   draw_widget(ctx, centre, t);
 
-  // The minute hand is a short pointer from just outside the information,
-  // reaching in among the hour ticks to the minute ticks, following the shape
-  // of the dial, so it is longest towards the corners. The current hour's
-  // number stands in for the hour hand.
-  const int16_t start = CLEAR_RADIUS + HAND_GAP;
-  const int32_t minute_angle = TRIG_MAX_ANGLE * t->tm_min / 60;
-  const int16_t minute_end = edge_distance(bounds, minute_angle) - MINUTE_TICK_LENGTH - 1;
-  draw_dial_hand(ctx, centre, minute_angle, start, minute_end, MINUTE_HAND_WIDTH);
+  // The minutes; the current hour's number stands in for the hour hand.
+  draw_minutes(ctx, bounds, centre, t);
 }
 
 // ---------------------------------------------------------------------------
@@ -1383,6 +1546,10 @@ static bool read_settings(DictionaryIterator *iterator) {
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_INFO_FONT))) {
     s_settings.info_font = tuple_int(tuple) % FONT_STYLE_COUNT;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_MINUTE_STYLE))) {
+    s_settings.minute_style = tuple_int(tuple) % MINUTE_STYLE_COUNT;
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_HOUR_COLOR))) {

@@ -77,8 +77,26 @@ module.exports = [
       },
       {
         type: 'select',
+        messageKey: 'MINUTE_STYLE',
+        label: 'Minutes',
+        description: 'All but the hand use the current hour\'s colour.',
+        defaultValue: '0',
+        options: [
+          { label: 'Hand', value: '0' },
+          { label: 'Highlighted tick', value: '1' },
+          { label: 'Minute number', value: '2' },
+          { label: 'Progress arc', value: '3' },
+          { label: 'Sketched bead', value: '4' },
+          { label: 'Edge pointer', value: '5' },
+          { label: 'Progress arc and bead', value: '6' },
+          { label: 'Minute number and tick', value: '7' }
+        ]
+      },
+      {
+        type: 'select',
         messageKey: 'SKETCHY_HANDS',
         label: 'Minute hand',
+        description: 'Used when the minutes show as a hand.',
         defaultValue: '0',
         options: [
           { label: 'Pencil stroke', value: '0' },
