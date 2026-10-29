@@ -1,10 +1,11 @@
 Meridian is a clean analog watch-face that keeps daily essentials within a glance. Arrange weather, date, battery and connection alerts, or health data at four positions around the dial, or leave any position empty for a simpler layout.
 
-Features: 
+Features:
 - Check the temperature and conditions
 - See your battery percentage
 - Tap the watch to cycle through steps, distance, active calories, active minutes, sleep, and heart rate where supported
 - Optional phone disconnect vibrations respect Quiet Time.
+- Put your own name on the dial below 12 o'clock (PEBBLE by default) in a small or large size, or leave it empty.
 - Choose a light or dark background, accent colours on colour watches, and separate fonts for the hour numbers and information/widgets.
 - Show or hide hour numbers, add an optional second hand (uses more battery), and rotate the dial to suit how you wear your watch (only works correctly on Pebble Round 2).
 - Turn on Shine and light glints across the hands and the hour marks as you turn your wrist (colour watches; uses more battery while the watch is moving).

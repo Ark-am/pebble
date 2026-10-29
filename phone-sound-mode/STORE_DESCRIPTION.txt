@@ -2,7 +2,7 @@ Phone Sound Mode puts your phone's ringer at most 2-clicks-out*. Switch your pho
 
 Open the app, choose a mode, and you're done; the list can be reordered from the Pebble app. A short vibration confirms that your phone has changed, and the app returns to your watch-face after the confirmation. If the change can't be made, the app stays open and tells you why, so you can try again.
 
-Clear icons for each mode make it easy to pick the right one at a glance.
+Clear icons for each mode make it easy to pick the right one at a glance. On colour watches each mode has its own colour (green for Normal, blue for Silent, grey for Vibrate), and the status bar turns that colour when your phone confirms the change, or red if something goes wrong.
 
 Android only. Phone Sound Mode requires its free Android companion app, located on our website:
 https://ark-am.com/projects/pebble-apps
