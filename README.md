@@ -38,7 +38,7 @@ Follow a project's link for its requirements, build instructions, testing steps,
 | [Meridian](./meridian/store/screenshots/STORE_DESCRIPTION.txt) | [Qibla Compass](./qibla-compass/STORE_DESCRIPTION.txt) |
 | [Sketchy Weather Analog](./sketchy-weather-analog/store/screenshots/STORE_DESCRIPTION.txt) |
 | [Retro F-91W](./retro-f91w/STORE_DESCRIPTION.txt) |
-| [World Clock](./world-clock/STORE_DESCRIPTION.txt) |
+| [World Clock](./world-clock/store/screenshots/STORE_DESCRIPTION.txt) |
 
 > Created by Ark-am LLC. Discover our work and custom software development services:\
 > https://ark-am.com/projects/pebble-apps
