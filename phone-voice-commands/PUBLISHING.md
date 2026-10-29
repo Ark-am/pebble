@@ -19,8 +19,8 @@
 | `phone-voice-commands-icon.png` | 1254 × 1254 RGBA store icon with transparency. |
 | `phone-voice-commands-icon.svg` | Source of the icon. |
 | `store/icon-large-144.png`, `store/icon-small-80.png` | The icon at the dashboard's recommended large (144 × 144) and small (80 × 80) sizes, cropped to the artwork so it stays legible. |
-| `phone-voice-commands-screenshot.png`, `store/screenshots/basalt.png` | 144 × 168 Basalt screenshot. |
-| `store/screenshots/chalk.png` | 180 × 180 Chalk screenshot. |
+| `phone-voice-commands-screenshot.png`, `store/screenshots/pebble-time.png` | 144 × 168 Pebble Time (Basalt) screenshot. |
+| `store/screenshots/pebble-time-round.png` | 180 × 180 Pebble Time Round (Chalk) screenshot. |
 
 `build/` and `dist/` are generated and ignored by Git. To rebuild them, from
 this directory:
@@ -65,16 +65,20 @@ Before each new APK, increase `versionCode` and `versionName` in
    PBW, `STORE_DESCRIPTION.txt` and the artwork above, or with the Pebble tool:
 
    ```sh
+   mkdir -p build/screenshots
+   cp store/screenshots/pebble-time.png build/screenshots/basalt.png
+   cp store/screenshots/pebble-time-round.png build/screenshots/chalk.png
    pebble publish --non-interactive --no-gif-all-platforms \
      --description "$(cat STORE_DESCRIPTION.txt)" \
      --icon-large store/icon-large-144.png \
      --icon-small store/icon-small-80.png \
-     --screenshots store/screenshots/basalt.png store/screenshots/chalk.png \
+     --screenshots build/screenshots/basalt.png build/screenshots/chalk.png \
      --release-notes "Quick commands: run up to six saved commands with Up or Down, set in Settings. Did you mean…?: the watch offers a corrected command when one is not understood."
    ```
 
    `--screenshots` only works with `--non-interactive`, and each file name
-   must start with its platform. Set the category on the dashboard, or pass
+   must start with its platform, so the screenshots, which are named after
+   the watches, are first copied under their platforms' names. Set the category on the dashboard, or pass
    the store's key with `--category`. The release stays hidden until it is
    published, unless `--is-published` is passed.
 
