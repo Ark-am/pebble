@@ -18,6 +18,9 @@ On Pebble Time 2 and Pebble Round 2, tap keys, swipe through lists, and tap the 
 Android only. Phone Dialer requires its free Android companion app, located on our website:
 https://ark-am.com/projects/pebble-apps
 
+Or Download the app directly from:
+https://ark-am.s3.us-east-1.amazonaws.com/App_Pebble/phone-dialer-1.7.0-android.apk
+
 Once installed, allow Phone access to make and end calls, Contacts for Favorites and Contacts, and Call history for Recent calls; each feature works on its own. Additionally, link your Pebble once in the companion app to switch the sound, mute, and see the call status and timer from your watch. If the companion app can't find your Pebble when linking, turn your phone's Bluetooth off and on again, then tap "Link your Pebble" within a few seconds while the watch reconnects. Your contacts and call history stay on your phone and watch and are never sent to a server. On dual-SIM phones, set a default calling SIM. For emergencies, use your phone directly. Android 12 and newer.
 
 Created by Ark-am LLC. Discover our work and custom software development services:
