@@ -35,7 +35,7 @@ Follow a project's link for its requirements, build instructions, testing steps,
 | --- | --- |
 | [Baltic](./baltic/STORE_DESCRIPTION.txt) | [Phone Dialer](./phone-dialer/STORE_DESCRIPTION.txt) |
 | [Gnomon 2](./gnomon-2/STORE_DESCRIPTION.txt) | [Phone Sound Mode](./phone-sound-mode/STORE_DESCRIPTION.txt) |
-| [Meridian](./meridian/STORE_DESCRIPTION.txt) | [Qibla Compass](./qibla-compass/STORE_DESCRIPTION.txt) |
+| [Meridian](./meridian/store/screenshots/STORE_DESCRIPTION.txt) | [Qibla Compass](./qibla-compass/STORE_DESCRIPTION.txt) |
 | [Sketchy Weather Analog](./sketchy-weather-analog/store/screenshots/STORE_DESCRIPTION.txt) |
 | [Retro F-91W](./retro-f91w/STORE_DESCRIPTION.txt) |
 | [World Clock](./world-clock/STORE_DESCRIPTION.txt) |
