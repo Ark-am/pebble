@@ -16,10 +16,21 @@ does not use the Casio name or logo.
 ## Settings
 
 - **LCD:** Classic pale grey-green (default), Classic grey, Backlit green, Blue,
-  Amber, or Dark with light segments. Black-and-white watches show a white LCD,
-  or a black one for Dark.
+  Amber, Dark with light segments, or Custom. Black-and-white watches show a
+  white LCD, or a black one for Dark, and do not offer Custom.
 - **Case:** Black with a blue frame, olive-gold model name and red WR (default),
-  Gold or Silver. Colour watches only.
+  Gold, Silver, or Custom. Colour watches only.
+- **Custom colours:** choosing Custom for the case or the LCD shows a colour
+  picker for each of its parts, starting from the preset that was chosen
+  before. The case has seven: the case, printed text, model name, the band
+  (with the lines and the box), the thin line inside the band, the boxed word
+  (with the arrows) and the LCD border; the LCD has two: the LCD and its
+  digits. **Separate colour for every part** adds pickers for the parts those
+  share: the button labels, the bottom label, the lines, the box, the arrows,
+  the LCD's top row (with PM and the chime sign), and the black around the
+  case. Choosing a preset again goes back to its colours; the custom ones are
+  kept for next time. The pickers live in `src/pkjs/custom-clay.js`, which
+  shows them and starts them from the presets.
 - **Brand**, **Model** and **Label at the bottom:** any text (PEBBLE, F-91W and
   WATER WR RESIST by default); all but the brand can be left empty. A bottom
   label of three words is set out as on the original, with the middle word in

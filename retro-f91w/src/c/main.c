@@ -114,6 +114,7 @@ typedef enum {
   LCD_AMBER,
   LCD_DARK,
   LCD_GREY,     // Plain grey.
+  LCD_CUSTOM,   // The wearer's own colours.
   LCD_COUNT,
 } LcdColour;
 
@@ -122,6 +123,7 @@ typedef enum {
   CASE_BLACK,
   CASE_GOLD,
   CASE_SILVER,
+  CASE_CUSTOM,  // The wearer's own colours.
   CASE_COUNT,
 } CaseColour;
 
@@ -153,8 +155,32 @@ typedef enum {
   FORMAT_COUNT,
 } TimeFormat;
 
+// The wearer's own colours, for a custom case or LCD. The first nine are
+// shared: printed text, for example, colours the brand, the button labels and
+// the bottom label alike. With separate colours on, the rest take over parts
+// of those. Indexes match COLOURS[n] in src/pkjs/config.js.
+typedef enum {
+  COLOUR_CASE,
+  COLOUR_BRAND,   // Printed text; separately, the brand.
+  COLOUR_BAND,    // The band, lines and box; separately, the band.
+  COLOUR_SILVER,
+  COLOUR_MODEL,
+  COLOUR_BADGE,   // The boxed word and the arrows; separately, the word.
+  COLOUR_TRIM,
+  COLOUR_LCD,
+  COLOUR_DIGITS,  // Everything on the LCD; separately, the time.
+  COLOUR_LABELS,  // The rest only with separate colours.
+  COLOUR_WORDS,
+  COLOUR_LINES,
+  COLOUR_BOX,
+  COLOUR_ARROWS,
+  COLOUR_TOP_ROW,
+  COLOUR_BACKGROUND,
+  COLOUR_COUNT,
+} ColourPart;
+
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 5
+#define SETTINGS_VERSION 6
 typedef struct {
   uint8_t version;
   uint8_t lcd;
@@ -176,24 +202,38 @@ typedef struct {
   uint8_t bottom_right;
   // What shows in place of the model name (see Widget).
   uint8_t model_widget;
+  // Added in version 6.
+  bool split_colours;
+  uint8_t colours[COLOUR_COUNT];  // GColor8 values, by ColourPart.
 } Settings;
+
+// Version 5 ended before the colours, and keeps its choices on update.
+#define SETTINGS_V5_SIZE offsetof(Settings, split_colours)
 
 static Settings s_settings;
 
 typedef struct {
+  GColor background; // Round the face plate.
   GColor body;       // The case.
-  GColor print;      // Text printed on the case.
-  GColor frame;      // The blue band round the face plate, and the lines.
+  GColor brand;
+  GColor labels;     // The labels by the buttons.
+  GColor words;      // The bottom label, but for a boxed middle word.
+  GColor band;       // The blue band round the face plate.
+  GColor lines;      // The lines across the plate.
+  GColor box;        // The box round the middle word of the bottom label.
   GColor silver;     // The thin line inside the band.
   GColor model;      // The model name beside the brand.
-  GColor badge;      // The middle word of the bottom label, in its box, and
-                     // the arrows to the buttons.
+  GColor badge;      // The middle word of the bottom label, in its box.
+  GColor arrows;     // The arrows to the buttons.
   GColor trim;       // The thin border round the LCD.
   GColor lcd;        // The LCD background.
-  GColor segment;    // Lit segments.
+  GColor digits;     // The time.
+  GColor top_row;    // The top row of the LCD and the signs beside it.
 } Palette;
 
 static Palette s_palette;
+// What lit segments are drawn in: the top row's colour, then the time's.
+static GColor s_ink;
 
 // Where the parts of the face go, worked out each time it is drawn. Kept
 // static rather than on the stack, so each part is drawn from a shallow
@@ -239,16 +279,41 @@ static void settings_set_defaults(Settings *settings) {
     .chime = false,
     .time_format = FORMAT_WATCH,
     .top_row = TOP_DATE,
+    // The black case and classic LCD, the starting point for custom colours.
+    .colours = {
+      [COLOUR_CASE] = GColorBlackARGB8,
+      [COLOUR_BRAND] = GColorWhiteARGB8,
+      [COLOUR_BAND] = GColorBlueARGB8,
+      [COLOUR_SILVER] = GColorLightGrayARGB8,
+      [COLOUR_MODEL] = GColorLimerickARGB8,
+      [COLOUR_BADGE] = GColorDarkCandyAppleRedARGB8,
+      [COLOUR_TRIM] = GColorDarkGrayARGB8,
+      [COLOUR_LCD] = GColorMintGreenARGB8,
+      [COLOUR_DIGITS] = GColorBlackARGB8,
+      [COLOUR_LABELS] = GColorWhiteARGB8,
+      [COLOUR_WORDS] = GColorWhiteARGB8,
+      [COLOUR_LINES] = GColorBlueARGB8,
+      [COLOUR_BOX] = GColorBlueARGB8,
+      [COLOUR_ARROWS] = GColorDarkCandyAppleRedARGB8,
+      [COLOUR_TOP_ROW] = GColorBlackARGB8,
+      [COLOUR_BACKGROUND] = GColorBlackARGB8,
+    },
   };
 }
+
+#if defined(PBL_COLOR)
+static GColor custom_colour(ColourPart part) {
+  return (GColor) { .argb = s_settings.colours[part] };
+}
+#endif
 
 static void apply_palette(void) {
 #if defined(PBL_COLOR)
   switch (s_settings.case_colour) {
     case CASE_GOLD:
       s_palette.body = GColorChromeYellow;
-      s_palette.print = GColorBlack;
-      s_palette.frame = GColorBlack;
+      s_palette.brand = GColorBlack;
+      s_palette.band = GColorBlack;
       s_palette.silver = GColorBlack;
       s_palette.model = GColorBlack;
       s_palette.badge = GColorDarkCandyAppleRed;
@@ -256,20 +321,29 @@ static void apply_palette(void) {
       break;
     case CASE_SILVER:
       s_palette.body = GColorLightGray;
-      s_palette.print = GColorBlack;
-      s_palette.frame = GColorDukeBlue;
+      s_palette.brand = GColorBlack;
+      s_palette.band = GColorDukeBlue;
       s_palette.silver = GColorDarkGray;
       s_palette.model = GColorDukeBlue;
       s_palette.badge = GColorDarkCandyAppleRed;
       s_palette.trim = GColorDarkGray;
+      break;
+    case CASE_CUSTOM:
+      s_palette.body = custom_colour(COLOUR_CASE);
+      s_palette.brand = custom_colour(COLOUR_BRAND);
+      s_palette.band = custom_colour(COLOUR_BAND);
+      s_palette.silver = custom_colour(COLOUR_SILVER);
+      s_palette.model = custom_colour(COLOUR_MODEL);
+      s_palette.badge = custom_colour(COLOUR_BADGE);
+      s_palette.trim = custom_colour(COLOUR_TRIM);
       break;
     default:
       // The colours of the original, chosen by how each looks on the
       // screen next to a photo of it: a blue band and lines, a silver line, an
       // olive-gold model name, and a deep red WR and arrows.
       s_palette.body = GColorBlack;
-      s_palette.print = GColorWhite;
-      s_palette.frame = GColorBlue;
+      s_palette.brand = GColorWhite;
+      s_palette.band = GColorBlue;
       s_palette.silver = GColorLightGray;
       s_palette.model = GColorLimerick;
       s_palette.badge = GColorDarkCandyAppleRed;
@@ -279,43 +353,68 @@ static void apply_palette(void) {
   switch (s_settings.lcd) {
     case LCD_BACKLIT:
       s_palette.lcd = GColorSpringBud;
-      s_palette.segment = GColorBlack;
+      s_palette.digits = GColorBlack;
       break;
     case LCD_BLUE:
       s_palette.lcd = GColorCeleste;
-      s_palette.segment = GColorOxfordBlue;
+      s_palette.digits = GColorOxfordBlue;
       break;
     case LCD_AMBER:
       s_palette.lcd = GColorRajah;
-      s_palette.segment = GColorBlack;
+      s_palette.digits = GColorBlack;
       break;
     case LCD_DARK:
       s_palette.lcd = GColorBlack;
-      s_palette.segment = GColorWhite;
+      s_palette.digits = GColorWhite;
       break;
     case LCD_GREY:
       s_palette.lcd = GColorLightGray;
-      s_palette.segment = GColorBlack;
+      s_palette.digits = GColorBlack;
+      break;
+    case LCD_CUSTOM:
+      s_palette.lcd = custom_colour(COLOUR_LCD);
+      s_palette.digits = custom_colour(COLOUR_DIGITS);
       break;
     default:
       // The pale grey-green of the original's LCD.
       s_palette.lcd = GColorMintGreen;
-      s_palette.segment = GColorBlack;
+      s_palette.digits = GColorBlack;
       break;
   }
 #else
   // Black and white: a black case with white print, and a white LCD (black
   // for the dark LCD).
   s_palette.body = GColorBlack;
-  s_palette.print = GColorWhite;
-  s_palette.frame = GColorWhite;
+  s_palette.brand = GColorWhite;
+  s_palette.band = GColorWhite;
   s_palette.silver = GColorWhite;
   s_palette.model = GColorWhite;
   s_palette.badge = GColorWhite;
   s_palette.trim = GColorWhite;
   const bool dark = s_settings.lcd == LCD_DARK;
   s_palette.lcd = dark ? GColorBlack : GColorWhite;
-  s_palette.segment = dark ? GColorWhite : GColorBlack;
+  s_palette.digits = dark ? GColorWhite : GColorBlack;
+#endif
+  // Parts that share a colour unless the wearer separates them.
+  s_palette.background = GColorBlack;
+  s_palette.labels = s_palette.brand;
+  s_palette.words = s_palette.brand;
+  s_palette.lines = s_palette.band;
+  s_palette.box = s_palette.band;
+  s_palette.arrows = s_palette.badge;
+  s_palette.top_row = s_palette.digits;
+#if defined(PBL_COLOR)
+  if (s_settings.split_colours && s_settings.case_colour == CASE_CUSTOM) {
+    s_palette.background = custom_colour(COLOUR_BACKGROUND);
+    s_palette.labels = custom_colour(COLOUR_LABELS);
+    s_palette.words = custom_colour(COLOUR_WORDS);
+    s_palette.lines = custom_colour(COLOUR_LINES);
+    s_palette.box = custom_colour(COLOUR_BOX);
+    s_palette.arrows = custom_colour(COLOUR_ARROWS);
+  }
+  if (s_settings.split_colours && s_settings.lcd == LCD_CUSTOM) {
+    s_palette.top_row = custom_colour(COLOUR_TOP_ROW);
+  }
 #endif
 }
 
@@ -364,7 +463,7 @@ static void draw_lit_segment(GContext *ctx, GPoint a, GPoint b, int16_t thicknes
   const int16_t half = thickness / 2;
   if (length == 0 || half < 2) {
     // Too thin to cut to a point; a plain bar reads the same.
-    graphics_context_set_stroke_color(ctx, s_palette.segment);
+    graphics_context_set_stroke_color(ctx, s_ink);
     graphics_context_set_stroke_width(ctx, thickness);
     graphics_draw_line(ctx, a, b);
     return;
@@ -384,7 +483,7 @@ static void draw_lit_segment(GContext *ctx, GPoint a, GPoint b, int16_t thicknes
   };
   GPathInfo info = { .num_points = ARRAY_LENGTH(points), .points = points };
   GPath *path = gpath_create(&info);
-  graphics_context_set_fill_color(ctx, s_palette.segment);
+  graphics_context_set_fill_color(ctx, s_ink);
   gpath_draw_filled(ctx, path);
   gpath_destroy(path);
 }
@@ -601,8 +700,8 @@ static IN_LINE void draw_label(GContext *ctx, const char *text, const char *font
 
 // The hourly signal's sign, a dot between two pairs of brackets: (( . )).
 static void draw_chime_sign(GContext *ctx, GPoint at, int16_t size) {
-  graphics_context_set_stroke_color(ctx, s_palette.segment);
-  graphics_context_set_fill_color(ctx, s_palette.segment);
+  graphics_context_set_stroke_color(ctx, s_palette.top_row);
+  graphics_context_set_fill_color(ctx, s_palette.top_row);
   graphics_context_set_stroke_width(ctx, 1);
   graphics_fill_circle(ctx, at, size / 6 > 1 ? size / 6 : 1);
   for (int side = -1; side <= 1; side += 2) {
@@ -644,7 +743,7 @@ static OUT_OF_LINE void draw_lcd(GContext *ctx, const struct tm *t) {
   }
   if (!use_24h() && t->tm_hour >= 12) {
     draw_label(ctx, "PM", PM_FONT, GRect(x0, y0 + row_h - PM_HEIGHT, column_w, PM_HEIGHT),
-               PM_PAD, GTextAlignmentLeft, s_palette.segment);
+               PM_PAD, GTextAlignmentLeft, s_palette.top_row);
   }
 
   // The top row: two letters after the signs, and the value at the right.
@@ -655,6 +754,7 @@ static OUT_OF_LINE void draw_lcd(GContext *ctx, const struct tm *t) {
   static char letters[4];
   static char value[VALUE_SIZE];
   top_row_text(t, letters, value);
+  s_ink = s_palette.top_row;
   draw_fourteen_text(ctx, letters, GPoint(x0 + column_w, y0), glyph, glyph_gap, glyph_t);
   // At least two places, as for the date, and up to five.
   int places = strlen(value);
@@ -665,6 +765,7 @@ static OUT_OF_LINE void draw_lcd(GContext *ctx, const struct tm *t) {
                   glyph, glyph_gap, glyph_t);
 
   // The time. Sizes are in 100ths of a large digit's width.
+  s_ink = s_palette.digits;
   const bool twenty_four = use_24h();
   const bool seconds = s_settings.seconds;
   const int32_t parts = seconds ? 622 : 502;
@@ -704,7 +805,7 @@ static OUT_OF_LINE void draw_lcd(GContext *ctx, const struct tm *t) {
       // The colon: two small squares.
       const int16_t dot = thickness;
       const int16_t cx = x - spacing + (colon_w + spacing - dot) / 2;
-      graphics_context_set_fill_color(ctx, s_palette.segment);
+      graphics_context_set_fill_color(ctx, s_palette.digits);
       graphics_fill_rect(ctx, GRect(cx, y + digit_h * 30 / 100 - dot / 2, dot, dot), 0,
                          GCornerNone);
       graphics_fill_rect(ctx, GRect(cx, y + digit_h * 70 / 100 - dot / 2, dot, dot), 0,
@@ -762,7 +863,7 @@ static bool widget_text(Widget widget, char *out, size_t size) {
 
 // A blue line across the plate, from one x to another.
 static void draw_line_across(GContext *ctx, int16_t left, int16_t right, int16_t y) {
-  graphics_context_set_fill_color(ctx, s_palette.frame);
+  graphics_context_set_fill_color(ctx, s_palette.lines);
   graphics_fill_rect(ctx, GRect(left, y, right - left, LINE_WIDTH), 0, GCornerNone);
 }
 
@@ -775,7 +876,7 @@ static void draw_arrow(GContext *ctx, GPoint tip, bool left, int16_t length, int
   };
   GPathInfo info = { .num_points = ARRAY_LENGTH(points), .points = points };
   GPath *path = gpath_create(&info);
-  graphics_context_set_fill_color(ctx, s_palette.badge);
+  graphics_context_set_fill_color(ctx, s_palette.arrows);
   gpath_draw_filled(ctx, path);
   gpath_destroy(path);
 }
@@ -795,12 +896,12 @@ static void draw_button_label(GContext *ctx, const char *text, GRect row, bool l
     draw_arrow(ctx, GPoint(row.origin.x, centre_y), true, length, width);
     draw_label(ctx, text, LABEL_FONT, GRect(row.origin.x + text_inset, row.origin.y,
                                             row.size.w - text_inset, LABEL_HEIGHT),
-               LABEL_PAD, GTextAlignmentLeft, s_palette.print);
+               LABEL_PAD, GTextAlignmentLeft, s_palette.labels);
   } else {
     draw_arrow(ctx, GPoint(row.origin.x + row.size.w - 1, centre_y), false, length, width);
     draw_label(ctx, text, LABEL_FONT, GRect(row.origin.x, row.origin.y,
                                             row.size.w - text_inset, LABEL_HEIGHT),
-               LABEL_PAD, GTextAlignmentRight, s_palette.print);
+               LABEL_PAD, GTextAlignmentRight, s_palette.labels);
   }
 }
 
@@ -978,7 +1079,7 @@ static OUT_OF_LINE void draw_case(GContext *ctx) {
   const GRect plate = s_layout.plate;
   const int16_t corner = s_layout.corner;
   draw_rounded_shape(ctx, plate, CORNER_CURVE, ARRAY_LENGTH(CORNER_CURVE), corner, corner,
-                     BAND_WIDTH, s_palette.body, s_palette.frame);
+                     BAND_WIDTH, s_palette.body, s_palette.band);
   draw_rounded_shape(ctx, grect_inset(plate, GEdgeInsets(SILVER_INSET)), CORNER_CURVE,
                      ARRAY_LENGTH(CORNER_CURVE), corner - SILVER_INSET, corner - SILVER_INSET,
                      1, GColorClear, s_palette.silver);
@@ -996,7 +1097,7 @@ static OUT_OF_LINE void draw_brand_row(GContext *ctx) {
   const int16_t clear = corner_in(s_layout.corner, y - plate.origin.y) + SILVER_INSET + 3;
   draw_centred_on(ctx, s_settings.brand, fonts_get_system_font(BRAND_FONT),
                   left + plate.size.w * BRAND_CENTRE / 1000, left + clear, middle - 2, y,
-                  BRAND_HEIGHT, BRAND_PAD, s_palette.print);
+                  BRAND_HEIGHT, BRAND_PAD, s_palette.brand);
   static char model[16];
   if (!widget_text(s_settings.model_widget, model, sizeof(model))) {
     strncpy(model, s_settings.model, sizeof(model));
@@ -1048,12 +1149,12 @@ static OUT_OF_LINE void draw_bottom_row(GContext *ctx) {
   if (count != 3) {
     const GRect row = GRect(line_left, words_y, line_right - line_left, BOTTOM_HEIGHT);
     draw_line_across(ctx, line_left, line_right, line_y);
-    draw_label(ctx, text, BOTTOM_FONT, row, BOTTOM_PAD, GTextAlignmentCenter, s_palette.print);
+    draw_label(ctx, text, BOTTOM_FONT, row, BOTTOM_PAD, GTextAlignmentCenter, s_palette.words);
     if (left_widget) {
-      draw_label(ctx, left, BOTTOM_FONT, row, BOTTOM_PAD, GTextAlignmentLeft, s_palette.print);
+      draw_label(ctx, left, BOTTOM_FONT, row, BOTTOM_PAD, GTextAlignmentLeft, s_palette.words);
     }
     if (right_widget) {
-      draw_label(ctx, right, BOTTOM_FONT, row, BOTTOM_PAD, GTextAlignmentRight, s_palette.print);
+      draw_label(ctx, right, BOTTOM_FONT, row, BOTTOM_PAD, GTextAlignmentRight, s_palette.words);
     }
     return;
   }
@@ -1071,7 +1172,7 @@ static OUT_OF_LINE void draw_bottom_row(GContext *ctx) {
   draw_line_across(ctx, line_left, box.origin.x, line_y);
   draw_line_across(ctx, box_right, line_right, line_y);
   draw_rounded_shape(ctx, box, QUARTER_CIRCLE, ARRAY_LENGTH(QUARTER_CIRCLE), BOX_TOP_RADIUS,
-                     BOX_BOTTOM_RADIUS, 1, GColorClear, s_palette.frame);
+                     BOX_BOTTOM_RADIUS, 1, GColorClear, s_palette.box);
   draw_text_in(ctx, words[1], s_model_font, GRect(box.origin.x, words_y, box.size.w, BOTTOM_HEIGHT),
                MODEL_PAD, GTextAlignmentCenter, s_palette.badge);
 
@@ -1080,11 +1181,11 @@ static OUT_OF_LINE void draw_bottom_row(GContext *ctx) {
   draw_label(ctx, left_widget ? left : words[0], BOTTOM_FONT,
              GRect(plate.origin.x, words_y, box.origin.x - WORD_GAP - plate.origin.x,
                    BOTTOM_HEIGHT),
-             BOTTOM_PAD, GTextAlignmentRight, s_palette.print);
+             BOTTOM_PAD, GTextAlignmentRight, s_palette.words);
   draw_label(ctx, right_widget ? right : words[2], BOTTOM_FONT,
              GRect(box_right + WORD_GAP, words_y, plate_right - box_right - WORD_GAP,
                    BOTTOM_HEIGHT),
-             BOTTOM_PAD, GTextAlignmentLeft, s_palette.print);
+             BOTTOM_PAD, GTextAlignmentLeft, s_palette.words);
 }
 
 static void canvas_update_proc(Layer *layer, GContext *ctx) {
@@ -1093,8 +1194,8 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   lay_out(layer_get_unobstructed_bounds(layer));
 
   graphics_context_set_antialiased(ctx, true);
-  // Black round the face plate, whatever the colour of the case.
-  graphics_context_set_fill_color(ctx, GColorBlack);
+  // Round the face plate: black, unless the wearer chose otherwise.
+  graphics_context_set_fill_color(ctx, s_palette.background);
   graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
   draw_case(ctx);
   draw_brand_row(ctx);
@@ -1218,6 +1319,19 @@ static bool read_settings(DictionaryIterator *iterator) {
     s_settings.top_row = tuple_int(tuple) % TOP_COUNT;
     changed = true;
   }
+#if defined(PBL_COLOR)
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_SPLIT_COLOURS))) {
+    s_settings.split_colours = tuple_int(tuple) != 0;
+    changed = true;
+  }
+  // Clay sends each colour as 0xRRGGBB.
+  for (int part = 0; part < COLOUR_COUNT; part++) {
+    if ((tuple = dict_find(iterator, MESSAGE_KEY_COLOURS + part))) {
+      s_settings.colours[part] = GColorFromHEX(tuple_int(tuple)).argb;
+      changed = true;
+    }
+  }
+#endif
   read_string(iterator, MESSAGE_KEY_BRAND, s_settings.brand, sizeof(s_settings.brand), &changed);
   read_string(iterator, MESSAGE_KEY_MODEL, s_settings.model, sizeof(s_settings.model), &changed);
   read_string(iterator, MESSAGE_KEY_LIGHT_LABEL, s_settings.light_label,
@@ -1285,6 +1399,10 @@ static OUT_OF_LINE void load_saved_state(void) {
     const int size = persist_read_data(PERSIST_KEY_SETTINGS, &saved, sizeof(saved));
     if (size == (int)sizeof(Settings) && saved.version == SETTINGS_VERSION) {
       s_settings = saved;
+    } else if (size == (int)SETTINGS_V5_SIZE && saved.version == 5) {
+      // Keep the earlier choices; the colours keep their defaults.
+      memcpy(&s_settings, &saved, SETTINGS_V5_SIZE);
+      s_settings.version = SETTINGS_VERSION;
     }
   }
   apply_palette();

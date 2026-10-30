@@ -1,7 +1,7 @@
 {
   "name": "retro-f91w",
   "author": "ark-am",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "keywords": [
     "pebble-app"
   ],
@@ -47,7 +47,9 @@
       "TOP_ROW",
       "BOTTOM_LEFT",
       "BOTTOM_RIGHT",
-      "TEMPERATURE_UNIT"
+      "TEMPERATURE_UNIT",
+      "SPLIT_COLOURS",
+      "COLOURS[16]"
     ],
     "resources": {
       "media": [

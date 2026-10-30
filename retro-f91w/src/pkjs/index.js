@@ -4,9 +4,10 @@
 
 var Clay = require('@rebble/clay');
 var clayConfig = require('./config');
+var customClay = require('./custom-clay');
 
 // Clay shows the settings page and sends the chosen values to the watch.
-new Clay(clayConfig);
+new Clay(clayConfig, customClay);
 
 var LOCATION_OPTIONS = { timeout: 15000, maximumAge: 10 * 60 * 1000 };
 

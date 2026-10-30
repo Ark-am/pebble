@@ -12,6 +12,19 @@ var WIDGETS = [
           { label: 'Battery', value: '4' }
         ];
 
+// A colour picker for one part of a custom case or LCD; the number matches
+// ColourPart in src/c/main.c. src/pkjs/custom-clay.js shows each only when it
+// applies.
+function colour(part, label, defaultValue) {
+  return {
+    type: 'color',
+    messageKey: 'COLOURS[' + part + ']',
+    label: label,
+    defaultValue: defaultValue,
+    capabilities: ['COLOR']
+  };
+}
+
 module.exports = [
   {
     type: 'heading',
@@ -36,9 +49,13 @@ module.exports = [
           { label: 'Backlit green', value: '1' },
           { label: 'Blue', value: '2' },
           { label: 'Amber', value: '3' },
-          { label: 'Dark, with light segments', value: '4' }
+          { label: 'Dark, with light segments', value: '4' },
+          { label: 'Custom', value: '6' }
         ]
       },
+      colour(7, 'LCD', 0xAAFFAA),
+      colour(8, 'Digits', 0x000000),
+      colour(14, 'Top row, PM and chime sign', 0x000000),
       {
         type: 'select',
         messageKey: 'CASE_COLOUR',
@@ -48,8 +65,31 @@ module.exports = [
         options: [
           { label: 'Black, with a blue frame', value: '0' },
           { label: 'Gold', value: '1' },
-          { label: 'Silver', value: '2' }
+          { label: 'Silver', value: '2' },
+          { label: 'Custom', value: '3' }
         ]
+      },
+      colour(0, 'Case', 0x000000),
+      colour(15, 'Around the case', 0x000000),
+      colour(1, 'Printed text', 0xFFFFFF),
+      colour(9, 'Button labels', 0xFFFFFF),
+      colour(10, 'Bottom label', 0xFFFFFF),
+      colour(4, 'Model name', 0xAAAA00),
+      colour(2, 'Band, lines and box', 0x0000FF),
+      colour(11, 'Lines', 0x0000FF),
+      colour(12, 'Box round the middle word', 0x0000FF),
+      colour(3, 'Thin line inside the band', 0xAAAAAA),
+      colour(5, 'Boxed word and arrows', 0xAA0000),
+      colour(13, 'Arrows', 0xAA0000),
+      colour(6, 'LCD border', 0x555555),
+      {
+        type: 'toggle',
+        messageKey: 'SPLIT_COLOURS',
+        label: 'Separate colour for every part',
+        description: 'Gives the brand, labels, lines, box, arrows and the LCD\'s top row ' +
+          'colours of their own.',
+        defaultValue: false,
+        capabilities: ['COLOR']
       }
     ]
   },

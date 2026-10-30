@@ -1,10 +1,11 @@
 Retro F-91W brings the look of the classic Casio F-91W digital wristwatch. A pale grey-green LCD sits inside a blue-framed face plate, with large segmented digits for the time, the day and date above them, and the familiar printed labels around the screen, right down to the boxed WR at the bottom.
 
-Make it your own: put your own brand and model name on the case, change or clear the printed labels, and pick the LCD and case colours. The top row can show the day and date, the local weather, your steps or your heart rate, or switch between them with a shake of the wrist.
+Make it your own: put your own brand and model name on the case, change or clear the printed labels, and pick the LCD and case colours, or make your own. The top row can show the day and date, the local weather, your steps or your heart rate, or switch between them with a shake of the wrist.
 
 Features:
  - Six LCD colours: classic pale grey-green, classic grey, backlit green, blue, amber, or dark with light segments
  - Black, gold or silver case on colour watches
+ - Custom colours on colour watches: pick the case, LCD, digits, printed text, band, model name and more, or give every single part its own colour
  - Editable brand, model and labels
  - Show weather, steps, heart rate or battery in place of F-91W, WATER or RESIST
  - 12-hour or 24-hour time, with a PM sign in 12-hour time
