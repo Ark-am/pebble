@@ -35,7 +35,9 @@ next screen, or turn on **Change screen every minute** to cycle through them
 automatically. Set the main and second items on a screen to Nothing to skip
 it; the bottom line alone does not keep a screen. A value on the bottom line
 uses the name's smaller lettering and switches to its short form (12.3k
-steps, 72 for heart rate) when the full one is too wide.
+steps, 72 for heart rate) when the full one is too wide. The date there adds
+the day of the week (Fri Oct 30), or drops the month (Fri 30) where that is
+too wide, as with most fonts on the 144-pixel-wide watches.
 
 If both values do not fit across the widget, the second, then the first,
 switches to a short form: `17°` instead of `17°C`, `Oct 3` instead of

@@ -784,23 +784,26 @@ static GColor hour_colour(void) {
   return PBL_IF_COLOR_ELSE((GColor) { .argb = s_settings.hour_argb }, s_palette.ink);
 }
 
-// One hour's number, just inside its hour marker.
+// One hour's number, just inside its hour marker. Bold draws it four times,
+// a pixel apart across and down, which thickens every stroke by a pixel.
 static void draw_hour_number(GContext *ctx, GRect bounds, GPoint centre, int hour,
-                             const StyledFont *font, int16_t height) {
+                             const StyledFont *font, int16_t height, bool bold) {
   char text[3];
   snprintf(text, sizeof(text), "%d", hour);
   const int16_t width = graphics_text_layout_get_content_size(
     text, font->font, GRect(0, 0, 60, 40), GTextOverflowModeFill, GTextAlignmentLeft).w;
   const GPoint at = numeral_centre(bounds, centre, TRIG_MAX_ANGLE * hour / 12,
                                    GSize(width, height));
-  graphics_draw_text(ctx, text, font->font,
-                     GRect(at.x - width, at.y - height / 2 - font->pad, width * 2,
-                           height + font->pad * 2),
-                     GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+  for (int pass = 0; pass < (bold ? 4 : 1); pass++) {
+    graphics_draw_text(ctx, text, font->font,
+                       GRect(at.x - width + pass % 2, at.y - height / 2 - font->pad + pass / 2,
+                             width * 2, height + font->pad * 2),
+                       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+  }
 }
 
-// There is no hour hand: the current hour's number shows instead, larger and
-// in its own colour. The other numbers show only when turned on, in the
+// There is no hour hand: the current hour's number shows instead, larger,
+// bolder and in its own colour. The other numbers show only when turned on, in the
 // watch's font or the chosen one, and the minute number takes the place of
 // any it lands on.
 static NOINLINE void draw_hour_numbers(GContext *ctx, GRect bounds, GPoint centre,
@@ -812,12 +815,12 @@ static NOINLINE void draw_hour_numbers(GContext *ctx, GRect bounds, GPoint centr
     for (int hour = 1; hour <= 12; hour++) {
       const int from_minutes = (place - hour * 5 + 90) % 60 - 30;
       if (hour != current && !(minute_number_shown() && abs(from_minutes) <= 2)) {
-        draw_hour_number(ctx, bounds, centre, hour, &s_numeral_font, NUMERAL_HEIGHT);
+        draw_hour_number(ctx, bounds, centre, hour, &s_numeral_font, NUMERAL_HEIGHT, false);
       }
     }
   }
   graphics_context_set_text_color(ctx, hour_colour());
-  draw_hour_number(ctx, bounds, centre, current, &s_hour_font, HOUR_HEIGHT);
+  draw_hour_number(ctx, bounds, centre, current, &s_hour_font, HOUR_HEIGHT, true);
 }
 
 // The usual hand: a heavy pencil stroke with a lighter one beside it.
@@ -1323,7 +1326,7 @@ static NOINLINE void draw_values(GContext *ctx, GPoint centre, Item main, Item s
 
 // The line under the values: the wearer's name for the watch, or a value,
 // centred and cut short if it is too wide for the information's round area
-// there. A value switches to its short form first. A large NAME_GAP_PERCENT
+// there. A value takes the longest form that fits. A large NAME_GAP_PERCENT
 // can put the line below that area, so it always has some width.
 static NOINLINE void draw_bottom_line(GContext *ctx, GPoint centre, uint8_t bottom,
                                       const struct tm *t) {
@@ -1337,11 +1340,22 @@ static NOINLINE void draw_bottom_line(GContext *ctx, GPoint centre, uint8_t bott
   if (bottom == BOTTOM_NAME) {
     text = s_settings.dial_name;
   } else {
-    format_item(bottom, false, t, value, sizeof(value));
-    if (graphics_text_layout_get_content_size(value, s_name_font.font, box,
-                                              GTextOverflowModeFill, GTextAlignmentCenter).w
-        > room) {
-      format_item(bottom, true, t, value, sizeof(value));
+    // The date first tries the day of the week with the month (Fri Oct 30),
+    // then without it (Fri 30); every value then tries its usual form and its
+    // short one.
+    for (int form = bottom == ITEM_DATE ? 0 : 2; form <= 3; form++) {
+      if (form < 2) {
+        const size_t length = strftime(value, sizeof(value), form == 0 ? "%a %b " : "%a ", t);
+        snprintf(value + length, sizeof(value) - length, "%d", t->tm_mday);
+      } else {
+        format_item(bottom, form == 3, t, value, sizeof(value));
+      }
+      // Measured unconstrained, since a box would wrap it to fit.
+      if (graphics_text_layout_get_content_size(value, s_name_font.font, GRect(0, 0, 200, 40),
+                                                GTextOverflowModeFill,
+                                                GTextAlignmentLeft).w <= room) {
+        break;
+      }
     }
   }
   if (!text[0]) {
