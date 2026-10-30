@@ -4,7 +4,7 @@ Show the minutes as a pencil, spear or arrow hand, a highlighted tick, a minute 
 
 Features:
 - Build up to four centre screens using weather, date, battery, steps, and heart rate
-- Each screen can pair a main item with a second value
+- Each screen can pair a main item with a second value, and show your name or a third value on the line below
 - Tap the watch to switch screens, or let them change automatically every minute.
 - Weather artwork changes with the conditions and includes sun and moon variations for day and night.
 - The current hour's number in a colour of your choice (colour watches), with eight ways to show the minutes

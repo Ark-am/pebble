@@ -18,8 +18,9 @@ picture and text.
 ## Centre screens
 
 The widget has up to four screens. Each screen has a main item, which sets
-the picture and the first value, and an optional second value after the
-divider. By default they are:
+the picture and the first value, an optional second value after the
+divider, and a bottom line under them that shows the name (the default) or a
+third value. By default they are:
 
 | Screen | Picture | Values |
 | --- | --- | --- |
@@ -31,7 +32,10 @@ divider. By default they are:
 The items are weather, date, battery (a gauge, red when low and green while
 charging), steps, and heart rate (a heart). **Tap the watch** to move to the
 next screen, or turn on **Change screen every minute** to cycle through them
-automatically. Set both items on a screen to Nothing to skip it.
+automatically. Set the main and second items on a screen to Nothing to skip
+it; the bottom line alone does not keep a screen. A value on the bottom line
+uses the name's smaller lettering and switches to its short form (12.3k
+steps, 72 for heart rate) when the full one is too wide.
 
 If both values do not fit across the widget, the second, then the first,
 switches to a short form: `17°` instead of `17°C`, `Oct 3` instead of
@@ -75,8 +79,9 @@ battery, choose it as one of the centre screen items.
 - **Minute hand** (when the minutes show as a hand): Pencil stroke (default), Sketched spear (a pencil outline with
   a line down the middle) or Sketched arrow (a pencil shaft with an open
   arrowhead and fletching)
-- **Name under the information:** any text, PEBBLE by default; leave it empty
-  to show none. A name too wide for the space ends in an ellipsis.
+- **Name under the information:** any text, PEBBLE by default, shown on the
+  bottom line of each screen set to The name; leave it empty to show none. A
+  name too wide for the space ends in an ellipsis.
 - **Number font** and **Information font:** see Font styles below
 - **Show hour numbers:** off by default; when on, the other hours' numbers
   sit just inside the hour ticks too

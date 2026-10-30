@@ -1,7 +1,7 @@
 {
   "name": "sketchy-weather-analog",
   "author": "ark-am",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "keywords": [
     "pebble-app"
   ],
@@ -47,6 +47,10 @@
       "SCREEN_3_SECOND",
       "SCREEN_4_MAIN",
       "SCREEN_4_SECOND",
+      "SCREEN_1_BOTTOM",
+      "SCREEN_2_BOTTOM",
+      "SCREEN_3_BOTTOM",
+      "SCREEN_4_BOTTOM",
       "ROTATE_SCREENS",
       "DISCONNECT_VIBE",
       "DIAL_NAME",
@@ -341,7 +345,7 @@
           "type": "font",
           "name": "FONT_SERIF_NAME_LARGE_15",
           "file": "fonts/IBMPlexSerif-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "emery",
             "gabbro"
@@ -351,7 +355,7 @@
           "type": "font",
           "name": "FONT_ROUNDED_NAME_LARGE_14",
           "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "emery",
             "gabbro"
@@ -361,7 +365,7 @@
           "type": "font",
           "name": "FONT_MONO_NAME_LARGE_15",
           "file": "fonts/DMMono-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "emery",
             "gabbro"
@@ -371,7 +375,7 @@
           "type": "font",
           "name": "FONT_SKETCH_NAME_LARGE_20",
           "file": "fonts/PatrickHand-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "emery",
             "gabbro"
@@ -381,7 +385,7 @@
           "type": "font",
           "name": "FONT_SERIF_NAME_SMALL_13",
           "file": "fonts/IBMPlexSerif-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "aplite",
             "basalt",
@@ -394,7 +398,7 @@
           "type": "font",
           "name": "FONT_ROUNDED_NAME_SMALL_12",
           "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "aplite",
             "basalt",
@@ -407,7 +411,7 @@
           "type": "font",
           "name": "FONT_MONO_NAME_SMALL_13",
           "file": "fonts/DMMono-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "aplite",
             "basalt",
@@ -420,7 +424,7 @@
           "type": "font",
           "name": "FONT_SKETCH_NAME_SMALL_15",
           "file": "fonts/PatrickHand-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "aplite",
             "basalt",

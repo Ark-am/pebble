@@ -20,6 +20,10 @@ var ITEM_OPTIONS = [
   { label: 'Nothing', value: '0' }
 ];
 
+// What the line under the values can show: the name, or one of the items.
+// The name's value matches BOTTOM_NAME on the watch.
+var BOTTOM_OPTIONS = [{ label: 'The name (PEBBLE)', value: '6' }].concat(ITEM_OPTIONS);
+
 // The four widget screens and what each shows by default.
 var SCREEN_DEFAULTS = [['1', '2'], ['2', '3'], ['4', '5'], ['0', '0']];
 
@@ -39,6 +43,13 @@ function screenItems(number) {
       label: 'Screen ' + number + ': second value',
       defaultValue: defaults[1],
       options: ITEM_OPTIONS
+    },
+    {
+      type: 'select',
+      messageKey: 'SCREEN_' + number + '_BOTTOM',
+      label: 'Screen ' + number + ': bottom line',
+      defaultValue: '6',
+      options: BOTTOM_OPTIONS
     }
   ];
 }
@@ -69,7 +80,8 @@ module.exports = [
         type: 'input',
         messageKey: 'DIAL_NAME',
         label: 'Name under the information',
-        description: 'Leave empty to show no name.',
+        description: 'Shown on the bottom line of each screen set to The name. Leave ' +
+          'empty to show no name.',
         defaultValue: 'PEBBLE',
         attributes: {
           maxlength: 20
@@ -147,7 +159,8 @@ module.exports = [
       {
         type: 'text',
         defaultValue: 'Choose up to four screens for the centre of the dial. The first ' +
-          'item on each screen also sets the picture. Set both items to Nothing to ' +
+          'item on each screen also sets the picture, and the bottom line, under the ' +
+          'values, shows the name or a third value. Set the first two to Nothing to ' +
           'skip a screen. Tap the watch to move to the next screen. Steps and heart ' +
           'rate show -- on watches without them.'
       },

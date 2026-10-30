@@ -117,8 +117,11 @@ typedef enum {
   ITEM_COUNT,
 } Item;
 
+// The line under the values shows an Item, or this for the name.
+#define BOTTOM_NAME ITEM_COUNT
+
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 9
+#define SETTINGS_VERSION 10
 typedef struct {
   uint8_t version;
   bool dark_theme;
@@ -149,6 +152,9 @@ typedef struct {
   uint8_t hour_argb;
   // Added in version 9: how the minutes are shown (see MinuteStyle).
   uint8_t minute_style;
+  // Added in version 10: what the line under each screen's values shows, an
+  // Item or BOTTOM_NAME.
+  uint8_t screen_bottom[SCREEN_COUNT];
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -163,6 +169,7 @@ static int settings_size(uint8_t version) {
     case 6: return offsetof(Settings, dial_name);
     case 7: return offsetof(Settings, hour_argb);
     case 8: return offsetof(Settings, minute_style);
+    case 9: return offsetof(Settings, screen_bottom);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -263,6 +270,7 @@ static void settings_set_defaults(Settings *settings) {
       { ITEM_NONE, ITEM_NONE },
     },
     .rotate_screens = false,
+    .screen_bottom = { BOTTOM_NAME, BOTTOM_NAME, BOTTOM_NAME, BOTTOM_NAME },
   };
 }
 
@@ -1313,22 +1321,35 @@ static NOINLINE void draw_values(GContext *ctx, GPoint centre, Item main, Item s
                      GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 }
 
-// The wearer's name for the watch, centred under the values, cut short if it
-// is too wide for the information's round area there. A large
-// NAME_GAP_PERCENT can put the name below that area, so it always has some
-// width.
-static NOINLINE void draw_name(GContext *ctx, GPoint centre) {
-  if (!s_settings.dial_name[0]) {
-    return;
-  }
+// The line under the values: the wearer's name for the watch, or a value,
+// centred and cut short if it is too wide for the information's round area
+// there. A value switches to its short form first. A large NAME_GAP_PERCENT
+// can put the line below that area, so it always has some width.
+static NOINLINE void draw_bottom_line(GContext *ctx, GPoint centre, uint8_t bottom,
+                                      const struct tm *t) {
   const int16_t below = RULE_DROP + 3 + TEXT_HEIGHT + CLEAR_RADIUS * NAME_GAP_PERCENT / 100;
   const int16_t fitted = ring_half_width(below) * 2 - 6;
   const int16_t room = fitted > CLEAR_RADIUS ? fitted : CLEAR_RADIUS;
+  const GRect box = GRect(centre.x - room / 2, centre.y + below - s_name_font.pad, room,
+                          NAME_HEIGHT + s_name_font.pad * 2);
+  static char value[16];
+  const char *text = value;
+  if (bottom == BOTTOM_NAME) {
+    text = s_settings.dial_name;
+  } else {
+    format_item(bottom, false, t, value, sizeof(value));
+    if (graphics_text_layout_get_content_size(value, s_name_font.font, box,
+                                              GTextOverflowModeFill, GTextAlignmentCenter).w
+        > room) {
+      format_item(bottom, true, t, value, sizeof(value));
+    }
+  }
+  if (!text[0]) {
+    return;
+  }
   graphics_context_set_text_color(ctx, s_palette.ink);
-  graphics_draw_text(ctx, s_settings.dial_name, s_name_font.font,
-                     GRect(centre.x - room / 2, centre.y + below - s_name_font.pad, room,
-                           NAME_HEIGHT + s_name_font.pad * 2),
-                     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+  graphics_draw_text(ctx, text, s_name_font.font, box, GTextOverflowModeTrailingEllipsis,
+                     GTextAlignmentCenter, NULL);
 }
 
 // ---------------------------------------------------------------------------
@@ -1349,15 +1370,16 @@ static int next_screen(int from) {
   return from;
 }
 
-// The items on the current screen. A screen with only a second item shows
-// it as the main one, and with nothing chosen anywhere the weather and date
-// are shown.
-static void screen_items(Item *main, Item *second) {
+// The items on the current screen, and what the line under them shows. A
+// screen with only a second item shows it as the main one, and with nothing
+// chosen anywhere the weather and date are shown.
+static void screen_items(Item *main, Item *second, uint8_t *bottom) {
   if (!screen_used(s_screen)) {
     s_screen = next_screen(s_screen);
   }
   *main = s_settings.screens[s_screen][0];
   *second = s_settings.screens[s_screen][1];
+  *bottom = s_settings.screen_bottom[s_screen];
   if (*main == ITEM_NONE) {
     *main = *second;
     *second = ITEM_NONE;
@@ -1372,18 +1394,20 @@ static void screen_items(Item *main, Item *second) {
 static bool item_shown(Item item) {
   Item main;
   Item second;
-  screen_items(&main, &second);
-  return main == item || second == item;
+  uint8_t bottom;
+  screen_items(&main, &second, &bottom);
+  return main == item || second == item || bottom == item;
 }
 #endif
 
 static NOINLINE void draw_widget(GContext *ctx, GPoint centre, const struct tm *t) {
   Item main;
   Item second;
-  screen_items(&main, &second);
+  uint8_t bottom;
+  screen_items(&main, &second, &bottom);
   draw_item_picture(ctx, main, GPoint(centre.x, centre.y - ICON_RISE), t);
   draw_values(ctx, centre, main, second, t);
-  draw_name(ctx, centre);
+  draw_bottom_line(ctx, centre, bottom, t);
 }
 
 // ---------------------------------------------------------------------------
@@ -1528,6 +1552,10 @@ static bool read_settings(DictionaryIterator *iterator) {
     { &MESSAGE_KEY_SCREEN_3_MAIN, &MESSAGE_KEY_SCREEN_3_SECOND },
     { &MESSAGE_KEY_SCREEN_4_MAIN, &MESSAGE_KEY_SCREEN_4_SECOND },
   };
+  static const uint32_t *bottom_keys[SCREEN_COUNT] = {
+    &MESSAGE_KEY_SCREEN_1_BOTTOM, &MESSAGE_KEY_SCREEN_2_BOTTOM,
+    &MESSAGE_KEY_SCREEN_3_BOTTOM, &MESSAGE_KEY_SCREEN_4_BOTTOM,
+  };
   bool changed = false;
   const Tuple *tuple;
 
@@ -1538,6 +1566,11 @@ static bool read_settings(DictionaryIterator *iterator) {
         s_settings.screens[screen][slot] = item >= 0 && item < ITEM_COUNT ? item : ITEM_NONE;
         changed = true;
       }
+    }
+    if ((tuple = dict_find(iterator, *bottom_keys[screen]))) {
+      const int32_t bottom = tuple_int(tuple);
+      s_settings.screen_bottom[screen] = bottom >= 0 && bottom <= BOTTOM_NAME ? bottom : BOTTOM_NAME;
+      changed = true;
     }
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_NUMBER_FONT))) {
