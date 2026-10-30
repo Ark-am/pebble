@@ -1,7 +1,7 @@
 {
   "name": "retro-f91w",
   "author": "ark-am",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "keywords": [
     "pebble-app"
   ],
@@ -49,7 +49,12 @@
       "BOTTOM_RIGHT",
       "TEMPERATURE_UNIT",
       "SPLIT_COLOURS",
-      "COLOURS[16]"
+      "COLOURS[16]",
+      "CHIME_PATTERN",
+      "CHIME_CUSTOM",
+      "CHIME_EVERY",
+      "CHIME_FROM",
+      "CHIME_UNTIL"
     ],
     "resources": {
       "media": [

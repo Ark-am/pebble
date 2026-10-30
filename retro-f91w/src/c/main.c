@@ -179,8 +179,20 @@ typedef enum {
   COLOUR_COUNT,
 } ColourPart;
 
+// What the chime plays; values match the options in src/pkjs/config.js.
+typedef enum {
+  CHIME_SHORT,        // One short buzz.
+  CHIME_COUNT_HOURS,  // On the hour, a buzz for each hour; a short buzz between.
+  CHIME_CUSTOM,       // The wearer's own buzzes and pauses.
+  CHIME_PATTERN_COUNT,
+} ChimePattern;
+
+// The most buzzes and pauses a custom pattern keeps, and the longest each.
+#define CUSTOM_CHIME_MAX 16
+#define CUSTOM_CHIME_MAX_MS 3000
+
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 6
+#define SETTINGS_VERSION 7
 typedef struct {
   uint8_t version;
   uint8_t lcd;
@@ -205,10 +217,26 @@ typedef struct {
   // Added in version 6.
   bool split_colours;
   uint8_t colours[COLOUR_COUNT];  // GColor8 values, by ColourPart.
+  // Added in version 7.
+  uint8_t chime_pattern;  // See ChimePattern.
+  uint8_t chime_every;    // Minutes between chimes: 60 is on the hour only.
+  // The hours the chime sounds between, the last one's :00 included; the
+  // same hour for both is all day.
+  uint8_t chime_from;
+  uint8_t chime_until;
+  uint8_t custom_chime_length;
+  uint16_t custom_chime[CUSTOM_CHIME_MAX];  // Buzz, pause, buzz... in ms.
 } Settings;
 
-// Version 5 ended before the colours, and keeps its choices on update.
-#define SETTINGS_V5_SIZE offsetof(Settings, split_colours)
+// Earlier versions end where the next one's fields begin, and keep their
+// choices on update.
+static const struct {
+  uint8_t version;
+  uint8_t size;
+} OLD_SETTINGS[] = {
+  { 5, offsetof(Settings, split_colours) },
+  { 6, offsetof(Settings, chime_pattern) },
+};
 
 static Settings s_settings;
 
@@ -298,6 +326,10 @@ static void settings_set_defaults(Settings *settings) {
       [COLOUR_TOP_ROW] = GColorBlackARGB8,
       [COLOUR_BACKGROUND] = GColorBlackARGB8,
     },
+    .chime_pattern = CHIME_SHORT,
+    .chime_every = 60,
+    .custom_chime_length = 3,
+    .custom_chime = { 200, 100, 200 },
   };
 }
 
@@ -1229,14 +1261,54 @@ static void request_weather(void) {
   app_message_outbox_send();
 }
 
+// Plays the chime for a time: the chosen pattern, except that counting the
+// hours only counts on the hour (in 12-hour time, so at most 12 buzzes) and
+// gives one short buzz between.
+static void play_chime(const struct tm *t) {
+  static uint32_t durations[2 * 12];
+  uint32_t length = 0;
+  if (s_settings.chime_pattern == CHIME_COUNT_HOURS && t->tm_min == 0) {
+    const int hours = t->tm_hour % 12 ? t->tm_hour % 12 : 12;
+    for (int i = 0; i < hours; i++) {
+      durations[length++] = 150;
+      durations[length++] = 300;
+    }
+    length--;  // No pause after the last buzz.
+  } else if (s_settings.chime_pattern == CHIME_CUSTOM && s_settings.custom_chime_length) {
+    for (int i = 0; i < s_settings.custom_chime_length; i++) {
+      durations[length++] = s_settings.custom_chime[i];
+    }
+  }
+  if (length) {
+    vibes_enqueue_custom_pattern((VibePattern) { .durations = durations, .num_segments = length });
+  } else {
+    vibes_short_pulse();
+  }
+}
+
+// Whether the chime sounds at this time: on its interval, within its hours,
+// and not during Quiet Time.
+static bool chime_due(const struct tm *t) {
+  if (!s_settings.chime || t->tm_min % s_settings.chime_every != 0 || quiet_time_is_active()) {
+    return false;
+  }
+  const int now = t->tm_hour * 60 + t->tm_min;
+  const int from = s_settings.chime_from * 60;
+  const int until = s_settings.chime_until * 60;
+  if (from == until) {
+    return true;
+  }
+  // A range such as 22:00 to 07:00 runs past midnight.
+  return from < until ? now >= from && now <= until : now >= from || now <= until;
+}
+
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   layer_mark_dirty(s_canvas);
   if (!(units_changed & MINUTE_UNIT)) {
     return;
   }
-  if (s_settings.chime && tick_time->tm_min == 0 && !quiet_time_is_active()) {
-    // The hourly time signal.
-    vibes_short_pulse();
+  if (chime_due(tick_time)) {
+    play_chime(tick_time);
   }
   if (weather_wanted() && tick_time->tm_min % WEATHER_REFRESH_MINUTES == 0) {
     request_weather();
@@ -1280,8 +1352,45 @@ static void read_string(DictionaryIterator *iterator, uint32_t key, char *out, s
   }
 }
 
+// Reads a pattern typed as numbers separated by anything else, such as
+// "200, 100, 200": buzz, pause, buzz, in milliseconds. Returns whether it
+// changed.
+static bool read_custom_chime(const char *text) {
+  uint16_t pattern[CUSTOM_CHIME_MAX];
+  int length = 0;
+  for (const char *p = text; *p && length < CUSTOM_CHIME_MAX; ) {
+    if (*p < '0' || *p > '9') {
+      p++;
+      continue;
+    }
+    int32_t ms = 0;
+    while (*p >= '0' && *p <= '9') {
+      if (ms <= CUSTOM_CHIME_MAX_MS) {
+        ms = ms * 10 + (*p - '0');
+      }
+      p++;
+    }
+    pattern[length++] = ms < 10 ? 10 : ms > CUSTOM_CHIME_MAX_MS ? CUSTOM_CHIME_MAX_MS : ms;
+  }
+  // A pause at the end does nothing.
+  if (length % 2 == 0 && length > 0) {
+    length--;
+  }
+  if (length == s_settings.custom_chime_length &&
+      memcmp(pattern, s_settings.custom_chime, length * sizeof(pattern[0])) == 0) {
+    return false;
+  }
+  memcpy(s_settings.custom_chime, pattern, length * sizeof(pattern[0]));
+  s_settings.custom_chime_length = length;
+  return true;
+}
+
+// Settings that change how the chime feels, so it plays once when one does.
+static bool s_chime_changed;
+
 static bool read_settings(DictionaryIterator *iterator) {
   bool changed = false;
+  s_chime_changed = false;
   const Tuple *tuple;
   if ((tuple = dict_find(iterator, MESSAGE_KEY_LCD_COLOUR))) {
     s_settings.lcd = tuple_int(tuple) % LCD_COUNT;
@@ -1296,7 +1405,9 @@ static bool read_settings(DictionaryIterator *iterator) {
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_CHIME))) {
-    s_settings.chime = tuple_int(tuple) != 0;
+    const bool chime = tuple_int(tuple) != 0;
+    s_chime_changed |= chime && !s_settings.chime;
+    s_settings.chime = chime;
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_TIME_FORMAT))) {
@@ -1332,6 +1443,31 @@ static bool read_settings(DictionaryIterator *iterator) {
     }
   }
 #endif
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_CHIME_PATTERN))) {
+    const uint8_t pattern = tuple_int(tuple) % CHIME_PATTERN_COUNT;
+    s_chime_changed |= pattern != s_settings.chime_pattern;
+    s_settings.chime_pattern = pattern;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_CHIME_CUSTOM)) && tuple->type == TUPLE_CSTRING) {
+    s_chime_changed |= read_custom_chime(tuple->value->cstring) &&
+                       s_settings.chime_pattern == CHIME_CUSTOM;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_CHIME_EVERY))) {
+    const int32_t every = tuple_int(tuple);
+    // Only steps that divide the hour, so each hour chimes alike.
+    s_settings.chime_every = every > 0 && every <= 60 && 60 % every == 0 ? every : 60;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_CHIME_FROM))) {
+    s_settings.chime_from = tuple_int(tuple) % 24;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_CHIME_UNTIL))) {
+    s_settings.chime_until = tuple_int(tuple) % 24;
+    changed = true;
+  }
   read_string(iterator, MESSAGE_KEY_BRAND, s_settings.brand, sizeof(s_settings.brand), &changed);
   read_string(iterator, MESSAGE_KEY_MODEL, s_settings.model, sizeof(s_settings.model), &changed);
   read_string(iterator, MESSAGE_KEY_LIGHT_LABEL, s_settings.light_label,
@@ -1366,6 +1502,13 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
     if (weather_wanted() && !wanted_weather) {
       request_weather();
     }
+    if (s_settings.chime && s_chime_changed) {
+      // Play a new pattern once, on the hour's form, so the wearer can feel it.
+      const time_t now = time(NULL);
+      struct tm hour = *localtime(&now);
+      hour.tm_min = 0;
+      play_chime(&hour);
+    }
   }
   layer_mark_dirty(s_canvas);
 }
@@ -1399,10 +1542,13 @@ static OUT_OF_LINE void load_saved_state(void) {
     const int size = persist_read_data(PERSIST_KEY_SETTINGS, &saved, sizeof(saved));
     if (size == (int)sizeof(Settings) && saved.version == SETTINGS_VERSION) {
       s_settings = saved;
-    } else if (size == (int)SETTINGS_V5_SIZE && saved.version == 5) {
-      // Keep the earlier choices; the colours keep their defaults.
-      memcpy(&s_settings, &saved, SETTINGS_V5_SIZE);
-      s_settings.version = SETTINGS_VERSION;
+    }
+    for (size_t i = 0; i < ARRAY_LENGTH(OLD_SETTINGS); i++) {
+      if (size == OLD_SETTINGS[i].size && saved.version == OLD_SETTINGS[i].version) {
+        // Keep the earlier choices; the newer fields keep their defaults.
+        memcpy(&s_settings, &saved, size);
+        s_settings.version = SETTINGS_VERSION;
+      }
     }
   }
   apply_palette();

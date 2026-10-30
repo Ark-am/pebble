@@ -12,6 +12,15 @@ var WIDGETS = [
           { label: 'Battery', value: '4' }
         ];
 
+// The hours of the day, for when the chime starts and stops, in 12- and
+// 24-hour time.
+var HOURS = [];
+for (var hour = 0; hour < 24; hour++) {
+  var twelve = hour === 0 ? 'Midnight' : hour === 12 ? 'Noon'
+    : (hour % 12) + (hour < 12 ? ' AM' : ' PM');
+  HOURS.push({ label: twelve + ' (' + (hour < 10 ? '0' : '') + hour + ':00)', value: String(hour) });
+}
+
 // A colour picker for one part of a custom case or LCD; the number matches
 // ColourPart in src/c/main.c. src/pkjs/custom-clay.js shows each only when it
 // applies.
@@ -213,13 +222,6 @@ module.exports = [
         defaultValue: false
       },
       {
-        type: 'toggle',
-        messageKey: 'CHIME',
-        label: 'Hourly chime',
-        description: 'A short vibration on the hour, except during Quiet Time.',
-        defaultValue: false
-      },
-      {
         type: 'select',
         messageKey: 'TEMPERATURE_UNIT',
         label: 'Temperature',
@@ -228,6 +230,75 @@ module.exports = [
           { label: 'Celsius', value: 'C' },
           { label: 'Fahrenheit', value: 'F' }
         ]
+      }
+    ]
+  },
+  {
+    type: 'section',
+    items: [
+      {
+        type: 'heading',
+        defaultValue: 'Chime'
+      },
+      {
+        type: 'toggle',
+        messageKey: 'CHIME',
+        label: 'Chime',
+        description: 'A vibration at set times, except during Quiet Time. After saving, a ' +
+          'new pattern plays once so you can feel it.',
+        defaultValue: false
+      },
+      {
+        type: 'select',
+        messageKey: 'CHIME_PATTERN',
+        label: 'Pattern',
+        defaultValue: '0',
+        options: [
+          { label: 'One short buzz', value: '0' },
+          { label: 'Count the hours', value: '1' },
+          { label: 'Custom', value: '2' }
+        ]
+      },
+      {
+        type: 'input',
+        messageKey: 'CHIME_CUSTOM',
+        label: 'Custom pattern',
+        description: 'Buzz and pause lengths in milliseconds, in turn, separated by ' +
+          'commas: 200, 100, 200 is two short buzzes. Up to 8 buzzes, each up to ' +
+          '3000 ms.',
+        defaultValue: '200, 100, 200',
+        attributes: { maxlength: 80, inputmode: 'numeric' }
+      },
+      {
+        type: 'select',
+        messageKey: 'CHIME_EVERY',
+        label: 'How often',
+        description: 'Counting the hours gives one short buzz between the hours.',
+        defaultValue: '60',
+        options: [
+          { label: 'On the hour', value: '60' },
+          { label: 'Every 30 minutes', value: '30' },
+          { label: 'Every 20 minutes', value: '20' },
+          { label: 'Every 15 minutes', value: '15' },
+          { label: 'Every 10 minutes', value: '10' },
+          { label: 'Every 5 minutes', value: '5' }
+        ]
+      },
+      {
+        type: 'select',
+        messageKey: 'CHIME_FROM',
+        label: 'From',
+        defaultValue: '0',
+        options: HOURS
+      },
+      {
+        type: 'select',
+        messageKey: 'CHIME_UNTIL',
+        label: 'Until',
+        description: 'The same time for both chimes all day. The last chime is at the ' +
+          'time chosen here. A range past midnight, such as 22:00 to 07:00, works too.',
+        defaultValue: '0',
+        options: HOURS
       }
     ]
   },

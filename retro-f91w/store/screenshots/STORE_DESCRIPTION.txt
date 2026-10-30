@@ -10,7 +10,7 @@ Features:
  - Show weather, steps, heart rate or battery in place of F-91W, WATER or RESIST
  - 12-hour or 24-hour time, with a PM sign in 12-hour time
  - Optional seconds; note, battery usage increases when the seconds are shown
- - An optional hourly chime that respects Quiet Time
+ - An optional chime that respects Quiet Time: a short buzz, one buzz for each hour, or your own pattern; on the hour or every 30, 20, 15, 10 or 5 minutes; all day or only between the hours you choose
 
 Settings are available via the Pebble phone app. Weather supports Celsius and Fahrenheit and needs your paired phone's location and internet access, with no weather account or API key required. Health data is unavailable on the original Pebble, and heart rate requires a supported sensor.
 

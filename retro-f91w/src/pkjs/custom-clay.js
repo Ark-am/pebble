@@ -1,7 +1,8 @@
 // Runs on the settings page (Clay copies it there with toString, so it uses
-// nothing from outside itself). It shows the colour pickers only for a custom
-// case or LCD, adds the separate ones when asked, and starts a custom set from
-// the preset that was showing.
+// nothing from outside itself). It shows the chime's settings only while the
+// chime is on, and the colour pickers only for a custom case or LCD, adds the
+// separate ones when asked, and starts a custom set from the preset that was
+// showing.
 
 module.exports = function () {
   var clayConfig = this;
@@ -65,6 +66,27 @@ module.exports = function () {
       picker(part).set(from < 0 ? 0x000000 : picker(from).get());
     });
   }
+
+  // The chime's settings show only while it is on, and the custom pattern
+  // only when chosen.
+  clayConfig.on(clayConfig.EVENTS.AFTER_BUILD, function () {
+    var chime = clayConfig.getItemByMessageKey('CHIME');
+    var pattern = clayConfig.getItemByMessageKey('CHIME_PATTERN');
+    var custom = clayConfig.getItemByMessageKey('CHIME_CUSTOM');
+    var others = ['CHIME_PATTERN', 'CHIME_EVERY', 'CHIME_FROM', 'CHIME_UNTIL'];
+
+    function update() {
+      var on = chime.get();
+      others.forEach(function (key) {
+        clayConfig.getItemByMessageKey(key)[on ? 'show' : 'hide']();
+      });
+      custom[on && pattern.get() === '2' ? 'show' : 'hide']();
+    }
+
+    chime.on('change', update);
+    pattern.on('change', update);
+    update();
+  });
 
   clayConfig.on(clayConfig.EVENTS.AFTER_BUILD, function () {
     var lcd = clayConfig.getItemByMessageKey('LCD_COLOUR');

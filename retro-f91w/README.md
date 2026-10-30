@@ -47,8 +47,18 @@ does not use the Casio name or logo.
   the afternoon) or 24-hour.
 - **Show seconds:** off by default. When on, the face updates every second,
   which uses more battery.
-- **Hourly chime:** a short vibration on the hour, except during Quiet Time;
-  off by default. While it is on, the LCD shows the signal's sign, (( . )).
+- **Chime:** a vibration at set times, except during Quiet Time; off by
+  default. While it is on, the LCD shows the signal's sign, (( . )).
+  - **Pattern:** one short buzz (default); count the hours, one buzz per hour
+    of the 12-hour clock on the hour and a short buzz between; or custom,
+    typed as buzz and pause lengths in milliseconds, such as 200, 100, 200 (up
+    to 8 buzzes, each 10 to 3000 ms; a trailing pause is dropped).
+  - **How often:** on the hour (default), or every 30, 20, 15, 10 or 5 minutes.
+  - **From** and **Until:** the hours it sounds between, the last at the
+    Until time itself; the same hour for both is all day, and a range past
+    midnight, such as 22:00 to 07:00, works too.
+  - After saving, a changed pattern (or the chime being turned on) plays once,
+    as it would on the hour.
 - **Temperature:** Celsius or Fahrenheit.
 
 Weather conditions show as two letters: CL clear, PC partly cloudy, CD cloudy,
