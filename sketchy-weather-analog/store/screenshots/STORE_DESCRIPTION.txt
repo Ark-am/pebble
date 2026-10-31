@@ -8,7 +8,7 @@ Features:
 - Tap the watch to switch screens, or let them change automatically every minute.
 - Weather artwork changes with the conditions and includes sun and moon variations for day and night.
 - The current hour's number in a colour of your choice (colour watches), with eight ways to show the minutes
-- An editable name under the information, PEBBLE by default
+- An editable name under the information, PEBBLE by default, in a small or large size
 - Show or hide the minute lines between the hour ticks
 - Handwritten Sketchy font by default, or Pebble, Serif, Rounded and Mono styles
 

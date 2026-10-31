@@ -84,6 +84,10 @@ battery, choose it as one of the centre screen items.
 - **Name under the information:** any text, PEBBLE by default, shown on the
   bottom line of each screen set to The name; leave it empty to show none. A
   name too wide for the space ends in an ellipsis.
+- **Bottom line size:** Small (default), the name's own size, or Large, the
+  size of the values above it. Large text is wider than the round area the
+  hands keep out of, so around :25 and :35 the minute hand can cross the ends
+  of a long line.
 - **Number font** and **Information font:** see Font styles below
 - **Show hour numbers:** off by default; when on, the other hours' numbers
   sit just inside the hour ticks too

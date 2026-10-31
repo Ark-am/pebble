@@ -121,7 +121,7 @@ typedef enum {
 #define BOTTOM_NAME ITEM_COUNT
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 11
+#define SETTINGS_VERSION 12
 typedef struct {
   uint8_t version;
   bool dark_theme;
@@ -157,7 +157,13 @@ typedef struct {
   uint8_t screen_bottom[SCREEN_COUNT];
   // Added in version 11: whether the small lines between the hour ticks show.
   bool minute_ticks;
+  // Added in version 12: the bottom line's size, NAME_SMALL or NAME_LARGE.
+  uint8_t name_size;
 } Settings;
+
+// Sizes of the bottom line: small in the name's own font, or large in the
+// values' font.
+enum { NAME_SMALL, NAME_LARGE, NAME_SIZE_COUNT };
 
 // How much of the settings each version saved, so older settings carry over
 // and the fields added since keep their defaults.
@@ -173,6 +179,7 @@ static int settings_size(uint8_t version) {
     case 8: return offsetof(Settings, minute_style);
     case 9: return offsetof(Settings, screen_bottom);
     case 10: return offsetof(Settings, minute_ticks);
+    case 11: return offsetof(Settings, name_size);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -275,6 +282,7 @@ static void settings_set_defaults(Settings *settings) {
     .rotate_screens = false,
     .screen_bottom = { BOTTOM_NAME, BOTTOM_NAME, BOTTOM_NAME, BOTTOM_NAME },
     .minute_ticks = true,
+    .name_size = NAME_SMALL,
   };
 }
 
@@ -1334,11 +1342,16 @@ static NOINLINE void draw_values(GContext *ctx, GPoint centre, Item main, Item s
 // can put the line below that area, so it always has some width.
 static NOINLINE void draw_bottom_line(GContext *ctx, GPoint centre, uint8_t bottom,
                                       const struct tm *t) {
+  const bool large = s_settings.name_size == NAME_LARGE;
+  const StyledFont *font = large ? &s_text_font : &s_name_font;
+  const int16_t height = large ? TEXT_HEIGHT : NAME_HEIGHT;
   const int16_t below = RULE_DROP + 3 + TEXT_HEIGHT + CLEAR_RADIUS * NAME_GAP_PERCENT / 100;
   const int16_t fitted = ring_half_width(below) * 2 - 6;
-  const int16_t room = fitted > CLEAR_RADIUS ? fitted : CLEAR_RADIUS;
-  const GRect box = GRect(centre.x - room / 2, centre.y + below - s_name_font.pad, room,
-                          NAME_HEIGHT + s_name_font.pad * 2);
+  // Large text has the width of the round area's middle, so a name fits; it
+  // reaches past the round area, where the minute hand can cross its ends.
+  const int16_t room = large ? CLEAR_RADIUS * 2 - 6 : fitted > CLEAR_RADIUS ? fitted : CLEAR_RADIUS;
+  const GRect box = GRect(centre.x - room / 2, centre.y + below - font->pad, room,
+                          height + font->pad * 2);
   static char value[16];
   const char *text = value;
   if (bottom == BOTTOM_NAME) {
@@ -1355,7 +1368,7 @@ static NOINLINE void draw_bottom_line(GContext *ctx, GPoint centre, uint8_t bott
         format_item(bottom, form == 3, t, value, sizeof(value));
       }
       // Measured unconstrained, since a box would wrap it to fit.
-      if (graphics_text_layout_get_content_size(value, s_name_font.font, GRect(0, 0, 200, 40),
+      if (graphics_text_layout_get_content_size(value, font->font, GRect(0, 0, 200, 40),
                                                 GTextOverflowModeFill,
                                                 GTextAlignmentLeft).w <= room) {
         break;
@@ -1366,7 +1379,7 @@ static NOINLINE void draw_bottom_line(GContext *ctx, GPoint centre, uint8_t bott
     return;
   }
   graphics_context_set_text_color(ctx, s_palette.ink);
-  graphics_draw_text(ctx, text, s_name_font.font, box, GTextOverflowModeTrailingEllipsis,
+  graphics_draw_text(ctx, text, font->font, box, GTextOverflowModeTrailingEllipsis,
                      GTextAlignmentCenter, NULL);
 }
 
@@ -1623,6 +1636,10 @@ static bool read_settings(DictionaryIterator *iterator) {
 
   if ((tuple = dict_find(iterator, MESSAGE_KEY_THEME))) {
     s_settings.dark_theme = tuple_int(tuple) == 1;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_NAME_SIZE))) {
+    s_settings.name_size = tuple_int(tuple) % NAME_SIZE_COUNT;
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_MINUTE_TICKS))) {

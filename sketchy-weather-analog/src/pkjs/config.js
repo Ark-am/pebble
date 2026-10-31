@@ -89,6 +89,18 @@ module.exports = [
       },
       {
         type: 'select',
+        messageKey: 'NAME_SIZE',
+        label: 'Bottom line size',
+        description: 'For the name, or the value shown in its place. Small is the name\'s ' +
+          'size; large matches the values above it.',
+        defaultValue: '0',
+        options: [
+          { label: 'Small', value: '0' },
+          { label: 'Large', value: '1' }
+        ]
+      },
+      {
+        type: 'select',
         messageKey: 'MINUTE_STYLE',
         label: 'Minutes',
         description: 'All but the hand use the current hour\'s colour.',
