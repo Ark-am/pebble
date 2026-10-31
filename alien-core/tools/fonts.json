@@ -1,0 +1,19 @@
+{
+  "roles": {
+    "NAME_SMALL": {
+      "kind": "info", "characters": "[ -~]",
+      "large": { "height": 10, "like": "GOTHIC_14" },
+      "small": { "height": 7, "like": "GOTHIC_09" }
+    },
+    "NAME_MEDIUM": {
+      "kind": "info", "characters": "[ -~]",
+      "large": { "height": 13, "like": "GOTHIC_18" },
+      "small": { "height": 10, "like": "GOTHIC_14" }
+    },
+    "NAME_LARGE": {
+      "kind": "info", "characters": "[ -~]",
+      "large": { "height": 17, "like": "GOTHIC_24" },
+      "small": { "height": 13, "like": "GOTHIC_18" }
+    }
+  }
+}

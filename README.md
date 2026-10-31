@@ -25,6 +25,7 @@ A growing collection of independent apps and watch faces for the Pebble watches.
 | [Meridian](./meridian/) | Analog watch-face with weather, date, battery, connection and Quiet Time alerts, and health data. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Sketchy Weather Analog](./sketchy-weather-analog/) | Pencil-sketch analog watch-face with a large hand-drawn weather widget, a coloured hour number in place of the hour hand, and eight ways to show the minutes. Inspired by the Sketchy Weather watch-face. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Retro F-91W](./retro-f91w/) | Digital face after the classic F-91W: a segmented LCD, a top row for the date, weather, steps or heart rate, and your own brand and labels, LCD and case colours. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
+| [Alien Core](./alien-core/) | Alien-tech face with a glowing core inside a ring of armoured plates, digital or analog time, and twelve original avatars to scroll through and transform into by wrist flick or touch. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [World Clock](./world-clock/) | Digital face with the current local time being large and at the top. Beside is the date, and below are the times of two other cities. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 
 Follow a project's link for its requirements, build instructions, testing steps, and platform-specific notes, but please try not to follow because we are still new to Python and C languages. 
@@ -39,6 +40,7 @@ Follow a project's link for its requirements, build instructions, testing steps,
 | [Sketchy Weather Analog](./sketchy-weather-analog/store/screenshots/STORE_DESCRIPTION.txt) |
 | [Retro F-91W](./retro-f91w/store/screenshots/STORE_DESCRIPTION.txt) |
 | [World Clock](./world-clock/store/screenshots/STORE_DESCRIPTION.txt) |
+| [Alien Core](./alien-core/store/screenshots/STORE_DESCRIPTION.txt) |
 
 > Created by Ark-am LLC. Discover our work and custom software development services:\
 > https://ark-am.com/projects/pebble-apps

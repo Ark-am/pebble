@@ -1,0 +1,1331 @@
+#include <pebble.h>
+
+#include "avatars.h"
+#include "font_styles.h"
+#if defined(PBL_SPEAKER)
+#include "sounds.h"
+#endif
+
+// An alien-tech watch face: a glowing core inside a ring of twelve armoured
+// plates. The core shows the time as glowing digits or as hands, and the
+// plate for the current hour glows, with the current minute's five-minute
+// plate glowing more dimly.
+//
+// Each plate also holds one of twelve avatars. A flick of the wrist, or a tap
+// on touch watches, opens the selector: the ring spins and the avatar of the
+// plate at the top shows in the core. Further flicks, or dragging the ring
+// round, step through them. Tapping the core, or leaving it for a few
+// seconds, transforms the face into that avatar: the core flares and opens
+// like an iris, the plates flash, and sparks and shock rings fly out. The
+// avatars are alive while they show: they blink, sway, flap and scuttle. After
+// a few seconds the time comes back.
+//
+// The face also powers up plate by plate when it appears, and a light runs
+// round the ring on the hour. Nothing else moves while the time shows, so the
+// face costs little battery.
+//
+// Watches with a speaker add sound effects: the ring ratchets as it spins, each
+// plate has its own note, the transformation surges and booms, and each avatar
+// has a call of its own.
+
+#define PERSIST_KEY_SETTINGS 1
+#define PERSIST_KEY_AVATAR 2
+
+// Saved with persist_write_data, so only append fields and bump the version.
+#define SETTINGS_VERSION 4
+
+// Sizes for the name in the core. Values match the NAME_SIZE options in
+// src/pkjs/config.js.
+enum { NAME_SMALL, NAME_MEDIUM, NAME_LARGE, NAME_SIZE_COUNT };
+
+// Each size of the name: Pebble's font, its visible height and the blank
+// space it leaves above. The bundled font styles are sized to match (see
+// tools/fonts.json).
+typedef struct {
+  const char *font;
+  int8_t height;
+  int8_t pad;
+} NameSize;
+
+#if PBL_DISPLAY_WIDTH >= 200
+static const NameSize NAME_SIZES[NAME_SIZE_COUNT] = {
+  { FONT_KEY_GOTHIC_14, 10, 4 }, { FONT_KEY_GOTHIC_18, 13, 5 }, { FONT_KEY_GOTHIC_24, 17, 7 },
+};
+#else
+static const NameSize NAME_SIZES[NAME_SIZE_COUNT] = {
+  { FONT_KEY_GOTHIC_09, 7, 2 }, { FONT_KEY_GOTHIC_14, 10, 4 }, { FONT_KEY_GOTHIC_18, 13, 5 },
+};
+#endif
+
+// Values match the TIME_FORMAT options in src/pkjs/config.js.
+enum { TIME_FORMAT_WATCH, TIME_FORMAT_12H, TIME_FORMAT_24H };
+
+// Which sound effects play, each including the ones before. Values match the
+// SOUND options in src/pkjs/config.js.
+enum { SOUND_OFF, SOUND_AVATARS, SOUND_ALL };
+
+#define VOLUME_MEDIUM 60
+
+// Values match the STYLE options in src/pkjs/config.js.
+typedef enum {
+  STYLE_DIGITAL,
+  STYLE_ANALOG,
+} Style;
+
+typedef struct {
+  uint8_t version;
+  uint8_t style;
+  uint8_t glow_argb;
+  // Whether flicks (and taps on touch watches) open the avatars.
+  bool animation;
+  // Added in version 2: the name in the core, empty to show none, with its
+  // size and font style (see font_styles.h).
+  char name[24];
+  uint8_t name_size;
+  uint8_t name_font;
+  // Added in version 3: see the TIME_FORMAT values.
+  uint8_t time_format;
+  // Added in version 4: which sounds play (see SOUND_OFF), and how loud, from
+  // 0 to 100.
+  uint8_t sound;
+  uint8_t sound_volume;
+} Settings;
+
+// How much of the settings each version saved, so older settings carry over
+// and the fields added since keep their defaults.
+static int settings_size(uint8_t version) {
+  switch (version) {
+    case 1: return offsetof(Settings, name);
+    case 2: return offsetof(Settings, time_format);
+    case 3: return offsetof(Settings, sound);
+    case SETTINGS_VERSION: return sizeof(Settings);
+    default: return -1;
+  }
+}
+
+static Settings s_settings;
+
+typedef struct {
+  GColor background;
+  GColor glow;
+  GColor dim;      // A darker glow, for fine lines and trails.
+  GColor minute;   // The minute's plate and the avatars' shading: dimmer than
+                   // the glow, but clear of grey.
+  GColor plate;    // Unlit plates.
+  GColor edge;     // Plate outlines; only on black and white watches.
+} Palette;
+
+static Palette s_palette;
+
+static Window *s_window;
+static Layer *s_canvas;
+static StyledFont s_name_font;
+
+#define PLATE_COUNT 12
+#define PLATE_ANGLE (TRIG_MAX_ANGLE / PLATE_COUNT)
+
+// The dial's parts as fractions of its radius, in hundredths.
+#define BEZEL_INNER 84   // The plates run from here to the edge.
+#define CORE_OUTER 78    // The glowing ring of the core.
+#define CORE_INNER 68    // Inside it, the dark centre with the time.
+
+// ---------------------------------------------------------------------------
+// States
+//
+// The face shows the time until a flick or tap opens the selector. Each
+// state but the time runs on a timer and returns to the time when it is done.
+// Frames come every FRAME_MS while much is moving and every SLOW_FRAME_MS
+// while only an avatar is, and the animations follow the clock, so they take
+// the same time however fast a watch draws.
+
+typedef enum {
+  STATE_TIME,
+  STATE_POWER_UP,      // The plates light in turn and the iris opens.
+  STATE_CHASE,         // A light runs round the ring on the hour.
+  STATE_OPENING,       // The ring spins up to the chosen avatar.
+  STATE_SELECTING,     // Stepping through the avatars.
+  STATE_TRANSFORMING,  // The flare, iris and shock rings.
+  STATE_AVATAR,        // The chosen avatar, large.
+  STATE_CLOSING,       // The ring turns home and the time comes back.
+} State;
+
+#define FRAME_MS 33
+#define SLOW_FRAME_MS 66
+#define LONGEST_FRAME_MS 120
+#define POWER_UP_MS 1100
+#define CHASE_MS 1000
+#define POP_MS 300
+#define OPENING_MS 900
+#define STEP_MS 250
+#define SNAP_MS 200
+#define SELECT_IDLE_MS 3000
+#define TRANSFORMING_MS 1000
+#define AVATAR_MS 4000
+#define CLOSING_MS 700
+
+static State s_state = STATE_TIME;
+static int32_t s_state_ms;        // Time spent in the current state.
+static int32_t s_idle_ms;         // Time since the last flick or touch.
+static AppTimer *s_frame_timer;
+static int32_t s_last_frame;      // The clock at the last frame.
+static int32_t s_life_ms;         // Keeps the avatars moving between states.
+static int32_t s_pop_ms = POP_MS; // Time since a new avatar came up.
+static int s_shown = -1;          // The avatar that last came up.
+static int s_pips;                // Seconds of the selector's charge sounded.
+static int s_avatar;              // The chosen avatar, kept between uses.
+
+// The plate ring's turn, clockwise, and its animation from one turn to
+// another. Plate i sits at i * PLATE_ANGLE + s_ring.
+static int32_t s_ring;
+static int32_t s_ring_from;
+static int32_t s_ring_to;
+static int32_t s_ring_ms;
+static int32_t s_ring_duration;
+
+// ---------------------------------------------------------------------------
+// Settings
+
+static void settings_set_defaults(Settings *settings) {
+  *settings = (Settings) {
+    .version = SETTINGS_VERSION,
+    .style = STYLE_DIGITAL,
+    .glow_argb = GColorGreenARGB8,
+    .animation = true,
+    .name = "PEBBLE",
+    .name_size = NAME_MEDIUM,
+    .name_font = FONT_STYLE_PEBBLE,
+    .time_format = TIME_FORMAT_WATCH,
+    .sound = SOUND_AVATARS,
+    .sound_volume = VOLUME_MEDIUM,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Sound
+//
+// Plays a sound effect in place of any already playing, if the setting
+// includes it and it is not Quiet Time, so a flick in the night stays silent.
+// The watch's own mute also applies.
+
+#if defined(PBL_SPEAKER)
+static void play_sound(const Sound *sound, int level) {
+  if (s_settings.sound < level || quiet_time_is_active()) {
+    return;
+  }
+  speaker_stop();
+  speaker_play_tracks(sound->tracks, sound->count, s_settings.sound_volume);
+}
+#define PLAY(sound, level) play_sound(sound, level)
+#else
+#define PLAY(sound, level)
+#endif
+
+static void load_name_font(void) {
+  static const CustomFont *const FONTS[NAME_SIZE_COUNT] = {
+    FONTS_NAME_SMALL, FONTS_NAME_MEDIUM, FONTS_NAME_LARGE,
+  };
+  const NameSize *size = &NAME_SIZES[s_settings.name_size];
+  styled_font_unload(&s_name_font);
+  styled_font_load(&s_name_font, s_settings.name_font, size->font, size->pad,
+                   FONTS[s_settings.name_size]);
+}
+
+#if defined(PBL_COLOR)
+// A colour with each channel halved.
+static GColor dimmed(GColor color) {
+  return (GColor) { .argb = 0xC0 | ((color.r / 2) << 4) | ((color.g / 2) << 2) | (color.b / 2) };
+}
+#endif
+
+static void apply_palette(void) {
+  s_palette.background = GColorBlack;
+#if defined(PBL_COLOR)
+  s_palette.glow = (GColor) { .argb = s_settings.glow_argb };
+  s_palette.dim = dimmed(s_palette.glow);
+  const GColor glow = s_palette.glow;
+  s_palette.minute = (GColor) { .argb = 0xC0 | ((glow.r * 2 / 3) << 4) | ((glow.g * 2 / 3) << 2)
+                                        | (glow.b * 2 / 3) };
+  s_palette.plate = GColorDarkGray;
+  s_palette.edge = GColorDarkGray;
+#else
+  s_palette.glow = GColorWhite;
+  s_palette.dim = GColorWhite;
+  s_palette.minute = GColorWhite;
+  s_palette.plate = GColorBlack;
+  s_palette.edge = GColorWhite;
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// Geometry and timing
+
+// The clock in milliseconds, wrapping every few hours.
+static int32_t clock_ms(void) {
+  time_t seconds;
+  uint16_t ms;
+  time_ms(&seconds, &ms);
+  return (int32_t)(seconds % 10000) * 1000 + ms;
+}
+
+// Where something repeating every period is in its cycle, as an angle.
+static int32_t cycle(int32_t period) {
+  return (s_life_ms % period) * TRIG_MAX_ANGLE / period;
+}
+
+static GPoint ray_point(GPoint centre, int32_t angle, int32_t distance) {
+  return GPoint(centre.x + sin_lookup(angle) * distance / TRIG_MAX_RATIO,
+                centre.y - cos_lookup(angle) * distance / TRIG_MAX_RATIO);
+}
+
+// The whole-number square root, rounded down.
+static int32_t isqrt(int32_t value) {
+  int32_t root = 0;
+  while ((root + 1) * (root + 1) <= value) {
+    root++;
+  }
+  return root;
+}
+
+// Eases from 0 to 1000 as x goes from 0 to 1000, slowing towards the end.
+static int32_t ease_out(int32_t x) {
+  const int32_t rest = 1000 - x;
+  return 1000 - rest * rest / 1000 * rest / 1000;
+}
+
+// A scale in thousandths that springs up from about three quarters, past
+// full size and back, as progress goes from 0 to 1000.
+static int32_t pop_scale(int32_t progress) {
+  const int32_t spring = sin_lookup(TRIG_MAX_ANGLE / 2 * progress / 1000);
+  return 720 + 280 * progress / 1000 + spring * 200 / TRIG_MAX_RATIO;
+}
+
+// How far through a stretch of the current state it is, from 0 to 1000.
+static int32_t stage(int32_t from, int32_t to) {
+  if (s_state_ms <= from) {
+    return 0;
+  }
+  if (s_state_ms >= to) {
+    return 1000;
+  }
+  return (s_state_ms - from) * 1000 / (to - from);
+}
+
+// How closed the core's iris is, from 0 (open) to 1000 (closed): closing
+// between two times and opening again by a third.
+static int32_t iris(int32_t close_from, int32_t closed_at, int32_t open_at) {
+  if (s_state_ms < closed_at) {
+    return stage(close_from, closed_at);
+  }
+  return 1000 - stage(closed_at, open_at);
+}
+
+// The plate at the top of the ring, whose avatar is the one shown.
+static int top_plate(void) {
+  // The plate nearest the top, rounding down for turns either way.
+  const int32_t offset = -s_ring + PLATE_ANGLE / 2;
+  const int32_t steps = offset >= 0 ? offset / PLATE_ANGLE
+                                    : -((-offset + PLATE_ANGLE - 1) / PLATE_ANGLE);
+  return ((steps % PLATE_COUNT) + PLATE_COUNT) % PLATE_COUNT;
+}
+
+static void ring_animate(int32_t to, int32_t duration) {
+  s_ring_from = s_ring;
+  s_ring_to = to;
+  s_ring_ms = 0;
+  s_ring_duration = duration;
+}
+
+static bool ring_moving(void) {
+  return s_ring_ms < s_ring_duration;
+}
+
+// ---------------------------------------------------------------------------
+// Drawing
+
+// One armoured plate: a curved block between two radii, with a dark slot
+// across its middle.
+static void draw_plate(GContext *ctx, GPoint centre, int32_t middle, int16_t inner,
+                       int16_t outer, GColor fill) {
+  const int32_t half = PLATE_ANGLE / 2 - DEG_TO_TRIGANGLE(3);
+  GPoint points[] = {
+    ray_point(centre, middle - half, inner),
+    ray_point(centre, middle - half, outer),
+    ray_point(centre, middle, outer),
+    ray_point(centre, middle + half, outer),
+    ray_point(centre, middle + half, inner),
+    ray_point(centre, middle, inner),
+  };
+  GPathInfo info = { .num_points = ARRAY_LENGTH(points), .points = points };
+  GPath *path = gpath_create(&info);
+  const bool plain = gcolor_equal(fill, s_palette.plate);
+  graphics_context_set_fill_color(ctx, fill);
+  gpath_draw_filled(ctx, path);
+  graphics_context_set_stroke_color(ctx, plain ? s_palette.edge : fill);
+  graphics_context_set_stroke_width(ctx, 1);
+  gpath_draw_outline(ctx, path);
+  gpath_destroy(path);
+
+  const int16_t depth = (outer - inner) / 3;
+  graphics_context_set_stroke_color(ctx, s_palette.background);
+  graphics_context_set_stroke_width(ctx, 2);
+  graphics_draw_line(ctx, ray_point(centre, middle, inner + depth),
+                     ray_point(centre, middle, outer - depth));
+}
+
+// Which plates are lit. The hour's plate glows and the minute's glows dimly;
+// in the animations a head of light runs round with a trail, plates fill up
+// in turn, or they all flash.
+typedef struct {
+  int lit;
+  int minute;
+  int head;
+  int trail;
+  int filled;
+  bool flash;
+} Lights;
+
+static GColor plate_fill(const Lights *lights, int i) {
+  if (i == lights->lit || i == lights->head) {
+    return s_palette.glow;
+  }
+  if (i == lights->trail) {
+    return s_palette.dim;
+  }
+  if (lights->flash || i < lights->filled) {
+    return s_palette.minute;
+  }
+#if defined(PBL_COLOR)
+  if (i == lights->minute) {
+    return s_palette.minute;
+  }
+#endif
+  return s_palette.plate;
+}
+
+// The ring of plates at its current turn. Black and white watches have no
+// dimmer glow, so there only the inner half of the minute's plate is filled.
+static void draw_plates(GContext *ctx, GPoint centre, int16_t radius, const Lights *lights) {
+  const int16_t inner = radius * BEZEL_INNER / 100;
+  for (int i = 0; i < PLATE_COUNT; i++) {
+    draw_plate(ctx, centre, PLATE_ANGLE * i + s_ring, inner, radius, plate_fill(lights, i));
+#if !defined(PBL_COLOR)
+    if (i == lights->minute && i != lights->lit) {
+      draw_plate(ctx, centre, PLATE_ANGLE * i + s_ring, inner, (inner + radius) / 2,
+                 s_palette.minute);
+    }
+#endif
+  }
+  graphics_context_set_stroke_color(ctx, s_palette.dim);
+  graphics_context_set_stroke_width(ctx, 1);
+  graphics_draw_circle(ctx, centre, inner - 3);
+}
+
+// The core: a glowing ring with four vents cut across it, around a dark
+// centre. It swells a little while it flares. In the selector it charges up
+// clockwise from 12 o'clock towards the transformation, shown by charge from
+// 0 to 1000; otherwise charge is negative.
+static void draw_core(GContext *ctx, GPoint centre, int16_t radius, int32_t flare,
+                      int32_t charge) {
+  const int16_t outer = radius * CORE_OUTER / 100 + 3 * flare / 1000;
+  const int16_t inner = radius * CORE_INNER / 100;
+  const bool charging = charge >= 0;
+  graphics_context_set_fill_color(ctx, charging ? PBL_IF_COLOR_ELSE(s_palette.dim, GColorBlack)
+                                                : s_palette.glow);
+  graphics_fill_circle(ctx, centre, outer);
+  if (charging) {
+    graphics_context_set_fill_color(ctx, s_palette.glow);
+    graphics_fill_radial(ctx, GRect(centre.x - outer, centre.y - outer, outer * 2, outer * 2),
+                         GOvalScaleModeFitCircle, outer - inner + 1, 0,
+                         TRIG_MAX_ANGLE * charge / 1000);
+  }
+#if !defined(PBL_COLOR)
+  if (charging) {
+    graphics_context_set_stroke_color(ctx, s_palette.glow);
+    graphics_context_set_stroke_width(ctx, 1);
+    graphics_draw_circle(ctx, centre, outer);
+  }
+#endif
+  graphics_context_set_fill_color(ctx, s_palette.background);
+  graphics_fill_circle(ctx, centre, inner);
+
+  const int16_t vent = (outer - inner) / 2 + 1;
+  graphics_context_set_stroke_color(ctx, s_palette.background);
+  graphics_context_set_stroke_width(ctx, vent);
+  for (int i = 0; i < 4; i++) {
+    const int32_t angle = TRIG_MAX_ANGLE / 8 + TRIG_MAX_ANGLE * i / 4;
+    graphics_draw_line(ctx, ray_point(centre, angle, inner - 1),
+                       ray_point(centre, angle, outer + 1));
+  }
+}
+
+// The iris over the core's centre: glow closing in from the edge, leaving an
+// opening that shrinks to nothing when fully closed.
+static void draw_iris(GContext *ctx, GPoint centre, int16_t inner, int32_t closed) {
+  if (closed <= 0) {
+    return;
+  }
+  const int16_t thickness = inner * closed / 1000;
+  graphics_context_set_fill_color(ctx, s_palette.glow);
+  graphics_fill_radial(ctx, GRect(centre.x - inner, centre.y - inner, inner * 2, inner * 2),
+                       GOvalScaleModeFitCircle, thickness, 0, TRIG_MAX_ANGLE);
+}
+
+static void draw_text_centred(GContext *ctx, const char *text, GFont font, GPoint centre,
+                              int16_t width) {
+  const GSize size = graphics_text_layout_get_content_size(
+    text, font, GRect(0, 0, width, 100), GTextOverflowModeFill, GTextAlignmentCenter);
+  graphics_draw_text(ctx, text, font,
+                     GRect(centre.x - width / 2, centre.y - size.h / 2, width, size.h),
+                     GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+}
+
+// The day and date, e.g. "SAT 31".
+static void format_date(const struct tm *t, char *buffer, size_t size) {
+  strftime(buffer, size, "%a %d", t);
+  for (char *c = buffer; *c; c++) {
+    if (*c >= 'a' && *c <= 'z') {
+      *c -= 'a' - 'A';
+    }
+  }
+}
+
+// The name, in the dark centre above the time, cut short if it is too wide
+// for the circle there.
+static void draw_name(GContext *ctx, GPoint centre, int16_t inner) {
+  if (!s_settings.name[0]) {
+    return;
+  }
+  const int16_t height = NAME_SIZES[s_settings.name_size].height;
+  const int16_t middle = inner * 62 / 100;
+  const int16_t top = middle + height / 2;
+  const int16_t half = top < inner ? isqrt(inner * inner - top * top) : inner / 2;
+  graphics_context_set_text_color(ctx, s_palette.glow);
+  graphics_draw_text(ctx, s_settings.name, s_name_font.font,
+                     GRect(centre.x - half, centre.y - top - s_name_font.pad, half * 2,
+                           height + s_name_font.pad * 2),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+}
+
+// Fonts to suit the size of the core: larger cores, as on the Pebble Round
+// 2, take larger digits.
+static GFont info_font(int16_t inner) {
+  return fonts_get_system_font(inner >= 80 ? FONT_KEY_GOTHIC_24_BOLD
+                               : inner >= 58 ? FONT_KEY_GOTHIC_18_BOLD
+                               : FONT_KEY_GOTHIC_14_BOLD);
+}
+
+static int16_t text_width(const char *text, GFont font, int16_t room) {
+  return graphics_text_layout_get_content_size(text, font, GRect(0, 0, room, 100),
+                                               GTextOverflowModeFill, GTextAlignmentLeft).w;
+}
+
+// The largest digits that leave room for the widest time, plus anything
+// beside it, across the core, so the digits stay one size all day. Larger
+// cores, as on the Pebble Round 2, take larger digits.
+static GFont digits_font(int16_t inner, int16_t beside) {
+  static const char *const FONTS[] = {
+    FONT_KEY_LECO_42_NUMBERS, FONT_KEY_LECO_38_BOLD_NUMBERS, FONT_KEY_LECO_36_BOLD_NUMBERS,
+    FONT_KEY_LECO_32_BOLD_NUMBERS, FONT_KEY_LECO_26_BOLD_NUMBERS_AM_PM,
+    FONT_KEY_LECO_20_BOLD_NUMBERS,
+  };
+  GFont font = NULL;
+  for (size_t i = inner >= 80 ? 0 : inner >= 58 ? 1 : 4; i < ARRAY_LENGTH(FONTS); i++) {
+    font = fonts_get_system_font(FONTS[i]);
+    if (text_width("00:00", font, inner * 3) + beside <= inner * 2 - 6) {
+      break;
+    }
+  }
+  return font;
+}
+
+static bool use_24h(void) {
+  switch (s_settings.time_format) {
+    case TIME_FORMAT_12H: return false;
+    case TIME_FORMAT_24H: return true;
+    default: return clock_is_24h_style();
+  }
+}
+
+// Glowing digits in the dark centre, with the day and date below them. In
+// 12-hour time AM or PM sits beside the minutes, and the two are centred
+// together.
+static void draw_digital(GContext *ctx, GPoint centre, int16_t inner, const struct tm *t) {
+  static char time_text[8];
+  const bool twenty_four = use_24h();
+  if (twenty_four) {
+    strftime(time_text, sizeof(time_text), "%H:%M", t);
+  } else {
+    const int hour = t->tm_hour % 12;
+    snprintf(time_text, sizeof(time_text), "%d:%02d", hour ? hour : 12, t->tm_min);
+  }
+  static char date[8];
+  format_date(t, date, sizeof(date));
+
+  GFont meridiem_font = fonts_get_system_font(inner >= 80 ? FONT_KEY_GOTHIC_18_BOLD
+                                              : inner >= 58 ? FONT_KEY_GOTHIC_14_BOLD
+                                              : FONT_KEY_GOTHIC_09);
+  const char *meridiem = t->tm_hour < 12 ? "AM" : "PM";
+  const int16_t gap = 2;
+  const int16_t meridiem_w = twenty_four ? 0 : text_width(meridiem, meridiem_font, inner);
+  GFont time_font = digits_font(inner, twenty_four ? 0 : gap + text_width("PM", meridiem_font,
+                                                                         inner));
+  graphics_context_set_text_color(ctx, s_palette.glow);
+  const int16_t time_y = centre.y - inner / 10;
+  int16_t time_x = centre.x;
+  if (!twenty_four) {
+    const int16_t time_w = text_width(time_text, time_font, inner * 2);
+    time_x -= (gap + meridiem_w) / 2;
+    draw_text_centred(ctx, meridiem, meridiem_font,
+                      GPoint(time_x + time_w / 2 + gap + meridiem_w / 2, time_y + inner / 8),
+                      meridiem_w + 4);
+  }
+  draw_text_centred(ctx, time_text, time_font, GPoint(time_x, time_y), inner * 2);
+  draw_text_centred(ctx, date, info_font(inner), GPoint(centre.x, centre.y + inner * 45 / 100),
+                    inner * 2);
+}
+
+// Hands in the dark centre, with the day and date below the middle.
+static void draw_analog(GContext *ctx, GPoint centre, int16_t inner, const struct tm *t) {
+  static char date[8];
+  format_date(t, date, sizeof(date));
+  const bool large = inner >= 58;
+  graphics_context_set_text_color(ctx, s_palette.dim);
+  draw_text_centred(ctx, date, info_font(inner), GPoint(centre.x, centre.y + inner * 50 / 100),
+                    inner * 2);
+
+  const int32_t minute_angle = TRIG_MAX_ANGLE * t->tm_min / 60;
+  const int32_t hour_angle = TRIG_MAX_ANGLE * ((t->tm_hour % 12) * 60 + t->tm_min) / 720;
+  graphics_context_set_stroke_color(ctx, s_palette.glow);
+  graphics_context_set_stroke_width(ctx, large ? 7 : 5);
+  graphics_draw_line(ctx, centre, ray_point(centre, hour_angle, inner * 55 / 100));
+  graphics_context_set_stroke_width(ctx, large ? 4 : 3);
+  graphics_draw_line(ctx, centre, ray_point(centre, minute_angle, inner * 88 / 100));
+  graphics_context_set_fill_color(ctx, s_palette.glow);
+  graphics_fill_circle(ctx, centre, large ? 6 : 4);
+  graphics_context_set_fill_color(ctx, s_palette.background);
+  graphics_fill_circle(ctx, centre, large ? 2 : 1);
+}
+
+// ---------------------------------------------------------------------------
+// Avatars
+//
+// An avatar is a run of shapes on a grid of half units, 0 to 200 each way (see
+// tools/make_avatars.py). Each starts with a byte of its motion (high four
+// bits), shade (next two) and type (low two); a zero byte ends the run.
+
+enum { SHAPE_END, SHAPE_POLY, SHAPE_CIRCLE, SHAPE_LINE };
+enum { SHADE_GLOW, SHADE_DIM, SHADE_CUT };
+
+// How a shape moves while its avatar shows. These match the motions in
+// tools/make_avatars.py.
+typedef enum {
+  MOTION_STILL,
+  MOTION_WAVE,     // Ripples, more towards its end, like a tentacle.
+  MOTION_FLAP,     // Narrows towards the middle and back, like a wing.
+  MOTION_BLINK,    // Hidden for a moment now and then, like an eye.
+  MOTION_SWING,    // Rocks about a pivot, like a claw.
+  MOTION_SQUASH,   // Widens as it flattens and back, like a jellyfish.
+  MOTION_STEP_A,   // Lifts and drops, like a leg; the two steps take turns.
+  MOTION_STEP_B,
+  MOTION_FLICK,    // Shows for a moment now and then, like a tongue.
+} Motion;
+
+#define BLINK_EVERY_MS 2600
+#define BLINK_MS 170
+#define FLICK_EVERY_MS 1500
+#define FLICK_MS 450
+
+// Where a grid point goes in its shape's motion. Along is how far the point
+// is through its shape, from 0 to 1000, and number which shape it is, so
+// shapes do not all ripple together.
+static GPoint moved(int32_t x, int32_t y, Motion motion, int32_t along, int number, int32_t pivot_x,
+                    int32_t pivot_y) {
+  switch (motion) {
+    case MOTION_WAVE: {
+      const int32_t angle = cycle(1400) + TRIG_MAX_ANGLE / 1000 * along
+        + TRIG_MAX_ANGLE / 5 * number;
+      x += sin_lookup(angle) * along / 1000 * 10 / TRIG_MAX_RATIO;
+      break;
+    }
+    case MOTION_FLAP: {
+      const int32_t closing = (TRIG_MAX_RATIO - cos_lookup(cycle(800))) / 2;
+      x = 100 + (x - 100) * (1000 - closing * 450 / TRIG_MAX_RATIO) / 1000;
+      break;
+    }
+    case MOTION_SWING: {
+      // Shapes either side of the middle rock opposite ways.
+      const int32_t rock = sin_lookup(cycle(1800)) * DEG_TO_TRIGANGLE(9) / TRIG_MAX_RATIO;
+      const int32_t angle = pivot_x < 100 ? -rock : rock;
+      const int32_t dx = x - pivot_x;
+      const int32_t dy = y - pivot_y;
+      x = pivot_x + (dx * cos_lookup(angle) - dy * sin_lookup(angle)) / TRIG_MAX_RATIO;
+      y = pivot_y + (dx * sin_lookup(angle) + dy * cos_lookup(angle)) / TRIG_MAX_RATIO;
+      break;
+    }
+    case MOTION_SQUASH: {
+      const int32_t squash = sin_lookup(cycle(1600)) * 70 / TRIG_MAX_RATIO;
+      x = 100 + (x - 100) * (1000 + squash) / 1000;
+      y = 100 + (y - 100) * (1000 - squash) / 1000;
+      break;
+    }
+    case MOTION_STEP_A:
+      y += sin_lookup(cycle(900)) * 4 / TRIG_MAX_RATIO;
+      break;
+    case MOTION_STEP_B:
+      y -= sin_lookup(cycle(900)) * 4 / TRIG_MAX_RATIO;
+      break;
+    default:
+      break;
+  }
+  return GPoint(x, y);
+}
+
+// An avatar at a size, centred on a point and bobbing gently: polygons,
+// circles and thick lines in the glow or its dimmer shade, and cut out in the
+// background colour for eyes and markings. Black and white watches draw the
+// dimmer shade as the glow.
+static void draw_avatar(GContext *ctx, int avatar, GPoint centre, int16_t size) {
+  static GPoint points[AVATAR_MAX_POINTS];
+  const uint8_t *data = AVATAR_SHAPES[avatar];
+  centre.y += sin_lookup(cycle(2000)) * size / 50 / TRIG_MAX_RATIO;
+  const bool blinking = s_life_ms % BLINK_EVERY_MS < BLINK_MS;
+  const bool flicking = s_life_ms % FLICK_EVERY_MS < FLICK_MS;
+  #define TO_SCREEN(point) GPoint(centre.x + ((point).x - 100) * size / 200, \
+                                  centre.y + ((point).y - 100) * size / 200)
+  for (int number = 0; *data != SHAPE_END; number++) {
+    const uint8_t head = *data++;
+    const int type = head & 3;
+    const int shade = (head >> 2) & 3;
+    const Motion motion = head >> 4;
+    const bool hidden = (motion == MOTION_BLINK && blinking)
+      || (motion == MOTION_FLICK && !flicking);
+    const GColor colour = shade == SHADE_CUT ? s_palette.background
+      : shade == SHADE_DIM ? PBL_IF_COLOR_ELSE(s_palette.minute, s_palette.glow)
+      : s_palette.glow;
+    int32_t pivot_x = 0;
+    int32_t pivot_y = 0;
+    if (motion == MOTION_SWING) {
+      pivot_x = *data++;
+      pivot_y = *data++;
+    }
+    if (type == SHAPE_CIRCLE) {
+      if (!hidden) {
+        const GPoint at = moved(data[0], data[1], motion, 0, number, pivot_x, pivot_y);
+        const int16_t radius = data[2] * size / 200;
+        graphics_context_set_fill_color(ctx, colour);
+        graphics_fill_circle(ctx, TO_SCREEN(at), radius > 0 ? radius : 1);
+      }
+      data += 3;
+      continue;
+    }
+    int16_t width = 0;
+    if (type == SHAPE_LINE) {
+      width = *data++ * size / 200;
+      width = width > 0 ? width : 1;
+    }
+    const int count = *data++;
+    if (!hidden) {
+      for (int i = 0; i < count; i++) {
+        const int32_t along = count > 1 ? i * 1000 / (count - 1) : 0;
+        const GPoint at = moved(data[i * 2], data[i * 2 + 1], motion, along, number, pivot_x,
+                                pivot_y);
+        points[i] = TO_SCREEN(at);
+      }
+      if (type == SHAPE_LINE) {
+        graphics_context_set_stroke_color(ctx, colour);
+        graphics_context_set_stroke_width(ctx, width);
+        for (int i = 1; i < count; i++) {
+          graphics_draw_line(ctx, points[i - 1], points[i]);
+        }
+      } else {
+        GPathInfo info = { .num_points = count, .points = points };
+        GPath *path = gpath_create(&info);
+        graphics_context_set_fill_color(ctx, colour);
+        gpath_draw_filled(ctx, path);
+        gpath_destroy(path);
+      }
+    }
+    data += count * 2;
+  }
+  #undef TO_SCREEN
+}
+
+// An avatar in the selector, springing up as it arrives, with its name below.
+static void draw_selection(GContext *ctx, GPoint centre, int16_t inner, int avatar) {
+  const int32_t pop = pop_scale(s_pop_ms >= POP_MS ? 1000 : s_pop_ms * 1000 / POP_MS);
+  draw_avatar(ctx, avatar, GPoint(centre.x, centre.y - inner * 12 / 100),
+              inner * 120 / 100 * pop / 1000);
+  graphics_context_set_text_color(ctx, s_palette.glow);
+  draw_text_centred(ctx, AVATAR_NAMES[avatar], info_font(inner),
+                    GPoint(centre.x, centre.y + inner * 66 / 100), inner * 2);
+}
+
+// Rings of glow pulsing out from the core to beyond the screen's corners,
+// one after another, at a steady speed.
+static void draw_shock_rings(GContext *ctx, GPoint centre, int16_t from, int16_t to) {
+  static const int16_t starts[] = { 250, 370, 490 };
+  graphics_context_set_stroke_color(ctx, s_palette.glow);
+  graphics_context_set_stroke_width(ctx, 4);
+  for (size_t i = 0; i < ARRAY_LENGTH(starts); i++) {
+    const int32_t reach = stage(starts[i], starts[i] + 450);
+    if (reach > 0 && reach < 1000) {
+      graphics_draw_circle(ctx, centre, from + (to - from) * reach / 1000);
+    }
+  }
+}
+
+// Sparks flying out through the gaps between the plates.
+static void draw_sparks(GContext *ctx, GPoint centre, int16_t from, int16_t to) {
+  const int32_t reach = ease_out(stage(250, 750));
+  if (reach == 0 || reach == 1000) {
+    return;
+  }
+  const int16_t distance = from + (to - from) * reach / 1000;
+  graphics_context_set_stroke_color(ctx, s_palette.glow);
+  graphics_context_set_stroke_width(ctx, 2);
+  for (int i = 0; i < PLATE_COUNT; i++) {
+    const int32_t angle = PLATE_ANGLE * i + PLATE_ANGLE / 2 + s_ring;
+    graphics_draw_line(ctx, ray_point(centre, angle, distance),
+                       ray_point(centre, angle, distance + from / 5));
+  }
+}
+
+static void canvas_update_proc(Layer *layer, GContext *ctx) {
+  const GRect bounds = layer_get_unobstructed_bounds(layer);
+  const GPoint centre = grect_center_point(&bounds);
+  const int16_t short_side = bounds.size.w < bounds.size.h ? bounds.size.w : bounds.size.h;
+  const int16_t radius = short_side / 2 - 2;
+  const int16_t inner = radius * CORE_INNER / 100;
+  const time_t now = time(NULL);
+  const struct tm *t = localtime(&now);
+
+  graphics_context_set_antialiased(ctx, true);
+  graphics_context_set_fill_color(ctx, s_palette.background);
+  graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
+
+  // The plates: the hour's and the minute's while showing the time, otherwise
+  // the one at the top, with a trail behind it while the ring turns.
+  Lights lights = {
+    .lit = t->tm_hour % 12, .minute = t->tm_min / 5, .head = -1, .trail = -1,
+  };
+  if (s_state == STATE_POWER_UP) {
+    lights.filled = stage(0, 700) * PLATE_COUNT / 1000;
+    lights.head = lights.filled < PLATE_COUNT ? lights.filled : -1;
+    if (s_state_ms < 700) {
+      lights.lit = lights.minute = -1;
+    }
+  } else if (s_state == STATE_CHASE) {
+    lights.head = stage(0, CHASE_MS) * PLATE_COUNT / 1000;
+    lights.trail = (lights.head + PLATE_COUNT - 1) % PLATE_COUNT;
+  } else if (s_state != STATE_TIME) {
+    lights.minute = -1;
+    lights.lit = top_plate();
+    if (ring_moving()) {
+      const bool clockwise = s_ring_to > s_ring_from;
+      lights.trail = (lights.lit + (clockwise ? 1 : PLATE_COUNT - 1)) % PLATE_COUNT;
+    }
+    lights.flash = s_state == STATE_TRANSFORMING && s_state_ms >= 220 && s_state_ms < 420;
+  }
+
+  // What each state shows in the core, and how closed its iris is.
+  bool show_time = false;
+  bool show_selection = false;
+  bool show_avatar = false;
+  int32_t closed = 0;
+  int32_t charge = -1;
+  int32_t pop = 1000;
+  switch (s_state) {
+    case STATE_TIME:
+    case STATE_CHASE:
+      show_time = true;
+      break;
+    case STATE_POWER_UP:
+      closed = 1000 - stage(500, 900);
+      show_time = true;
+      break;
+    case STATE_OPENING:
+      closed = iris(0, 180, 380);
+      show_time = s_state_ms < 180;
+      show_selection = !show_time;
+      break;
+    case STATE_SELECTING:
+      show_selection = true;
+      charge = s_idle_ms >= SELECT_IDLE_MS ? 1000 : s_idle_ms * 1000 / SELECT_IDLE_MS;
+      break;
+    case STATE_TRANSFORMING:
+      closed = iris(0, 250, 650);
+      show_selection = s_state_ms < 250;
+      show_avatar = !show_selection;
+      pop = pop_scale(stage(250, 650));
+      break;
+    case STATE_AVATAR:
+      show_avatar = true;
+      break;
+    case STATE_CLOSING:
+      closed = iris(0, 250, 500);
+      show_avatar = s_state_ms < 250;
+      show_time = !show_avatar;
+      break;
+  }
+
+  draw_plates(ctx, centre, radius, &lights);
+  draw_core(ctx, centre, radius, closed, charge);
+  if (show_time) {
+    draw_name(ctx, centre, inner);
+    if (s_settings.style == STYLE_ANALOG) {
+      draw_analog(ctx, centre, inner, t);
+    } else {
+      draw_digital(ctx, centre, inner, t);
+    }
+  } else if (show_selection) {
+    draw_selection(ctx, centre, inner, top_plate());
+  } else if (show_avatar) {
+    draw_avatar(ctx, s_avatar, centre, inner * 165 / 100 * pop / 1000);
+  }
+  draw_iris(ctx, centre, inner, closed);
+
+  if (s_state == STATE_TRANSFORMING) {
+    const int16_t corner = (bounds.size.w + bounds.size.h) * 6 / 10;
+    draw_shock_rings(ctx, centre, radius * CORE_OUTER / 100, corner);
+    draw_sparks(ctx, centre, radius * CORE_OUTER / 100, corner);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Running the states
+
+static void next_frame(void *context);
+
+static void enter_state(State state) {
+  s_state = state;
+  s_state_ms = 0;
+  s_idle_ms = 0;
+  if (state != STATE_TIME && !s_frame_timer) {
+    s_last_frame = clock_ms();
+    s_frame_timer = app_timer_register(FRAME_MS, next_frame, NULL);
+  }
+  layer_mark_dirty(s_canvas);
+}
+
+// Opens the selector: the ring spins once round and comes to rest with the
+// chosen avatar's plate at the top.
+static void open_selector(void) {
+  s_ring = 0;
+  ring_animate(2 * TRIG_MAX_ANGLE - s_avatar * PLATE_ANGLE, OPENING_MS);
+  enter_state(STATE_OPENING);
+  PLAY(&SFX_OPEN, SOUND_AVATARS);
+}
+
+// Goes back from the avatar to choosing another.
+static void back_to_selecting(void) {
+  enter_state(STATE_SELECTING);
+  PLAY(&SFX_BACK, SOUND_AVATARS);
+}
+
+// Steps to the next avatar by turning the ring back one plate.
+static void step_avatar(void) {
+  const int32_t from = ring_moving() ? s_ring_to : s_ring;
+  ring_animate(from - PLATE_ANGLE, STEP_MS);
+  s_idle_ms = 0;
+}
+
+static void transform(void) {
+  s_avatar = top_plate();
+  persist_write_int(PERSIST_KEY_AVATAR, s_avatar);
+  enter_state(STATE_TRANSFORMING);
+  PLAY(&SFX_TRANSFORM, SOUND_AVATARS);
+}
+
+// Closes back to the time, turning the ring home with one more spin.
+static void close_to_time(void) {
+  const int32_t home = (s_ring / TRIG_MAX_ANGLE + 1) * TRIG_MAX_ANGLE;
+  ring_animate(home, CLOSING_MS);
+  enter_state(STATE_CLOSING);
+  PLAY(&SFX_CLOSE, SOUND_AVATARS);
+}
+
+static void next_frame(void *context) {
+  s_frame_timer = NULL;
+  const int32_t clock = clock_ms();
+  int32_t step = clock - s_last_frame;
+  step = step < 0 || step > LONGEST_FRAME_MS ? LONGEST_FRAME_MS : step;
+  s_last_frame = clock;
+  s_state_ms += step;
+  s_idle_ms += step;
+  s_life_ms += step;
+  s_pop_ms += step;
+  if (ring_moving()) {
+    s_ring_ms += step;
+    const int32_t progress = s_ring_ms >= s_ring_duration
+      ? 1000 : s_ring_ms * 1000 / s_ring_duration;
+    s_ring = s_ring_from + (s_ring_to - s_ring_from) * ease_out(progress) / 1000;
+  }
+
+  if (s_state == STATE_OPENING || s_state == STATE_SELECTING) {
+    const int top = top_plate();
+    if (top != s_shown) {
+      s_shown = top;
+      s_pop_ms = 0;
+      if (s_state == STATE_SELECTING) {
+        PLAY(SFX_STEPS[top], SOUND_AVATARS);
+      }
+    }
+  }
+
+  // A pip at each second of the charge, rising towards the transformation.
+  if (s_state == STATE_SELECTING) {
+    const int pips = s_idle_ms / 1000;
+    if (pips > s_pips && pips < 3 && !ring_moving()) {
+      PLAY(pips == 1 ? &SFX_PIP_1 : &SFX_PIP_2, SOUND_AVATARS);
+    }
+    s_pips = pips;
+  }
+
+  switch (s_state) {
+    case STATE_POWER_UP:
+      if (s_state_ms >= POWER_UP_MS) {
+        enter_state(STATE_TIME);
+      }
+      break;
+    case STATE_CHASE:
+      if (s_state_ms >= CHASE_MS) {
+        enter_state(STATE_TIME);
+      }
+      break;
+    case STATE_OPENING:
+      if (s_state_ms >= OPENING_MS) {
+        enter_state(STATE_SELECTING);
+      }
+      break;
+    case STATE_SELECTING:
+      if (s_idle_ms >= SELECT_IDLE_MS && !ring_moving()) {
+        transform();
+      }
+      break;
+    case STATE_TRANSFORMING:
+      if (s_state_ms >= TRANSFORMING_MS) {
+        enter_state(STATE_AVATAR);
+        PLAY(SFX_CALLS[s_avatar], SOUND_AVATARS);
+      }
+      break;
+    case STATE_AVATAR:
+      if (s_state_ms >= AVATAR_MS) {
+        close_to_time();
+      }
+      break;
+    case STATE_CLOSING:
+      if (s_state_ms >= CLOSING_MS) {
+        s_ring = 0;
+        enter_state(STATE_TIME);
+      }
+      break;
+    default:
+      break;
+  }
+
+  if (s_state != STATE_TIME && !s_frame_timer) {
+    const bool calm = s_state == STATE_AVATAR
+      || (s_state == STATE_SELECTING && !ring_moving() && s_pop_ms >= POP_MS);
+    s_frame_timer = app_timer_register(calm ? SLOW_FRAME_MS : FRAME_MS, next_frame, NULL);
+  }
+  layer_mark_dirty(s_canvas);
+}
+
+// A flick opens the selector, steps through the avatars, or goes back to
+// choosing from the avatar.
+static void tap_handler(AccelAxisType axis, int32_t direction) {
+  if (!s_settings.animation) {
+    return;
+  }
+  switch (s_state) {
+    case STATE_TIME: open_selector(); break;
+    case STATE_SELECTING: step_avatar(); break;
+    case STATE_AVATAR: back_to_selecting(); break;
+    default: break;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Touch, on the Pebble Time 2 and Pebble Round 2
+//
+// A tap opens the selector, picks the avatar when on the core, or goes back
+// to choosing from the avatar. Dragging round the ring turns it, and it snaps
+// to the nearest plate when let go.
+
+#if defined(_PBL_API_EXISTS_touch_service_subscribe)
+#define DRAG_START_PIXELS 6
+
+static bool s_touch_subscribed;
+static bool s_touching;
+static bool s_dragging;
+static GPoint s_touch_start;
+static int32_t s_touch_angle;
+
+static GPoint dial_centre(void) {
+  const GRect bounds = layer_get_unobstructed_bounds(s_canvas);
+  return grect_center_point(&bounds);
+}
+
+static int32_t touch_angle(GPoint at) {
+  const GPoint centre = dial_centre();
+  return atan2_lookup(at.y - centre.y, at.x - centre.x);
+}
+
+static void touch_handler(const TouchEvent *event, void *context) {
+  const GPoint at = GPoint(event->x, event->y);
+  if (event->non_navigational) {
+    return;
+  }
+  switch (event->type) {
+    case TouchEvent_Touchdown:
+      s_touching = true;
+      s_dragging = false;
+      s_touch_start = at;
+      s_touch_angle = touch_angle(at);
+      break;
+    case TouchEvent_PositionUpdate: {
+      if (!s_touching) {
+        break;
+      }
+      if (!s_dragging && abs(at.x - s_touch_start.x) + abs(at.y - s_touch_start.y)
+          >= DRAG_START_PIXELS) {
+        s_dragging = true;
+        if (s_state == STATE_TIME) {
+          s_ring = 0;
+          s_ring_duration = 0;
+          enter_state(STATE_SELECTING);
+        } else if (s_state == STATE_AVATAR) {
+          back_to_selecting();
+        }
+      }
+      if (s_dragging && s_state == STATE_SELECTING) {
+        // Turn the ring by how far the finger has gone round the centre.
+        const int32_t angle = touch_angle(at);
+        int32_t turn = angle - s_touch_angle;
+        if (turn > TRIG_MAX_ANGLE / 2) {
+          turn -= TRIG_MAX_ANGLE;
+        } else if (turn < -TRIG_MAX_ANGLE / 2) {
+          turn += TRIG_MAX_ANGLE;
+        }
+        s_touch_angle = angle;
+        s_ring += turn;
+        s_ring_duration = 0;
+        s_idle_ms = 0;
+        layer_mark_dirty(s_canvas);
+      }
+      break;
+    }
+    case TouchEvent_Liftoff:
+      if (!s_touching) {
+        break;
+      }
+      s_touching = false;
+      if (s_dragging) {
+        if (s_state == STATE_SELECTING) {
+          // Snap to the nearest plate.
+          const int32_t steps = (s_ring + (s_ring >= 0 ? PLATE_ANGLE / 2 : -PLATE_ANGLE / 2))
+            / PLATE_ANGLE;
+          ring_animate(steps * PLATE_ANGLE, SNAP_MS);
+          s_idle_ms = 0;
+        }
+        break;
+      }
+      if (s_state == STATE_TIME) {
+        open_selector();
+      } else if (s_state == STATE_SELECTING) {
+        const GPoint centre = dial_centre();
+        const GRect bounds = layer_get_unobstructed_bounds(s_canvas);
+        const int16_t short_side = bounds.size.w < bounds.size.h ? bounds.size.w : bounds.size.h;
+        const int16_t inner = (short_side / 2 - 2) * CORE_INNER / 100;
+        const int32_t dx = at.x - centre.x;
+        const int32_t dy = at.y - centre.y;
+        if (dx * dx + dy * dy <= inner * inner) {
+          transform();
+        }
+      } else if (s_state == STATE_AVATAR) {
+        back_to_selecting();
+      }
+      break;
+  }
+}
+#endif
+
+// Touch is read only while the avatars are turned on, as the touch sensor
+// stays on while anything listens to it.
+static void update_touch(void) {
+#if defined(_PBL_API_EXISTS_touch_service_subscribe)
+  const bool wanted = s_settings.animation && touch_service_is_enabled();
+  if (wanted == s_touch_subscribed) {
+    return;
+  }
+  s_touch_subscribed = wanted;
+  if (wanted) {
+    touch_service_subscribe(touch_handler, NULL);
+  } else {
+    touch_service_unsubscribe();
+  }
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// Events
+
+static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
+  if (tick_time->tm_min == 0 && s_state == STATE_TIME && s_settings.animation) {
+    enter_state(STATE_CHASE);
+    PLAY(&SFX_CHASE, SOUND_ALL);
+  }
+  layer_mark_dirty(s_canvas);
+}
+
+// Clay sends dropdown choices as strings.
+static int32_t tuple_int(const Tuple *tuple) {
+  return tuple->type == TUPLE_CSTRING ? atoi(tuple->value->cstring) : tuple->value->int32;
+}
+
+static void inbox_received(DictionaryIterator *iterator, void *context) {
+  bool changed = false;
+  const Tuple *tuple;
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_STYLE))) {
+    s_settings.style = tuple_int(tuple) == STYLE_ANALOG ? STYLE_ANALOG : STYLE_DIGITAL;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_GLOW_COLOR))) {
+    s_settings.glow_argb = GColorFromHEX(tuple_int(tuple)).argb;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_ANIMATION))) {
+    s_settings.animation = tuple_int(tuple) != 0;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_NAME)) && tuple->type == TUPLE_CSTRING) {
+    strncpy(s_settings.name, tuple->value->cstring, sizeof(s_settings.name) - 1);
+    s_settings.name[sizeof(s_settings.name) - 1] = '\0';
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_TIME_FORMAT))) {
+    const int32_t format = tuple_int(tuple);
+    s_settings.time_format = format == TIME_FORMAT_12H || format == TIME_FORMAT_24H
+      ? format : TIME_FORMAT_WATCH;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_SOUND))) {
+    const int32_t sound = tuple_int(tuple);
+    s_settings.sound = sound >= SOUND_OFF && sound <= SOUND_ALL ? sound : SOUND_OFF;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_SOUND_VOLUME))) {
+    const int32_t volume = tuple_int(tuple);
+    s_settings.sound_volume = volume >= 0 && volume <= 100 ? volume : VOLUME_MEDIUM;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_NAME_SIZE))) {
+    s_settings.name_size = tuple_int(tuple) % NAME_SIZE_COUNT;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_NAME_FONT))) {
+    s_settings.name_font = tuple_int(tuple) % FONT_STYLE_COUNT;
+    changed = true;
+  }
+  if (changed) {
+    persist_write_data(PERSIST_KEY_SETTINGS, &s_settings, sizeof(s_settings));
+    apply_palette();
+    load_name_font();
+    update_touch();
+    layer_mark_dirty(s_canvas);
+  }
+}
+
+#if !defined(PBL_PLATFORM_APLITE)
+static void unobstructed_change(AnimationProgress progress, void *context) {
+  layer_mark_dirty(s_canvas);
+}
+#endif
+
+// ---------------------------------------------------------------------------
+// Lifecycle
+
+static void window_load(Window *window) {
+  Layer *root = window_get_root_layer(window);
+  s_canvas = layer_create(layer_get_bounds(root));
+  layer_set_update_proc(s_canvas, canvas_update_proc);
+  layer_add_child(root, s_canvas);
+}
+
+// Powers up whenever the face comes on screen.
+static void window_appear(Window *window) {
+  if (s_state == STATE_TIME && s_settings.animation) {
+    enter_state(STATE_POWER_UP);
+    PLAY(&SFX_POWER, SOUND_ALL);
+  }
+}
+
+static void window_unload(Window *window) {
+  layer_destroy(s_canvas);
+}
+
+static void load_settings(void) {
+  settings_set_defaults(&s_settings);
+  if (persist_exists(PERSIST_KEY_SETTINGS)) {
+    Settings saved;
+    const int size = persist_read_data(PERSIST_KEY_SETTINGS, &saved, sizeof(saved));
+    if (size == settings_size(saved.version)) {
+      memcpy(&s_settings, &saved, size);
+      s_settings.version = SETTINGS_VERSION;
+    }
+  }
+  if (persist_exists(PERSIST_KEY_AVATAR)) {
+    s_avatar = persist_read_int(PERSIST_KEY_AVATAR) % AVATAR_COUNT;
+  }
+  apply_palette();
+}
+
+static void init(void) {
+  load_settings();
+  load_name_font();
+
+  s_window = window_create();
+  window_set_background_color(s_window, GColorBlack);
+  window_set_window_handlers(s_window, (WindowHandlers) {
+    .load = window_load,
+    .appear = window_appear,
+    .unload = window_unload,
+  });
+  window_stack_push(s_window, true);
+
+  tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
+  accel_tap_service_subscribe(tap_handler);
+  update_touch();
+#if !defined(PBL_PLATFORM_APLITE)
+  unobstructed_area_service_subscribe((UnobstructedAreaHandlers) {
+    .change = unobstructed_change,
+  }, NULL);
+#endif
+
+  app_message_register_inbox_received(inbox_received);
+  app_message_open(160, 16);
+}
+
+static void deinit(void) {
+  if (s_frame_timer) {
+    app_timer_cancel(s_frame_timer);
+  }
+  tick_timer_service_unsubscribe();
+  accel_tap_service_unsubscribe();
+#if defined(_PBL_API_EXISTS_touch_service_subscribe)
+  if (s_touch_subscribed) {
+    touch_service_unsubscribe();
+  }
+#endif
+#if defined(PBL_SPEAKER)
+  speaker_stop();
+#endif
+  window_destroy(s_window);
+  styled_font_unload(&s_name_font);
+}
+
+int main(void) {
+  init();
+  app_event_loop();
+  deinit();
+}

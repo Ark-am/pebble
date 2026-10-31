@@ -1,0 +1,21 @@
+Inspired by Ben 10's Omnitrix watch. Due to copyright and trademark infringement risks, we could not directly copy the original designs and animations. 
+
+This watch face has a glowing core and inside sits a ring of twelve armoured plates, showing the time as bright digits or as hands, while the plate for the current hour lights up.
+
+Each plate holds one of twelve original avatars. Flick your wrist, or tap the screen on touch watches, and the plate ring spins up like a selector dial. Flick again, or drag the ring round, to scroll through them, then tap the core or let it charge up to transform: the plates flash, sparks and shock rings fly out, and your avatar springs to life, blinking, flapping and scuttling, before the time returns. The face powers up plate by plate when it appears, and a light runs round the ring on the hour. It stays still the rest of the time, so it's easy on the battery.
+
+Features:
+- Digital or analog time in the glowing core, with the day and date
+- 12-hour or 24-hour digital time, with AM or PM beside the minutes in 12-hour time
+- Your own name in the core, with a choice of three sizes and five font styles
+- The current hour's plate glows, with a dimmer plate for the minutes, so the ring doubles as a clock track
+- Twelve original animated avatars to scroll through and transform into, by wrist flick or by touch
+- A transformation animation with an iris, a spinning dial and shock rings, which can be turned off
+- Sound effects on the Pebble Time 2 and Pebble 2 Duo: a ratcheting dial, a note for every plate, and a call for each avatar
+- Eight glow colours on colour watches: alien green, lime, cyan, blue, purple, red, orange and yellow
+- Works on every Pebble, round and rectangular, colour and black and white
+
+Settings are available via the Pebble phone app.
+
+Created by Ark-am LLC. Discover our work and custom software development services:
+https://ark-am.com/
