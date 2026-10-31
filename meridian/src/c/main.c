@@ -74,7 +74,7 @@ enum { POSITION_TOP, POSITION_RIGHT, POSITION_BOTTOM, POSITION_LEFT, POSITION_CO
 enum { NAME_SMALL, NAME_LARGE };
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 6
+#define SETTINGS_VERSION 7
 typedef struct {
   uint8_t version;
   bool light_theme;
@@ -98,6 +98,9 @@ typedef struct {
   // Added in version 6: light glints along the edge of the screen as the
   // watch moves (see "Rim glint").
   bool rim_glint;
+  // Added in version 7: whether the small lines between the hour ticks show.
+  // It sits where version 6 had a padding byte (see settings_size()).
+  bool minute_ticks;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -109,6 +112,9 @@ static int settings_size(uint8_t version) {
     case 3: return offsetof(Settings, dial_name);
     case 4: return offsetof(Settings, shine);
     case 5: return offsetof(Settings, rim_glint);
+    // Version 6 ended in a byte of padding after rim_glint, to keep the size
+    // a multiple of rotation's 2 bytes.
+    case 6: return (offsetof(Settings, minute_ticks) + 1) & ~1;
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -284,6 +290,7 @@ static void settings_set_defaults(Settings *settings) {
     .shine = false,
     .name_size = NAME_SMALL,
     .rim_glint = false,
+    .minute_ticks = true,
   };
 }
 
@@ -779,6 +786,9 @@ static void draw_facets(GContext *ctx, GPoint centre, int32_t angle, int16_t len
 static void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
   for (int i = 0; i < 60; i++) {
     const bool hour = i % 5 == 0;
+    if (!hour && !s_settings.minute_ticks) {
+      continue;
+    }
     const int32_t angle = dial_angle(TRIG_MAX_ANGLE * i / 60);
     const int32_t outer = edge_distance(bounds, angle);
     const int32_t length = hour ? HOUR_TICK_LENGTH : MINUTE_TICK_LENGTH;
@@ -1416,6 +1426,10 @@ static bool read_settings(DictionaryIterator *iterator) {
     s_settings.hour_numbers = tuple_int(tuple) != 0;
     changed = true;
   }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_MINUTE_TICKS))) {
+    s_settings.minute_ticks = tuple_int(tuple) != 0;
+    changed = true;
+  }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_SECOND_HAND))) {
     s_settings.second_hand = tuple_int(tuple) != 0;
     changed = true;
@@ -1515,6 +1529,10 @@ static void load_saved_state(void) {
     const int size = persist_read_data(PERSIST_KEY_SETTINGS, &saved, sizeof(saved));
     if (size == settings_size(saved.version)) {
       memcpy(&s_settings, &saved, size);
+      if (saved.version < 7) {
+        // Version 6 saved padding where this now sits.
+        s_settings.minute_ticks = true;
+      }
       s_settings.version = SETTINGS_VERSION;
     }
   }

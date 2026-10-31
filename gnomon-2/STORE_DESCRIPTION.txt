@@ -7,6 +7,7 @@ Features:
  - A custom dial name
  - Font choices for hour numbers and information/widgets
  - An optional second hand with colour choices
+ - Show or hide the minute lines between the hour ticks
  - Optional phone disconnect vibrations respect Quiet Time.
 
 Settings are available via the Pebble phone app. Weather supports Celsius and Fahrenheit and needs your paired phone's location and internet access, with no weather account or API key required. Health data is unavailable on the original Pebble, and heart rate requires a supported sensor.

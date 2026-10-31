@@ -9,6 +9,7 @@ Features:
 - Weather artwork changes with the conditions and includes sun and moon variations for day and night.
 - The current hour's number in a colour of your choice (colour watches), with eight ways to show the minutes
 - An editable name under the information, PEBBLE by default
+- Show or hide the minute lines between the hour ticks
 - Handwritten Sketchy font by default, or Pebble, Serif, Rounded and Mono styles
 
 Phone connection and Quiet Time indicators keep you informed with optional disconnect vibrations that respect Quiet Time. Settings are available in the Pebble phone app. Weather supports Celsius and Fahrenheit and needs your paired phone's location and internet access, with no weather account or API key required. Steps require a watch with health support, and heart rate requires a supported sensor.

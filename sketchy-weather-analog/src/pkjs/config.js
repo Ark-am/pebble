@@ -124,6 +124,13 @@ module.exports = [
         defaultValue: false
       },
       {
+        type: 'toggle',
+        messageKey: 'MINUTE_TICKS',
+        label: 'Show minute lines',
+        description: 'The small lines between the hour marks.',
+        defaultValue: true
+      },
+      {
         type: 'color',
         messageKey: 'HOUR_COLOR',
         label: 'Current hour colour',

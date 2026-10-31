@@ -93,7 +93,7 @@
 #define AVOID_GAP 2
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 9
+#define SETTINGS_VERSION 10
 typedef struct {
   uint8_t version;
   bool dark;
@@ -119,6 +119,8 @@ typedef struct {
   uint8_t info_font;
   // Added in version 9: the HandStyle.
   uint8_t hand_style;
+  // Added in version 10: whether the small lines between the hour ticks show.
+  bool minute_ticks;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -132,6 +134,7 @@ static int settings_size(uint8_t version) {
     case 6: return offsetof(Settings, second_hand_argb);
     case 7: return offsetof(Settings, number_font);
     case 8: return offsetof(Settings, hand_style);
+    case 9: return offsetof(Settings, minute_ticks);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -344,6 +347,7 @@ static void settings_set_defaults(Settings *settings) {
     .show_battery = true,
     .avoid_hands = false,
     .second_hand_argb = GColorRedARGB8,
+    .minute_ticks = true,
   };
 }
 
@@ -635,6 +639,9 @@ static int16_t text_width(const char *text, GFont font) {
 static NOINLINE void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
   for (int i = 0; i < 60; i++) {
     const bool hour = i % 5 == 0;
+    if (!hour && !s_settings.minute_ticks) {
+      continue;
+    }
     const int32_t angle = TRIG_MAX_ANGLE * i / 60;
     const int32_t outer = edge_distance(bounds, angle);
     const int32_t length = hour ? HOUR_TICK_LENGTH : MINUTE_TICK_LENGTH;
@@ -1658,6 +1665,10 @@ static bool read_settings(DictionaryIterator *iterator) {
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_DISCONNECT_VIBE))) {
     s_settings.disconnect_vibe = tuple_int(tuple) != 0;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_MINUTE_TICKS))) {
+    s_settings.minute_ticks = tuple_int(tuple) != 0;
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_SECOND_HAND))) {

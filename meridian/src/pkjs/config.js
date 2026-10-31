@@ -83,6 +83,13 @@ module.exports = [
       },
       {
         type: 'toggle',
+        messageKey: 'MINUTE_TICKS',
+        label: 'Show minute lines',
+        description: 'The small lines between the hour marks.',
+        defaultValue: true
+      },
+      {
+        type: 'toggle',
         messageKey: 'SECOND_HAND',
         label: 'Show second hand',
         description: 'Updates every second, which uses more battery.',

@@ -21,7 +21,8 @@ o'clock, the name moves down into that space. **Name size** shows it small,
 like the information's labels, or large, like its values.
 
 On rectangular watches the minute track follows the edge of the screen; on
-round watches it follows the circle. When a Timeline Quick View covers part of
+round watches it follows the circle. Turn off **Show minute lines** to leave
+only the hour marks. When a Timeline Quick View covers part of
 the screen, the dial shrinks to fit the remaining area.
 
 The whole face can be turned to suit how the watch is worn: set **Rotate the

@@ -87,6 +87,8 @@ battery, choose it as one of the centre screen items.
 - **Number font** and **Information font:** see Font styles below
 - **Show hour numbers:** off by default; when on, the other hours' numbers
   sit just inside the hour ticks too
+- **Show minute lines:** on by default; turn it off to leave only the hour
+  ticks around the edge
 - **Current hour colour:** the colour of the current hour's number (colour
   watches only; red by default)
 - **Temperature:** Celsius or Fahrenheit

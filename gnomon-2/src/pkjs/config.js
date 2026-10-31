@@ -42,6 +42,13 @@ module.exports = [
         ]
       },
       {
+        type: 'toggle',
+        messageKey: 'MINUTE_TICKS',
+        label: 'Show minute lines',
+        description: 'The small lines between the hour marks.',
+        defaultValue: true
+      },
+      {
         type: 'select',
         messageKey: 'INFO_FONT',
         label: 'Information/widget font',

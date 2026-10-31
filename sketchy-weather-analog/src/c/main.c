@@ -121,7 +121,7 @@ typedef enum {
 #define BOTTOM_NAME ITEM_COUNT
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 10
+#define SETTINGS_VERSION 11
 typedef struct {
   uint8_t version;
   bool dark_theme;
@@ -155,6 +155,8 @@ typedef struct {
   // Added in version 10: what the line under each screen's values shows, an
   // Item or BOTTOM_NAME.
   uint8_t screen_bottom[SCREEN_COUNT];
+  // Added in version 11: whether the small lines between the hour ticks show.
+  bool minute_ticks;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -170,6 +172,7 @@ static int settings_size(uint8_t version) {
     case 7: return offsetof(Settings, hour_argb);
     case 8: return offsetof(Settings, minute_style);
     case 9: return offsetof(Settings, screen_bottom);
+    case 10: return offsetof(Settings, minute_ticks);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -271,6 +274,7 @@ static void settings_set_defaults(Settings *settings) {
     },
     .rotate_screens = false,
     .screen_bottom = { BOTTOM_NAME, BOTTOM_NAME, BOTTOM_NAME, BOTTOM_NAME },
+    .minute_ticks = true,
   };
 }
 
@@ -747,7 +751,7 @@ static NOINLINE void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
       graphics_context_set_stroke_width(ctx, 2);
       graphics_draw_line(ctx, a, b);
       sketch_line(ctx, a, b, s_palette.ink);
-    } else {
+    } else if (s_settings.minute_ticks) {
       graphics_context_set_stroke_color(ctx, s_palette.faint);
       graphics_context_set_stroke_width(ctx, 1);
       graphics_draw_line(ctx, ray_point(centre, angle, outer - MINUTE_TICK_LENGTH),
@@ -1619,6 +1623,10 @@ static bool read_settings(DictionaryIterator *iterator) {
 
   if ((tuple = dict_find(iterator, MESSAGE_KEY_THEME))) {
     s_settings.dark_theme = tuple_int(tuple) == 1;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_MINUTE_TICKS))) {
+    s_settings.minute_ticks = tuple_int(tuple) != 0;
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_HOUR_NUMBERS))) {
