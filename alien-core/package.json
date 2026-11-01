@@ -24,7 +24,9 @@
       "watchface": true
     },
     "capabilities": [
-      "configurable"
+      "configurable",
+      "location",
+      "health"
     ],
     "messageKeys": [
       "STYLE",
@@ -35,7 +37,17 @@
       "NAME_FONT",
       "TIME_FORMAT",
       "SOUND",
-      "SOUND_VOLUME"
+      "SOUND_VOLUME",
+      "LONG_PRESS",
+      "SELECT_TIME",
+      "KEEP_LIGHT",
+      "TEMPERATURE",
+      "CONDITION",
+      "REQUEST_WEATHER",
+      "TOP_SLOT",
+      "BOTTOM_SLOT",
+      "TEMPERATURE_UNIT",
+      "DAYTIME"
     ],
     "resources": {
       "media": [
@@ -49,7 +61,7 @@
           "type": "font",
           "name": "FONT_SERIF_NAME_SMALL_LARGE_13",
           "file": "fonts/IBMPlexSerif-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "emery",
             "gabbro"
@@ -59,7 +71,7 @@
           "type": "font",
           "name": "FONT_ROUNDED_NAME_SMALL_LARGE_12",
           "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "emery",
             "gabbro"
@@ -69,7 +81,7 @@
           "type": "font",
           "name": "FONT_MONO_NAME_SMALL_LARGE_13",
           "file": "fonts/DMMono-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "emery",
             "gabbro"
@@ -79,7 +91,7 @@
           "type": "font",
           "name": "FONT_SKETCH_NAME_SMALL_LARGE_15",
           "file": "fonts/PatrickHand-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "emery",
             "gabbro"
@@ -89,7 +101,7 @@
           "type": "font",
           "name": "FONT_SERIF_NAME_SMALL_SMALL_10",
           "file": "fonts/IBMPlexSerif-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "aplite",
             "basalt",
@@ -102,7 +114,7 @@
           "type": "font",
           "name": "FONT_ROUNDED_NAME_SMALL_SMALL_9",
           "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "aplite",
             "basalt",
@@ -115,7 +127,7 @@
           "type": "font",
           "name": "FONT_MONO_NAME_SMALL_SMALL_10",
           "file": "fonts/DMMono-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "aplite",
             "basalt",
@@ -128,7 +140,7 @@
           "type": "font",
           "name": "FONT_SKETCH_NAME_SMALL_SMALL_11",
           "file": "fonts/PatrickHand-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "aplite",
             "basalt",
@@ -141,7 +153,7 @@
           "type": "font",
           "name": "FONT_SERIF_NAME_MEDIUM_LARGE_15",
           "file": "fonts/IBMPlexSerif-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "emery",
             "gabbro"
@@ -151,7 +163,7 @@
           "type": "font",
           "name": "FONT_ROUNDED_NAME_MEDIUM_LARGE_14",
           "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "emery",
             "gabbro"
@@ -161,7 +173,7 @@
           "type": "font",
           "name": "FONT_MONO_NAME_MEDIUM_LARGE_15",
           "file": "fonts/DMMono-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "emery",
             "gabbro"
@@ -171,7 +183,7 @@
           "type": "font",
           "name": "FONT_SKETCH_NAME_MEDIUM_LARGE_20",
           "file": "fonts/PatrickHand-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "emery",
             "gabbro"
@@ -181,7 +193,7 @@
           "type": "font",
           "name": "FONT_SERIF_NAME_MEDIUM_SMALL_13",
           "file": "fonts/IBMPlexSerif-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "aplite",
             "basalt",
@@ -194,7 +206,7 @@
           "type": "font",
           "name": "FONT_ROUNDED_NAME_MEDIUM_SMALL_12",
           "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "aplite",
             "basalt",
@@ -207,7 +219,7 @@
           "type": "font",
           "name": "FONT_MONO_NAME_MEDIUM_SMALL_13",
           "file": "fonts/DMMono-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "aplite",
             "basalt",
@@ -220,7 +232,7 @@
           "type": "font",
           "name": "FONT_SKETCH_NAME_MEDIUM_SMALL_15",
           "file": "fonts/PatrickHand-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "aplite",
             "basalt",
@@ -233,7 +245,7 @@
           "type": "font",
           "name": "FONT_SERIF_NAME_LARGE_LARGE_17",
           "file": "fonts/IBMPlexSerif-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "emery",
             "gabbro"
@@ -243,7 +255,7 @@
           "type": "font",
           "name": "FONT_ROUNDED_NAME_LARGE_LARGE_16",
           "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "emery",
             "gabbro"
@@ -253,7 +265,7 @@
           "type": "font",
           "name": "FONT_MONO_NAME_LARGE_LARGE_17",
           "file": "fonts/DMMono-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "emery",
             "gabbro"
@@ -263,7 +275,7 @@
           "type": "font",
           "name": "FONT_SKETCH_NAME_LARGE_LARGE_23",
           "file": "fonts/PatrickHand-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "emery",
             "gabbro"
@@ -273,7 +285,7 @@
           "type": "font",
           "name": "FONT_SERIF_NAME_LARGE_SMALL_15",
           "file": "fonts/IBMPlexSerif-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "aplite",
             "basalt",
@@ -286,7 +298,7 @@
           "type": "font",
           "name": "FONT_ROUNDED_NAME_LARGE_SMALL_14",
           "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "aplite",
             "basalt",
@@ -299,7 +311,7 @@
           "type": "font",
           "name": "FONT_MONO_NAME_LARGE_SMALL_15",
           "file": "fonts/DMMono-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "aplite",
             "basalt",
@@ -312,7 +324,7 @@
           "type": "font",
           "name": "FONT_SKETCH_NAME_LARGE_SMALL_20",
           "file": "fonts/PatrickHand-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "characterRegex": "[ -~\u00b0]",
           "targetPlatforms": [
             "aplite",
             "basalt",

@@ -11,11 +11,11 @@
 // plate for the current hour glows, with the current minute's five-minute
 // plate glowing more dimly.
 //
-// Each plate also holds one of twelve avatars. A flick of the wrist, or a tap
-// on touch watches, opens the selector: the ring spins and the avatar of the
-// plate at the top shows in the core. Further flicks, or dragging the ring
-// round, step through them. Tapping the core, or leaving it for a few
-// seconds, transforms the face into that avatar: the core flares and opens
+// Each plate also holds one of twelve avatars. A long press on touch watches,
+// or a flick of the wrist on the others, opens the selector: the ring spins
+// and the avatar of the plate at the top shows in the core. Swipes or
+// dragging the ring round, or further flicks without a touchscreen, step
+// through them. Tapping the core, or leaving it for a few seconds, transforms the face into that avatar: the core flares and opens
 // like an iris, the plates flash, and sparks and shock rings fly out. The
 // avatars are alive while they show: they blink, sway, flap and scuttle. After
 // a few seconds the time comes back.
@@ -30,9 +30,15 @@
 
 #define PERSIST_KEY_SETTINGS 1
 #define PERSIST_KEY_AVATAR 2
+#define PERSIST_KEY_TEMPERATURE 3
+#define PERSIST_KEY_CONDITION 4
+#define PERSIST_KEY_DAYTIME 5
+
+#define WEATHER_REFRESH_MINUTES 30
+#define NO_TEMPERATURE INT32_MIN
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 4
+#define SETTINGS_VERSION 8
 
 // Sizes for the name in the core. Values match the NAME_SIZE options in
 // src/pkjs/config.js.
@@ -57,6 +63,19 @@ static const NameSize NAME_SIZES[NAME_SIZE_COUNT] = {
 };
 #endif
 
+// What can show above and below the time. Values match the SLOT_OPTIONS in
+// src/pkjs/config.js.
+typedef enum {
+  SLOT_NAME,
+  SLOT_DATE,
+  SLOT_WEATHER,
+  SLOT_STEPS,
+  SLOT_HEART_RATE,
+  SLOT_BATTERY,
+  SLOT_NOTHING,
+  SLOT_COUNT,
+} Slot;
+
 // Values match the TIME_FORMAT options in src/pkjs/config.js.
 enum { TIME_FORMAT_WATCH, TIME_FORMAT_12H, TIME_FORMAT_24H };
 
@@ -65,6 +84,9 @@ enum { TIME_FORMAT_WATCH, TIME_FORMAT_12H, TIME_FORMAT_24H };
 enum { SOUND_OFF, SOUND_AVATARS, SOUND_ALL };
 
 #define VOLUME_MEDIUM 60
+
+#define DEFAULT_LONG_PRESS_TENTHS 10
+#define DEFAULT_SELECT_SECONDS 3
 
 // Values match the STYLE options in src/pkjs/config.js.
 typedef enum {
@@ -89,6 +111,18 @@ typedef struct {
   // 0 to 100.
   uint8_t sound;
   uint8_t sound_volume;
+  // Added in version 5: how long a press on the screen opens the selector,
+  // in tenths of a second.
+  uint8_t long_press_tenths;
+  // Added in version 6: how long the selector waits before transforming, in
+  // seconds, counted from the last touch or flick.
+  uint8_t select_seconds;
+  // Added in version 7: whether the backlight stays on from the selector
+  // opening until the time comes back.
+  bool keep_light;
+  // Added in version 8: what shows above and below the time (see Slot).
+  uint8_t top_slot;
+  uint8_t bottom_slot;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -98,6 +132,10 @@ static int settings_size(uint8_t version) {
     case 1: return offsetof(Settings, name);
     case 2: return offsetof(Settings, time_format);
     case 3: return offsetof(Settings, sound);
+    case 4: return offsetof(Settings, long_press_tenths);
+    case 5: return offsetof(Settings, select_seconds);
+    case 6: return offsetof(Settings, keep_light);
+    case 7: return offsetof(Settings, top_slot);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -120,6 +158,10 @@ static Palette s_palette;
 static Window *s_window;
 static Layer *s_canvas;
 static StyledFont s_name_font;
+
+static int32_t s_temperature = NO_TEMPERATURE;
+static char s_condition[8];
+static bool s_daytime = true;
 
 #define PLATE_COUNT 12
 #define PLATE_ANGLE (TRIG_MAX_ANGLE / PLATE_COUNT)
@@ -158,7 +200,6 @@ typedef enum {
 #define OPENING_MS 900
 #define STEP_MS 250
 #define SNAP_MS 200
-#define SELECT_IDLE_MS 3000
 #define TRANSFORMING_MS 1000
 #define AVATAR_MS 4000
 #define CLOSING_MS 700
@@ -171,7 +212,7 @@ static int32_t s_last_frame;      // The clock at the last frame.
 static int32_t s_life_ms;         // Keeps the avatars moving between states.
 static int32_t s_pop_ms = POP_MS; // Time since a new avatar came up.
 static int s_shown = -1;          // The avatar that last came up.
-static int s_pips;                // Seconds of the selector's charge sounded.
+static int s_pips;                // Pips of the selector's charge sounded.
 static int s_avatar;              // The chosen avatar, kept between uses.
 
 // The plate ring's turn, clockwise, and its animation from one turn to
@@ -197,6 +238,11 @@ static void settings_set_defaults(Settings *settings) {
     .time_format = TIME_FORMAT_WATCH,
     .sound = SOUND_AVATARS,
     .sound_volume = VOLUME_MEDIUM,
+    .long_press_tenths = DEFAULT_LONG_PRESS_TENTHS,
+    .select_seconds = DEFAULT_SELECT_SECONDS,
+    .keep_light = true,
+    .top_slot = SLOT_NAME,
+    .bottom_slot = SLOT_DATE,
   };
 }
 
@@ -489,29 +535,281 @@ static void format_date(const struct tm *t, char *buffer, size_t size) {
   }
 }
 
-// The name, in the dark centre above the time, cut short if it is too wide
-// for the circle there.
-static void draw_name(GContext *ctx, GPoint centre, int16_t inner) {
-  if (!s_settings.name[0]) {
-    return;
-  }
-  const int16_t height = NAME_SIZES[s_settings.name_size].height;
-  const int16_t middle = inner * 62 / 100;
-  const int16_t top = middle + height / 2;
-  const int16_t half = top < inner ? isqrt(inner * inner - top * top) : inner / 2;
-  graphics_context_set_text_color(ctx, s_palette.glow);
-  graphics_draw_text(ctx, s_settings.name, s_name_font.font,
-                     GRect(centre.x - half, centre.y - top - s_name_font.pad, half * 2,
-                           height + s_name_font.pad * 2),
-                     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
-}
-
 // Fonts to suit the size of the core: larger cores, as on the Pebble Round
 // 2, take larger digits.
 static GFont info_font(int16_t inner) {
   return fonts_get_system_font(inner >= 80 ? FONT_KEY_GOTHIC_24_BOLD
                                : inner >= 58 ? FONT_KEY_GOTHIC_18_BOLD
                                : FONT_KEY_GOTHIC_14_BOLD);
+}
+
+// The visible height of the information's text and the blank space its font
+// leaves above it.
+static void info_metrics(int16_t inner, int16_t *height, int16_t *pad) {
+  *height = inner >= 80 ? 17 : inner >= 58 ? 13 : 10;
+  *pad = inner >= 80 ? 7 : inner >= 58 ? 5 : 4;
+}
+
+// The value a slot shows; its icon says what the value is.
+static void slot_text(Slot slot, const struct tm *t, char *out, size_t size) {
+  out[0] = '\0';
+  switch (slot) {
+    case SLOT_NAME:
+      strncpy(out, s_settings.name, size - 1);
+      out[size - 1] = '\0';
+      break;
+    case SLOT_DATE:
+      format_date(t, out, size);
+      break;
+    case SLOT_WEATHER:
+      if (s_temperature == NO_TEMPERATURE) {
+        snprintf(out, size, "--\xc2\xb0");
+      } else {
+        snprintf(out, size, "%d\xc2\xb0", (int)s_temperature);
+      }
+      break;
+    case SLOT_STEPS: {
+#if defined(PBL_HEALTH)
+      const int steps = health_service_sum_today(HealthMetricStepCount);
+      if (steps >= 1000) {
+        snprintf(out, size, "%d,%03d", steps / 1000, steps % 1000);
+      } else {
+        snprintf(out, size, "%d", steps);
+      }
+#else
+      snprintf(out, size, "--");
+#endif
+      break;
+    }
+    case SLOT_HEART_RATE: {
+#if defined(PBL_HEALTH)
+      const HealthValue bpm = health_service_peek_current_value(HealthMetricHeartRateBPM);
+#else
+      const int bpm = 0;
+#endif
+      if (bpm > 0) {
+        snprintf(out, size, "%d", (int)bpm);
+      } else {
+        snprintf(out, size, "--");
+      }
+      break;
+    }
+    default:
+      // The battery's icon says it all.
+      break;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Icons
+//
+// Small icons beside the information, drawn in a square of the given size at
+// a point, in percentages of that size so they scale with the text.
+
+typedef enum {
+  ICON_NONE,
+  ICON_STEPS,
+  ICON_HEART,
+  ICON_BATTERY,
+  ICON_SUN,
+  ICON_MOON,
+  ICON_CLOUD,
+  ICON_RAIN,
+  ICON_SNOW,
+  ICON_STORM,
+  ICON_FOG,
+} Icon;
+
+#define PC(origin, percent) ((origin) + size * (percent) / 100)
+
+static void icon_dot(GContext *ctx, GPoint at, int16_t size, int x, int y, int radius) {
+  const int16_t r = size * radius / 100;
+  graphics_fill_circle(ctx, GPoint(PC(at.x, x), PC(at.y, y)), r > 0 ? r : 1);
+}
+
+static void icon_line(GContext *ctx, GPoint at, int16_t size, int x0, int y0, int x1, int y1) {
+  graphics_draw_line(ctx, GPoint(PC(at.x, x0), PC(at.y, y0)), GPoint(PC(at.x, x1), PC(at.y, y1)));
+}
+
+// A cloud across the top of the square, with room for weather below it.
+static void icon_cloud(GContext *ctx, GPoint at, int16_t size) {
+  icon_dot(ctx, at, size, 28, 42, 22);
+  icon_dot(ctx, at, size, 58, 30, 28);
+  icon_dot(ctx, at, size, 78, 46, 18);
+  graphics_fill_rect(ctx, GRect(PC(at.x, 12), PC(at.y, 42), size * 76 / 100, size * 22 / 100), 0,
+                     GCornerNone);
+}
+
+static void icon_heart(GContext *ctx, GPoint at, int16_t size) {
+  icon_dot(ctx, at, size, 29, 32, 26);
+  icon_dot(ctx, at, size, 71, 32, 26);
+  GPoint points[] = {
+    GPoint(PC(at.x, 3), PC(at.y, 42)), GPoint(PC(at.x, 97), PC(at.y, 42)),
+    GPoint(PC(at.x, 50), PC(at.y, 98)),
+  };
+  GPathInfo info = { .num_points = ARRAY_LENGTH(points), .points = points };
+  GPath *path = gpath_create(&info);
+  gpath_draw_filled(ctx, path);
+  gpath_destroy(path);
+}
+
+// Two footprints, one a step ahead of the other.
+static void icon_steps(GContext *ctx, GPoint at, int16_t size) {
+  icon_dot(ctx, at, size, 28, 58, 19);
+  icon_dot(ctx, at, size, 28, 88, 11);
+  icon_dot(ctx, at, size, 72, 26, 19);
+  icon_dot(ctx, at, size, 72, 56, 11);
+}
+
+// A battery on its side, wider than its square, filled to the charge.
+static void icon_battery(GContext *ctx, GPoint at, int16_t size) {
+  const int16_t width = size * 3 / 2 - 2;
+  const int16_t height = size * 7 / 10;
+  const GRect body = GRect(at.x, at.y + (size - height) / 2, width, height);
+  const int percent = battery_state_service_peek().charge_percent;
+  graphics_draw_rect(ctx, body);
+  graphics_fill_rect(ctx, GRect(body.origin.x + 2, body.origin.y + 2,
+                                (width - 4) * percent / 100, height - 4), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(body.origin.x + width, body.origin.y + height / 4, 2, height / 2),
+                     0, GCornerNone);
+}
+
+static int16_t icon_width(Icon icon, int16_t size) {
+  return icon == ICON_NONE ? 0 : icon == ICON_BATTERY ? size * 3 / 2 : size;
+}
+
+static void draw_icon(GContext *ctx, Icon icon, GPoint at, int16_t size, GColor colour) {
+  graphics_context_set_fill_color(ctx, colour);
+  graphics_context_set_stroke_color(ctx, colour);
+  graphics_context_set_stroke_width(ctx, 1);
+  switch (icon) {
+    case ICON_STEPS: icon_steps(ctx, at, size); break;
+    case ICON_HEART: icon_heart(ctx, at, size); break;
+    case ICON_BATTERY: icon_battery(ctx, at, size); break;
+    case ICON_SUN:
+      icon_dot(ctx, at, size, 50, 50, 25);
+      for (int i = 0; i < 8; i++) {
+        const int32_t angle = TRIG_MAX_ANGLE * i / 8;
+        const GPoint middle = GPoint(PC(at.x, 50), PC(at.y, 50));
+        graphics_draw_line(ctx, ray_point(middle, angle, size * 36 / 100),
+                           ray_point(middle, angle, size * 49 / 100));
+      }
+      break;
+    case ICON_MOON:
+      icon_dot(ctx, at, size, 50, 50, 44);
+      graphics_context_set_fill_color(ctx, s_palette.background);
+      icon_dot(ctx, at, size, 70, 36, 38);
+      break;
+    case ICON_CLOUD:
+      icon_cloud(ctx, GPoint(at.x, at.y + size / 8), size);
+      break;
+    case ICON_RAIN:
+      icon_cloud(ctx, at, size);
+      icon_line(ctx, at, size, 28, 74, 20, 96);
+      icon_line(ctx, at, size, 54, 74, 46, 96);
+      icon_line(ctx, at, size, 80, 74, 72, 96);
+      break;
+    case ICON_SNOW:
+      icon_cloud(ctx, at, size);
+      icon_dot(ctx, at, size, 24, 84, 7);
+      icon_dot(ctx, at, size, 50, 92, 7);
+      icon_dot(ctx, at, size, 76, 84, 7);
+      break;
+    case ICON_STORM:
+      icon_cloud(ctx, at, size);
+      icon_line(ctx, at, size, 58, 66, 42, 84);
+      icon_line(ctx, at, size, 42, 84, 58, 84);
+      icon_line(ctx, at, size, 58, 84, 44, 100);
+      break;
+    case ICON_FOG:
+      icon_cloud(ctx, at, size);
+      icon_line(ctx, at, size, 8, 78, 92, 78);
+      icon_line(ctx, at, size, 20, 94, 80, 94);
+      break;
+    default:
+      break;
+  }
+}
+
+#undef PC
+
+// The icon for the current weather. It is the moon on a clear night.
+static Icon weather_icon(void) {
+  static const struct { const char *word; Icon icon; } ICONS[] = {
+    { "FAIR", ICON_CLOUD }, { "CLOUDY", ICON_CLOUD }, { "FOG", ICON_FOG },
+    { "DRIZZLE", ICON_RAIN }, { "RAIN", ICON_RAIN }, { "SHOWERS", ICON_RAIN },
+    { "SNOW", ICON_SNOW }, { "STORM", ICON_STORM },
+  };
+  if (strcmp(s_condition, "CLEAR") == 0) {
+    return s_daytime ? ICON_SUN : ICON_MOON;
+  }
+  for (size_t i = 0; i < ARRAY_LENGTH(ICONS); i++) {
+    if (strcmp(s_condition, ICONS[i].word) == 0) {
+      return ICONS[i].icon;
+    }
+  }
+  return ICON_CLOUD;
+}
+
+static Icon slot_icon(Slot slot) {
+  switch (slot) {
+    case SLOT_WEATHER: return weather_icon();
+    case SLOT_STEPS: return ICON_STEPS;
+    case SLOT_HEART_RATE: return ICON_HEART;
+    case SLOT_BATTERY: return ICON_BATTERY;
+    default: return ICON_NONE;
+  }
+}
+
+// A slot centred on a point: its icon, if it has one, then its value, if it
+// has one, cut short if it is too wide for the room. Height and pad describe the text's
+// font. The text lives in a static buffer to spare the stack.
+static void draw_slot(GContext *ctx, Slot slot, const struct tm *t, GFont font, GPoint middle,
+                      int16_t room, int16_t height, int16_t pad, GColor colour) {
+  static char text[24];
+  slot_text(slot, t, text, sizeof(text));
+  const Icon icon = slot_icon(slot);
+  if (!text[0] && icon == ICON_NONE) {
+    return;
+  }
+  const int16_t size = height + 6 > 14 ? height + 6 : 14;
+  const int16_t gap = icon != ICON_NONE && text[0] ? 3 : 0;
+  const int16_t icon_w = icon_width(icon, size);
+  const int16_t text_w = graphics_text_layout_get_content_size(
+    text, font, GRect(0, 0, 400, 100), GTextOverflowModeFill, GTextAlignmentLeft).w;
+  const int16_t room_w = room - icon_w - gap;
+  const int16_t shown_w = text_w < room_w ? text_w : room_w;
+  const int16_t left = middle.x - (icon_w + gap + shown_w) / 2;
+  if (icon != ICON_NONE) {
+    draw_icon(ctx, icon, GPoint(left, middle.y - size / 2), size, colour);
+  }
+  graphics_context_set_text_color(ctx, colour);
+  graphics_draw_text(ctx, text, font,
+                     GRect(left + icon_w + gap, middle.y - height / 2 - pad, shown_w + 2,
+                           height + pad * 2),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+}
+
+// What shows in the dark centre above the time, in the name's size and font,
+// cut short if it is too wide for the circle there.
+static void draw_top_slot(GContext *ctx, GPoint centre, int16_t inner, const struct tm *t) {
+  const int16_t height = NAME_SIZES[s_settings.name_size].height;
+  const int16_t middle = inner * 62 / 100;
+  const int16_t top = middle + height / 2;
+  const int16_t half = top < inner ? isqrt(inner * inner - top * top) : inner / 2;
+  draw_slot(ctx, s_settings.top_slot, t, s_name_font.font,
+            GPoint(centre.x, centre.y - middle), half * 2, height, s_name_font.pad,
+            s_palette.glow);
+}
+
+// What shows below the time, centred on a height.
+static void draw_bottom_slot(GContext *ctx, GPoint centre, int16_t inner, int16_t below,
+                             const struct tm *t, GColor colour) {
+  int16_t height;
+  int16_t pad;
+  info_metrics(inner, &height, &pad);
+  draw_slot(ctx, s_settings.bottom_slot, t, info_font(inner), GPoint(centre.x, centre.y + below),
+            inner * 3 / 2, height, pad, colour);
 }
 
 static int16_t text_width(const char *text, GFont font, int16_t room) {
@@ -558,8 +856,6 @@ static void draw_digital(GContext *ctx, GPoint centre, int16_t inner, const stru
     const int hour = t->tm_hour % 12;
     snprintf(time_text, sizeof(time_text), "%d:%02d", hour ? hour : 12, t->tm_min);
   }
-  static char date[8];
-  format_date(t, date, sizeof(date));
 
   GFont meridiem_font = fonts_get_system_font(inner >= 80 ? FONT_KEY_GOTHIC_18_BOLD
                                               : inner >= 58 ? FONT_KEY_GOTHIC_14_BOLD
@@ -580,18 +876,13 @@ static void draw_digital(GContext *ctx, GPoint centre, int16_t inner, const stru
                       meridiem_w + 4);
   }
   draw_text_centred(ctx, time_text, time_font, GPoint(time_x, time_y), inner * 2);
-  draw_text_centred(ctx, date, info_font(inner), GPoint(centre.x, centre.y + inner * 45 / 100),
-                    inner * 2);
+  draw_bottom_slot(ctx, centre, inner, inner * 45 / 100, t, s_palette.glow);
 }
 
 // Hands in the dark centre, with the day and date below the middle.
 static void draw_analog(GContext *ctx, GPoint centre, int16_t inner, const struct tm *t) {
-  static char date[8];
-  format_date(t, date, sizeof(date));
   const bool large = inner >= 58;
-  graphics_context_set_text_color(ctx, s_palette.dim);
-  draw_text_centred(ctx, date, info_font(inner), GPoint(centre.x, centre.y + inner * 50 / 100),
-                    inner * 2);
+  draw_bottom_slot(ctx, centre, inner, inner * 50 / 100, t, s_palette.dim);
 
   const int32_t minute_angle = TRIG_MAX_ANGLE * t->tm_min / 60;
   const int32_t hour_angle = TRIG_MAX_ANGLE * ((t->tm_hour % 12) * 60 + t->tm_min) / 720;
@@ -850,7 +1141,8 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
       break;
     case STATE_SELECTING:
       show_selection = true;
-      charge = s_idle_ms >= SELECT_IDLE_MS ? 1000 : s_idle_ms * 1000 / SELECT_IDLE_MS;
+      const int32_t wait_ms = s_settings.select_seconds * 1000;
+      charge = s_idle_ms >= wait_ms ? 1000 : s_idle_ms * 1000 / wait_ms;
       break;
     case STATE_TRANSFORMING:
       closed = iris(0, 250, 650);
@@ -871,7 +1163,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   draw_plates(ctx, centre, radius, &lights);
   draw_core(ctx, centre, radius, closed, charge);
   if (show_time) {
-    draw_name(ctx, centre, inner);
+    draw_top_slot(ctx, centre, inner, t);
     if (s_settings.style == STYLE_ANALOG) {
       draw_analog(ctx, centre, inner, t);
     } else {
@@ -896,10 +1188,27 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
 
 static void next_frame(void *context);
 
+// Keeps the backlight on from the selector opening until the time comes back,
+// if the setting says so. Letting go hands it back to the watch, which leaves
+// it on for its usual few seconds, so the time can be read.
+static void update_light(void) {
+  static bool s_light_held;
+  const bool wanted = s_settings.keep_light && s_state >= STATE_OPENING;
+  if (wanted == s_light_held) {
+    return;
+  }
+  s_light_held = wanted;
+  light_enable(wanted);
+  if (!wanted) {
+    light_enable_interaction();
+  }
+}
+
 static void enter_state(State state) {
   s_state = state;
   s_state_ms = 0;
   s_idle_ms = 0;
+  update_light();
   if (state != STATE_TIME && !s_frame_timer) {
     s_last_frame = clock_ms();
     s_frame_timer = app_timer_register(FRAME_MS, next_frame, NULL);
@@ -922,10 +1231,11 @@ static void back_to_selecting(void) {
   PLAY(&SFX_BACK, SOUND_AVATARS);
 }
 
-// Steps to the next avatar by turning the ring back one plate.
-static void step_avatar(void) {
+// Steps to the next avatar by turning the ring back one plate, or to the
+// one before by turning it on one.
+static void step_avatar(bool forwards) {
   const int32_t from = ring_moving() ? s_ring_to : s_ring;
-  ring_animate(from - PLATE_ANGLE, STEP_MS);
+  ring_animate(from + (forwards ? -PLATE_ANGLE : PLATE_ANGLE), STEP_MS);
   s_idle_ms = 0;
 }
 
@@ -972,10 +1282,11 @@ static void next_frame(void *context) {
     }
   }
 
-  // A pip at each second of the charge, rising towards the transformation.
+  // Two pips rising over the last seconds of the charge, however long it is.
   if (s_state == STATE_SELECTING) {
-    const int pips = s_idle_ms / 1000;
-    if (pips > s_pips && pips < 3 && !ring_moving()) {
+    const int32_t left = s_settings.select_seconds * 1000 - s_idle_ms;
+    const int pips = left <= 1000 ? 2 : left <= 2000 ? 1 : 0;
+    if (pips > s_pips && !ring_moving()) {
       PLAY(pips == 1 ? &SFX_PIP_1 : &SFX_PIP_2, SOUND_AVATARS);
     }
     s_pips = pips;
@@ -998,7 +1309,7 @@ static void next_frame(void *context) {
       }
       break;
     case STATE_SELECTING:
-      if (s_idle_ms >= SELECT_IDLE_MS && !ring_moving()) {
+      if (s_idle_ms >= s_settings.select_seconds * 1000 && !ring_moving()) {
         transform();
       }
       break;
@@ -1031,15 +1342,18 @@ static void next_frame(void *context) {
   layer_mark_dirty(s_canvas);
 }
 
-// A flick opens the selector, steps through the avatars, or goes back to
-// choosing from the avatar.
+static bool touch_in_use(void);
+
+// On watches without a touchscreen, a flick opens the selector, steps through
+// the avatars, or goes back to choosing from the avatar. Touch does all of
+// that on the others, so a shake of the wrist does nothing there.
 static void tap_handler(AccelAxisType axis, int32_t direction) {
-  if (!s_settings.animation) {
+  if (!s_settings.animation || touch_in_use()) {
     return;
   }
   switch (s_state) {
     case STATE_TIME: open_selector(); break;
-    case STATE_SELECTING: step_avatar(); break;
+    case STATE_SELECTING: step_avatar(true); break;
     case STATE_AVATAR: back_to_selecting(); break;
     default: break;
   }
@@ -1048,16 +1362,24 @@ static void tap_handler(AccelAxisType axis, int32_t direction) {
 // ---------------------------------------------------------------------------
 // Touch, on the Pebble Time 2 and Pebble Round 2
 //
-// A tap opens the selector, picks the avatar when on the core, or goes back
-// to choosing from the avatar. Dragging round the ring turns it, and it snaps
-// to the nearest plate when let go.
+// A long press opens the selector. In the selector, a swipe across the core
+// steps to the next avatar (left or up) or the one before (right or down), a
+// tap on the core picks the avatar, and dragging round the plates turns the
+// ring, snapping to the nearest plate when let go. A tap or drag on the avatar
+// goes back to choosing.
 
 #if defined(_PBL_API_EXISTS_touch_service_subscribe)
 #define DRAG_START_PIXELS 6
+// How far a swipe must go to step to another avatar.
+#define SWIPE_PIXELS 20
+// How far a finger can wander and still be a long press.
+#define LONG_PRESS_SLOP_PIXELS 12
 
 static bool s_touch_subscribed;
+static AppTimer *s_press_timer;
 static bool s_touching;
 static bool s_dragging;
+static bool s_on_plates;    // The touch started on the plates, not the core.
 static GPoint s_touch_start;
 static int32_t s_touch_angle;
 
@@ -1071,9 +1393,57 @@ static int32_t touch_angle(GPoint at) {
   return atan2_lookup(at.y - centre.y, at.x - centre.x);
 }
 
+static bool in_core(GPoint at) {
+  const GPoint centre = dial_centre();
+  const GRect bounds = layer_get_unobstructed_bounds(s_canvas);
+  const int16_t short_side = bounds.size.w < bounds.size.h ? bounds.size.w : bounds.size.h;
+  const int16_t inner = (short_side / 2 - 2) * CORE_INNER / 100;
+  const int32_t dx = at.x - centre.x;
+  const int32_t dy = at.y - centre.y;
+  return dx * dx + dy * dy <= inner * inner;
+}
+
+static void cancel_long_press(void) {
+  if (s_press_timer) {
+    app_timer_cancel(s_press_timer);
+    s_press_timer = NULL;
+  }
+}
+
+static void long_press_held(void *context) {
+  s_press_timer = NULL;
+  if (s_state == STATE_TIME && s_settings.animation) {
+    open_selector();
+  }
+}
+
+// While the time shows, the only touch that counts is a long press. It is
+// deliberate enough to count on the idle face too, which marks its touches
+// non-navigational, or it would not work until the watch was woken. Those
+// marks are ignored in the selector too, which the long press has opened.
+static void touch_on_time(const TouchEvent *event, GPoint at) {
+  switch (event->type) {
+    case TouchEvent_Touchdown:
+      cancel_long_press();
+      s_touch_start = at;
+      s_press_timer = app_timer_register(s_settings.long_press_tenths * 100, long_press_held,
+                                         NULL);
+      break;
+    case TouchEvent_PositionUpdate:
+      if (abs(at.x - s_touch_start.x) + abs(at.y - s_touch_start.y) > LONG_PRESS_SLOP_PIXELS) {
+        cancel_long_press();
+      }
+      break;
+    case TouchEvent_Liftoff:
+      cancel_long_press();
+      break;
+  }
+}
+
 static void touch_handler(const TouchEvent *event, void *context) {
   const GPoint at = GPoint(event->x, event->y);
-  if (event->non_navigational) {
+  if (s_state == STATE_TIME) {
+    touch_on_time(event, at);
     return;
   }
   switch (event->type) {
@@ -1082,6 +1452,7 @@ static void touch_handler(const TouchEvent *event, void *context) {
       s_dragging = false;
       s_touch_start = at;
       s_touch_angle = touch_angle(at);
+      s_on_plates = !in_core(at);
       break;
     case TouchEvent_PositionUpdate: {
       if (!s_touching) {
@@ -1090,15 +1461,14 @@ static void touch_handler(const TouchEvent *event, void *context) {
       if (!s_dragging && abs(at.x - s_touch_start.x) + abs(at.y - s_touch_start.y)
           >= DRAG_START_PIXELS) {
         s_dragging = true;
-        if (s_state == STATE_TIME) {
-          s_ring = 0;
-          s_ring_duration = 0;
-          enter_state(STATE_SELECTING);
-        } else if (s_state == STATE_AVATAR) {
+        if (s_state == STATE_AVATAR) {
           back_to_selecting();
         }
       }
       if (s_dragging && s_state == STATE_SELECTING) {
+        s_idle_ms = 0;
+      }
+      if (s_dragging && s_state == STATE_SELECTING && s_on_plates) {
         // Turn the ring by how far the finger has gone round the centre.
         const int32_t angle = touch_angle(at);
         int32_t turn = angle - s_touch_angle;
@@ -1110,7 +1480,6 @@ static void touch_handler(const TouchEvent *event, void *context) {
         s_touch_angle = angle;
         s_ring += turn;
         s_ring_duration = 0;
-        s_idle_ms = 0;
         layer_mark_dirty(s_canvas);
       }
       break;
@@ -1121,7 +1490,14 @@ static void touch_handler(const TouchEvent *event, void *context) {
       }
       s_touching = false;
       if (s_dragging) {
-        if (s_state == STATE_SELECTING) {
+        const int16_t dx = at.x - s_touch_start.x;
+        const int16_t dy = at.y - s_touch_start.y;
+        const int16_t across = abs(dx) > abs(dy) ? dx : dy;
+        if (s_state == STATE_SELECTING && !s_on_plates) {
+          if (abs(across) >= SWIPE_PIXELS) {
+            step_avatar(across < 0);
+          }
+        } else if (s_state == STATE_SELECTING) {
           // Snap to the nearest plate.
           const int32_t steps = (s_ring + (s_ring >= 0 ? PLATE_ANGLE / 2 : -PLATE_ANGLE / 2))
             / PLATE_ANGLE;
@@ -1130,16 +1506,8 @@ static void touch_handler(const TouchEvent *event, void *context) {
         }
         break;
       }
-      if (s_state == STATE_TIME) {
-        open_selector();
-      } else if (s_state == STATE_SELECTING) {
-        const GPoint centre = dial_centre();
-        const GRect bounds = layer_get_unobstructed_bounds(s_canvas);
-        const int16_t short_side = bounds.size.w < bounds.size.h ? bounds.size.w : bounds.size.h;
-        const int16_t inner = (short_side / 2 - 2) * CORE_INNER / 100;
-        const int32_t dx = at.x - centre.x;
-        const int32_t dy = at.y - centre.y;
-        if (dx * dx + dy * dy <= inner * inner) {
+      if (s_state == STATE_SELECTING) {
+        if (in_core(at)) {
           transform();
         }
       } else if (s_state == STATE_AVATAR) {
@@ -1149,6 +1517,15 @@ static void touch_handler(const TouchEvent *event, void *context) {
   }
 }
 #endif
+
+// Whether this watch opens the selector by touch.
+static bool touch_in_use(void) {
+#if defined(_PBL_API_EXISTS_touch_service_subscribe)
+  return s_touch_subscribed;
+#else
+  return false;
+#endif
+}
 
 // Touch is read only while the avatars are turned on, as the touch sensor
 // stays on while anything listens to it.
@@ -1170,7 +1547,23 @@ static void update_touch(void) {
 // ---------------------------------------------------------------------------
 // Events
 
+static bool weather_shown(void) {
+  return s_settings.top_slot == SLOT_WEATHER || s_settings.bottom_slot == SLOT_WEATHER;
+}
+
+static void request_weather(void) {
+  DictionaryIterator *iterator;
+  if (app_message_outbox_begin(&iterator) != APP_MSG_OK) {
+    return;
+  }
+  dict_write_uint8(iterator, MESSAGE_KEY_REQUEST_WEATHER, 1);
+  app_message_outbox_send();
+}
+
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
+  if (weather_shown() && tick_time->tm_min % WEATHER_REFRESH_MINUTES == 0) {
+    request_weather();
+  }
   if (tick_time->tm_min == 0 && s_state == STATE_TIME && s_settings.animation) {
     enter_state(STATE_CHASE);
     PLAY(&SFX_CHASE, SOUND_ALL);
@@ -1186,6 +1579,30 @@ static int32_t tuple_int(const Tuple *tuple) {
 static void inbox_received(DictionaryIterator *iterator, void *context) {
   bool changed = false;
   const Tuple *tuple;
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_TEMPERATURE))) {
+    s_temperature = tuple->value->int32;
+    persist_write_int(PERSIST_KEY_TEMPERATURE, s_temperature);
+    layer_mark_dirty(s_canvas);
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_CONDITION)) && tuple->type == TUPLE_CSTRING) {
+    strncpy(s_condition, tuple->value->cstring, sizeof(s_condition) - 1);
+    s_condition[sizeof(s_condition) - 1] = '\0';
+    persist_write_string(PERSIST_KEY_CONDITION, s_condition);
+    layer_mark_dirty(s_canvas);
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_DAYTIME))) {
+    s_daytime = tuple_int(tuple) != 0;
+    persist_write_bool(PERSIST_KEY_DAYTIME, s_daytime);
+    layer_mark_dirty(s_canvas);
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_TOP_SLOT))) {
+    s_settings.top_slot = tuple_int(tuple) % SLOT_COUNT;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_BOTTOM_SLOT))) {
+    s_settings.bottom_slot = tuple_int(tuple) % SLOT_COUNT;
+    changed = true;
+  }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_STYLE))) {
     s_settings.style = tuple_int(tuple) == STYLE_ANALOG ? STYLE_ANALOG : STYLE_DIGITAL;
     changed = true;
@@ -1214,6 +1631,21 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
     s_settings.sound = sound >= SOUND_OFF && sound <= SOUND_ALL ? sound : SOUND_OFF;
     changed = true;
   }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_KEEP_LIGHT))) {
+    s_settings.keep_light = tuple_int(tuple) != 0;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_SELECT_TIME))) {
+    const int32_t seconds = tuple_int(tuple);
+    s_settings.select_seconds = seconds >= 3 && seconds <= 60 ? seconds : DEFAULT_SELECT_SECONDS;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_LONG_PRESS))) {
+    const int32_t tenths = tuple_int(tuple);
+    s_settings.long_press_tenths = tenths >= 3 && tenths <= 50 ? tenths
+                                                               : DEFAULT_LONG_PRESS_TENTHS;
+    changed = true;
+  }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_SOUND_VOLUME))) {
     const int32_t volume = tuple_int(tuple);
     s_settings.sound_volume = volume >= 0 && volume <= 100 ? volume : VOLUME_MEDIUM;
@@ -1232,6 +1664,7 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
     apply_palette();
     load_name_font();
     update_touch();
+    update_light();
     layer_mark_dirty(s_canvas);
   }
 }
@@ -1274,6 +1707,15 @@ static void load_settings(void) {
       s_settings.version = SETTINGS_VERSION;
     }
   }
+  if (persist_exists(PERSIST_KEY_TEMPERATURE)) {
+    s_temperature = persist_read_int(PERSIST_KEY_TEMPERATURE);
+  }
+  if (persist_exists(PERSIST_KEY_CONDITION)) {
+    persist_read_string(PERSIST_KEY_CONDITION, s_condition, sizeof(s_condition));
+  }
+  if (persist_exists(PERSIST_KEY_DAYTIME)) {
+    s_daytime = persist_read_bool(PERSIST_KEY_DAYTIME);
+  }
   if (persist_exists(PERSIST_KEY_AVATAR)) {
     s_avatar = persist_read_int(PERSIST_KEY_AVATAR) % AVATAR_COUNT;
   }
@@ -1303,7 +1745,7 @@ static void init(void) {
 #endif
 
   app_message_register_inbox_received(inbox_received);
-  app_message_open(160, 16);
+  app_message_open(256, 32);
 }
 
 static void deinit(void) {
@@ -1320,6 +1762,9 @@ static void deinit(void) {
 #if defined(PBL_SPEAKER)
   speaker_stop();
 #endif
+  // Hands the backlight back if the face closes while it is held.
+  s_state = STATE_TIME;
+  update_light();
   window_destroy(s_window);
   styled_font_unload(&s_name_font);
 }

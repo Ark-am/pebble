@@ -1,8 +1,9 @@
 # Alien Core
 
 An alien-tech watchface: a glowing core inside a ring of twelve armoured
-plates. The core shows a name of your choice (PEBBLE by default) above the
-time, as glowing digits with the day and date below, or as hands. The plate
+plates. The core shows the time as glowing digits or as hands, with a name of
+your choice (PEBBLE by default) above it and the day and date below, or other
+information in those places. The plate
 for the current hour glows, and the plate for the current five minutes glows
 more dimly, so the ring doubles as a track for both.
 
@@ -12,18 +13,22 @@ Each plate also holds one of twelve original avatars: Octavo, Sporelet,
 Lumoth, Hornback, Wyrmling, Driftjelly, Hootan, Coilfang, Stingtail, Oculon,
 Skyray and Pincera.
 
-- **Open the selector:** flick your wrist, or tap the screen on the Pebble
-  Time 2 and Pebble Round 2. The core's iris closes over the time, the plate
-  ring spins once round, and it comes to rest on the last avatar chosen. The
-  plate at the top lights up, and its avatar springs up in the core with its
+- **Open the selector:** long press the screen on the Pebble Time 2 and Pebble
+  Round 2 (a quick tap or a wrist flick does nothing here), or flick your wrist
+  on watches without a touchscreen. The core's iris closes over the time, the
+  plate ring spins once round, and it comes to rest on the last avatar chosen.
+  The plate at the top lights up, and its avatar springs up in the core with its
   name.
-- **Step through them:** flick again for the next avatar, or on touch watches
-  drag round the ring to turn it; it snaps to the nearest plate when you let
-  go. The core's ring charges up clockwise over three seconds; each flick or
-  drag starts it again.
+- **Step through them:** on touch watches, swipe across the core: left or up
+  for the next avatar, right or down for the one before. You can also drag
+  round the plates to turn the ring; it snaps to the nearest plate when you
+  let go. On other watches, flick again for the next avatar. The core's ring
+  charges up clockwise over the time set in Settings (three seconds to begin
+  with); each swipe, drag or flick starts it again.
 - **Transform:** tap the core, or let it finish charging. The iris closes, the
   plates flash, sparks and shock rings fly out, and the iris opens on the
-  avatar, springing up large and glowing. A flick or tap goes back to choosing.
+  avatar, springing up large and glowing. A tap, or a flick on watches without
+  a touchscreen, goes back to choosing.
 - **Back to the time:** after four seconds the iris closes again, the ring
   spins home, and the time returns.
 
@@ -51,8 +56,9 @@ The Pebble Time 2 and Pebble 2 Duo have a speaker, so they add sound effects:
 - **Opening:** the ring ratchets as it spins, its ticks spreading out as it
   slows, over a rising hum.
 - **Stepping:** each plate has its own note, on a scale round the ring, whether
-  you flick or drag.
-- **Charging:** a pip at each second, rising towards the transformation.
+  you swipe, drag or flick.
+- **Charging:** two pips over the last two seconds, rising towards the
+  transformation.
 - **Transforming:** a surge up as the iris closes, a low boom as the plates
   flash, and bright notes falling as the sparks fly out.
 - **Each avatar** has a call of its own as it arrives, such as Hootan's two
@@ -70,15 +76,37 @@ Quiet Time, or when the watch is muted.
   digital time. 12-hour time shows AM or PM beside the minutes.
 - **Glow colour:** Alien green (the default), lime, cyan, blue, purple, red,
   orange or yellow (colour watches only; black-and-white watches glow white)
+- **Above the time** and **Below the time:** the name, date, weather, steps,
+  heart rate, battery or nothing (the name and the date by default). Weather,
+  steps and heart rate show an icon beside the value, and the battery shows an
+  icon filled to the charge. The weather's icon follows the conditions, with a
+  moon on a clear night. Steps need a watch
+  with health support, and heart rate a supported sensor; otherwise they show
+  `--`.
+- **Temperature:** Celsius or Fahrenheit
 - **Name in the core:** any text up to 20 characters, PEBBLE by default; leave
   it empty to show none. A name too wide for the core ends in an ellipsis.
-- **Name size:** Small, Medium (the default) or Large
+- **Name size:** Small, Medium (the default) or Large, for whatever shows above
+  the time
 - **Name font:** Pebble (the watch's own Gothic, the default), Serif (IBM Plex
   Serif), Rounded (Varela Round), Mono (DM Mono) or Sketchy (Patrick Hand)
 - **Avatars and animations:** on by default; turn off to keep the face still
+- **Time to choose:** how long the selector waits before transforming: 3 (the
+  default), 5, 10, 15 or 30 seconds
+- **Keep the light on:** on by default; the backlight stays on from the selector
+  opening until the time comes back, then goes off as usual
+- **Long press** (touch watches): how long to hold the screen to open the
+  avatars: 0.5, 1 (the default), 1.5, 2 or 3 seconds
 - **Sound effects** (watches with a speaker): Off, Avatars only (the default),
   or Avatars, power-up and on the hour
 - **Volume** (watches with a speaker): Quiet, Medium (the default) or Loud
+
+## Weather
+
+The companion JavaScript runs in the Pebble phone app. While the weather is
+shown, it asks the phone for its location and fetches the weather from
+[Open-Meteo](https://open-meteo.com/), which needs no account or API key. The
+watch asks for an update every 30 minutes and keeps the last reading.
 
 ## Drawing
 
@@ -115,7 +143,7 @@ python3 tools/make_sounds.py previews
 ```
 pebble build
 pebble install --emulator emery
-pebble emu-tap --emulator emery        # open the selector, then step
+pebble emu-tap --emulator basalt       # open the selector, then step
 ```
 
 Supported platforms: Aplite, Basalt, Chalk, Diorite, Emery, Flint and Gabbro.
