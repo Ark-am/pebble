@@ -16,12 +16,12 @@ Skyray and Pincera.
 - **Open the selector:** long press the screen on the Pebble Time 2 and Pebble
   Round 2 (a quick tap or a wrist flick does nothing here), or flick your wrist
   on watches without a touchscreen. The core's iris closes over the time, the
-  plate ring spins once round, and it comes to rest on the last avatar chosen.
-  The plate at the top lights up, and its avatar springs up in the core with its
-  name.
+  light runs round the plates from the hour and comes to rest on the last avatar
+  chosen. Each avatar has its own hour plate, and its avatar springs up in the
+  core with its name when the light lands there.
 - **Step through them:** on touch watches, swipe across the core: left or up
   for the next avatar, right or down for the one before. You can also drag
-  round the plates to turn the ring; it snaps to the nearest plate when you
+  round the plates to move the light; it snaps to the nearest plate when you
   let go. On other watches, flick again for the next avatar. The core's ring
   charges up clockwise over the time set in Settings (three seconds to begin
   with); each swipe, drag or flick starts it again.
@@ -30,7 +30,7 @@ Skyray and Pincera.
   avatar, springing up large and glowing. A tap, or a flick on watches without
   a touchscreen, goes back to choosing.
 - **Back to the time:** after four seconds the iris closes again, the ring
-  spins home, and the time returns.
+  runs on to the hour's plate, and the time returns.
 
 The avatars are alive while they show: they blink and bob, and each has its
 own movement, such as Lumoth's flapping wings, Stingtail's rocking claws and
@@ -53,7 +53,7 @@ other works.
 
 The Pebble Time 2 and Pebble 2 Duo have a speaker, so they add sound effects:
 
-- **Opening:** the ring ratchets as it spins, its ticks spreading out as it
+- **Opening:** the light ratchets round the plates, its ticks spreading out as it
   slows, over a rising hum.
 - **Stepping:** each plate has its own note, on a scale round the ring, whether
   you swipe, drag or flick.

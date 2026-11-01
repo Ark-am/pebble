@@ -12,10 +12,10 @@
 // plate glowing more dimly.
 //
 // Each plate also holds one of twelve avatars. A long press on touch watches,
-// or a flick of the wrist on the others, opens the selector: the ring spins
-// and the avatar of the plate at the top shows in the core. Swipes or
-// dragging the ring round, or further flicks without a touchscreen, step
-// through them. Tapping the core, or leaving it for a few seconds, transforms the face into that avatar: the core flares and opens
+// or a flick of the wrist on the others, opens the selector: a light runs round
+// the plates and the avatar of the plate it rests on shows in the core. Swipes
+// or dragging round the plates, or further flicks without a touchscreen, step
+// the light through them. Tapping the core, or leaving it for a few seconds, transforms the face into that avatar: the core flares and opens
 // like an iris, the plates flash, and sparks and shock rings fly out. The
 // avatars are alive while they show: they blink, sway, flap and scuttle. After
 // a few seconds the time comes back.
@@ -24,7 +24,7 @@
 // round the ring on the hour. Nothing else moves while the time shows, so the
 // face costs little battery.
 //
-// Watches with a speaker add sound effects: the ring ratchets as it spins, each
+// Watches with a speaker add sound effects: the light ratchets round, each
 // plate has its own note, the transformation surges and booms, and each avatar
 // has a call of its own.
 
@@ -188,7 +188,7 @@ typedef enum {
   STATE_SELECTING,     // Stepping through the avatars.
   STATE_TRANSFORMING,  // The flare, iris and shock rings.
   STATE_AVATAR,        // The chosen avatar, large.
-  STATE_CLOSING,       // The ring turns home and the time comes back.
+  STATE_CLOSING,       // The light runs home and the time comes back.
 } State;
 
 #define FRAME_MS 33
@@ -215,8 +215,10 @@ static int s_shown = -1;          // The avatar that last came up.
 static int s_pips;                // Pips of the selector's charge sounded.
 static int s_avatar;              // The chosen avatar, kept between uses.
 
-// The plate ring's turn, clockwise, and its animation from one turn to
-// another. Plate i sits at i * PLATE_ANGLE + s_ring.
+// The light's turn and its animation from one turn to another. The plates
+// stay put: the turn picks which of them is lit, so the light moves clockwise
+// round the hours as the turn goes down, and each avatar lights the plate at
+// its own hour.
 static int32_t s_ring;
 static int32_t s_ring_from;
 static int32_t s_ring_to;
@@ -365,9 +367,9 @@ static int32_t iris(int32_t close_from, int32_t closed_at, int32_t open_at) {
   return 1000 - stage(closed_at, open_at);
 }
 
-// The plate at the top of the ring, whose avatar is the one shown.
+// The lit plate, whose avatar is the one shown.
 static int top_plate(void) {
-  // The plate nearest the top, rounding down for turns either way.
+  // The nearest plate, rounding down for turns either way.
   const int32_t offset = -s_ring + PLATE_ANGLE / 2;
   const int32_t steps = offset >= 0 ? offset / PLATE_ANGLE
                                     : -((-offset + PLATE_ANGLE - 1) / PLATE_ANGLE);
@@ -448,15 +450,15 @@ static GColor plate_fill(const Lights *lights, int i) {
   return s_palette.plate;
 }
 
-// The ring of plates at its current turn. Black and white watches have no
+// The ring of plates. Black and white watches have no
 // dimmer glow, so there only the inner half of the minute's plate is filled.
 static void draw_plates(GContext *ctx, GPoint centre, int16_t radius, const Lights *lights) {
   const int16_t inner = radius * BEZEL_INNER / 100;
   for (int i = 0; i < PLATE_COUNT; i++) {
-    draw_plate(ctx, centre, PLATE_ANGLE * i + s_ring, inner, radius, plate_fill(lights, i));
+    draw_plate(ctx, centre, PLATE_ANGLE * i, inner, radius, plate_fill(lights, i));
 #if !defined(PBL_COLOR)
     if (i == lights->minute && i != lights->lit) {
-      draw_plate(ctx, centre, PLATE_ANGLE * i + s_ring, inner, (inner + radius) / 2,
+      draw_plate(ctx, centre, PLATE_ANGLE * i, inner, (inner + radius) / 2,
                  s_palette.minute);
     }
 #endif
@@ -1075,7 +1077,7 @@ static void draw_sparks(GContext *ctx, GPoint centre, int16_t from, int16_t to) 
   graphics_context_set_stroke_color(ctx, s_palette.glow);
   graphics_context_set_stroke_width(ctx, 2);
   for (int i = 0; i < PLATE_COUNT; i++) {
-    const int32_t angle = PLATE_ANGLE * i + PLATE_ANGLE / 2 + s_ring;
+    const int32_t angle = PLATE_ANGLE * i + PLATE_ANGLE / 2;
     graphics_draw_line(ctx, ray_point(centre, angle, distance),
                        ray_point(centre, angle, distance + from / 5));
   }
@@ -1216,11 +1218,17 @@ static void enter_state(State state) {
   layer_mark_dirty(s_canvas);
 }
 
-// Opens the selector: the ring spins once round and comes to rest with the
-// chosen avatar's plate at the top.
+// The hour's plate, where the light starts and finishes.
+static int hour_plate(void) {
+  const time_t now = time(NULL);
+  return localtime(&now)->tm_hour % 12;
+}
+
+// Opens the selector: the light runs clockwise from the hour's plate, round
+// the dial, and comes to rest on the chosen avatar's plate.
 static void open_selector(void) {
-  s_ring = 0;
-  ring_animate(2 * TRIG_MAX_ANGLE - s_avatar * PLATE_ANGLE, OPENING_MS);
+  s_ring = -hour_plate() * PLATE_ANGLE;
+  ring_animate(-2 * TRIG_MAX_ANGLE - s_avatar * PLATE_ANGLE, OPENING_MS);
   enter_state(STATE_OPENING);
   PLAY(&SFX_OPEN, SOUND_AVATARS);
 }
@@ -1246,9 +1254,12 @@ static void transform(void) {
   PLAY(&SFX_TRANSFORM, SOUND_AVATARS);
 }
 
-// Closes back to the time, turning the ring home with one more spin.
+// Closes back to the time, the light running on clockwise to the hour's plate.
 static void close_to_time(void) {
-  const int32_t home = (s_ring / TRIG_MAX_ANGLE + 1) * TRIG_MAX_ANGLE;
+  int32_t home = -hour_plate() * PLATE_ANGLE;
+  while (home >= s_ring) {
+    home -= TRIG_MAX_ANGLE;
+  }
   ring_animate(home, CLOSING_MS);
   enter_state(STATE_CLOSING);
   PLAY(&SFX_CLOSE, SOUND_AVATARS);
@@ -1469,7 +1480,7 @@ static void touch_handler(const TouchEvent *event, void *context) {
         s_idle_ms = 0;
       }
       if (s_dragging && s_state == STATE_SELECTING && s_on_plates) {
-        // Turn the ring by how far the finger has gone round the centre.
+        // Move the light by how far the finger has gone round the centre.
         const int32_t angle = touch_angle(at);
         int32_t turn = angle - s_touch_angle;
         if (turn > TRIG_MAX_ANGLE / 2) {
@@ -1478,7 +1489,7 @@ static void touch_handler(const TouchEvent *event, void *context) {
           turn += TRIG_MAX_ANGLE;
         }
         s_touch_angle = angle;
-        s_ring += turn;
+        s_ring -= turn;
         s_ring_duration = 0;
         layer_mark_dirty(s_canvas);
       }
