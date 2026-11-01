@@ -1,6 +1,36 @@
 // Settings page, rendered on the phone by Clay. Each messageKey matches one in
 // package.json; the watch reads them in read_settings() in src/c/main.c.
 
+// Whose colour the lines or the information take; values match the
+// COLOUR_ names on the watch. src/pkjs/custom-clay.js shows the picker only
+// for Custom.
+var COLOUR_OPTIONS = [
+  { label: 'Same as the text', value: '0' },
+  { label: 'Same as the current hour', value: '1' },
+  { label: 'Custom', value: '2' }
+];
+
+function colourItems(key, label) {
+  return [
+    {
+      type: 'select',
+      messageKey: key,
+      label: label,
+      defaultValue: '0',
+      options: COLOUR_OPTIONS,
+      capabilities: ['COLOR']
+    },
+    {
+      type: 'color',
+      messageKey: key.replace('COLOUR', 'COLOR_CUSTOM'),
+      label: 'Custom colour',
+      defaultValue: '0055AA',
+      sunlight: false,
+      capabilities: ['COLOR']
+    }
+  ];
+}
+
 // Font styles; values match the styles in src/c/font_styles.h.
 var FONT_OPTIONS = [
   { label: 'Sketchy (Patrick Hand)', value: '4' },
@@ -165,8 +195,21 @@ module.exports = [
         description: 'For the date, weather, battery and health values in the centre.',
         defaultValue: '4',
         options: FONT_OPTIONS
+      },
+      {
+        type: 'toggle',
+        messageKey: 'VALUE_RULE',
+        label: 'Show the line under the picture',
+        defaultValue: true
+      },
+      {
+        type: 'toggle',
+        messageKey: 'VALUE_DIVIDER',
+        label: 'Show the line between the values',
+        defaultValue: true
       }
-    ]
+    ].concat(colourItems('LINE_COLOUR', 'Line colour'),
+             colourItems('INFO_COLOUR', 'Information colour'))
   },
   {
     type: 'section',

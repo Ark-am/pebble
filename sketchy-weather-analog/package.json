@@ -1,7 +1,7 @@
 {
   "name": "sketchy-weather-analog",
   "author": "ark-am",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "keywords": [
     "pebble-app"
   ],
@@ -57,7 +57,13 @@
       "HOUR_COLOR",
       "MINUTE_STYLE",
       "MINUTE_TICKS",
-      "NAME_SIZE"
+      "NAME_SIZE",
+      "VALUE_RULE",
+      "VALUE_DIVIDER",
+      "LINE_COLOUR",
+      "LINE_COLOR_CUSTOM",
+      "INFO_COLOUR",
+      "INFO_COLOR_CUSTOM"
     ],
     "resources": {
       "media": [

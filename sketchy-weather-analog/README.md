@@ -88,6 +88,12 @@ battery, choose it as one of the centre screen items.
   size of the values above it. Large text is wider than the round area the
   hands keep out of, so around :25 and :35 the minute hand can cross the ends
   of a long line.
+- **Show the line under the picture** and **Show the line between the values:**
+  both on by default. With the second off, the values keep their spacing.
+- **Line colour** and **Information colour** (colour watches only): same as
+  the text (default), same as the current hour, or Custom, which shows a colour
+  picker. Line colour covers both lines; Information colour covers the values
+  and the bottom line, not the pictures, which keep their own colours.
 - **Number font** and **Information font:** see Font styles below
 - **Show hour numbers:** off by default; when on, the other hours' numbers
   sit just inside the hour ticks too

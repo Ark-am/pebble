@@ -121,7 +121,7 @@ typedef enum {
 #define BOTTOM_NAME ITEM_COUNT
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 12
+#define SETTINGS_VERSION 13
 typedef struct {
   uint8_t version;
   bool dark_theme;
@@ -159,7 +159,18 @@ typedef struct {
   bool minute_ticks;
   // Added in version 12: the bottom line's size, NAME_SMALL or NAME_LARGE.
   uint8_t name_size;
+  // Added in version 13: the lines around the values, and the colours of
+  // those lines and of the information's text (the COLOUR_ values below).
+  bool value_rule;
+  bool value_divider;
+  uint8_t line_colour;
+  uint8_t line_argb;
+  uint8_t info_colour;
+  uint8_t info_argb;
 } Settings;
+
+// Whose colour something takes; values match the options in src/pkjs/config.js.
+enum { COLOUR_SAME_AS_TEXT, COLOUR_SAME_AS_HOUR, COLOUR_CUSTOM, COLOUR_CHOICE_COUNT };
 
 // Sizes of the bottom line: small in the name's own font, or large in the
 // values' font.
@@ -180,6 +191,7 @@ static int settings_size(uint8_t version) {
     case 9: return offsetof(Settings, screen_bottom);
     case 10: return offsetof(Settings, minute_ticks);
     case 11: return offsetof(Settings, name_size);
+    case 12: return offsetof(Settings, value_rule);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -283,6 +295,12 @@ static void settings_set_defaults(Settings *settings) {
     .screen_bottom = { BOTTOM_NAME, BOTTOM_NAME, BOTTOM_NAME, BOTTOM_NAME },
     .minute_ticks = true,
     .name_size = NAME_SMALL,
+    .value_rule = true,
+    .value_divider = true,
+    .line_colour = COLOUR_SAME_AS_TEXT,
+    .line_argb = GColorCobaltBlueARGB8,
+    .info_colour = COLOUR_SAME_AS_TEXT,
+    .info_argb = GColorCobaltBlueARGB8,
   };
 }
 
@@ -794,6 +812,28 @@ static int minute_number_place(const struct tm *t) {
 // The colour chosen for the current hour, which the minutes share.
 static GColor hour_colour(void) {
   return PBL_IF_COLOR_ELSE((GColor) { .argb = s_settings.hour_argb }, s_palette.ink);
+}
+
+// A colour chosen for the lines or the information. Black-and-white watches
+// have only the text colour.
+static GColor chosen_colour(uint8_t choice, uint8_t argb) {
+#if defined(PBL_COLOR)
+  if (choice == COLOUR_SAME_AS_HOUR) {
+    return hour_colour();
+  }
+  if (choice == COLOUR_CUSTOM) {
+    return (GColor) { .argb = argb };
+  }
+#endif
+  return s_palette.ink;
+}
+
+static GColor line_colour(void) {
+  return chosen_colour(s_settings.line_colour, s_settings.line_argb);
+}
+
+static GColor info_colour(void) {
+  return chosen_colour(s_settings.info_colour, s_settings.info_argb);
 }
 
 // One hour's number, just inside its hour marker. Bold draws it four times,
@@ -1316,10 +1356,12 @@ static NOINLINE void draw_values(GContext *ctx, GPoint centre, Item main, Item s
   const int16_t left = centre.x - total / 2;
   const int16_t rule_half_max = ring_half_width(RULE_DROP) - 3;
   const int16_t rule_half = total / 2 + 3 < rule_half_max ? total / 2 + 3 : rule_half_max;
-  sketch_line(ctx, GPoint(centre.x - rule_half, rule_y), GPoint(centre.x + rule_half, rule_y),
-              s_palette.ink);
+  if (s_settings.value_rule) {
+    sketch_line(ctx, GPoint(centre.x - rule_half, rule_y), GPoint(centre.x + rule_half, rule_y),
+                line_colour());
+  }
 
-  graphics_context_set_text_color(ctx, s_palette.ink);
+  graphics_context_set_text_color(ctx, info_colour());
   graphics_draw_text(ctx, first, s_text_font.font,
                      GRect(left, text_top - s_text_font.pad, first_w + 2,
                            TEXT_HEIGHT + s_text_font.pad * 2),
@@ -1328,8 +1370,10 @@ static NOINLINE void draw_values(GContext *ctx, GPoint centre, Item main, Item s
     return;
   }
   const int16_t divider = left + first_w + TEXT_GAP;
-  sketch_line(ctx, GPoint(divider, rule_y + 1), GPoint(divider, text_top + TEXT_HEIGHT + 1),
-              s_palette.ink);
+  if (s_settings.value_divider) {
+    sketch_line(ctx, GPoint(divider, rule_y + 1), GPoint(divider, text_top + TEXT_HEIGHT + 1),
+                line_colour());
+  }
   graphics_draw_text(ctx, other, s_text_font.font,
                      GRect(divider + TEXT_GAP, text_top - s_text_font.pad, other_w + 2,
                            TEXT_HEIGHT + s_text_font.pad * 2),
@@ -1378,7 +1422,7 @@ static NOINLINE void draw_bottom_line(GContext *ctx, GPoint centre, uint8_t bott
   if (!text[0]) {
     return;
   }
-  graphics_context_set_text_color(ctx, s_palette.ink);
+  graphics_context_set_text_color(ctx, info_colour());
   graphics_draw_text(ctx, text, font->font, box, GTextOverflowModeTrailingEllipsis,
                      GTextAlignmentCenter, NULL);
 }
@@ -1638,6 +1682,32 @@ static bool read_settings(DictionaryIterator *iterator) {
     s_settings.dark_theme = tuple_int(tuple) == 1;
     changed = true;
   }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_VALUE_RULE))) {
+    s_settings.value_rule = tuple_int(tuple) != 0;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_VALUE_DIVIDER))) {
+    s_settings.value_divider = tuple_int(tuple) != 0;
+    changed = true;
+  }
+#if defined(PBL_COLOR)
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_LINE_COLOUR))) {
+    s_settings.line_colour = tuple_int(tuple) % COLOUR_CHOICE_COUNT;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_LINE_COLOR_CUSTOM))) {
+    s_settings.line_argb = GColorFromHEX(tuple_int(tuple)).argb;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_INFO_COLOUR))) {
+    s_settings.info_colour = tuple_int(tuple) % COLOUR_CHOICE_COUNT;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_INFO_COLOR_CUSTOM))) {
+    s_settings.info_argb = GColorFromHEX(tuple_int(tuple)).argb;
+    changed = true;
+  }
+#endif
   if ((tuple = dict_find(iterator, MESSAGE_KEY_NAME_SIZE))) {
     s_settings.name_size = tuple_int(tuple) % NAME_SIZE_COUNT;
     changed = true;
