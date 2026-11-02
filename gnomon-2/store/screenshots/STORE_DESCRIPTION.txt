@@ -1,6 +1,6 @@
 Gnomon 2 was originally inspired by Gnomon, developed by JR Mobley, and created to place additional features on the watch face. It pairs a classic analog dial with the everyday details at a glance. Choose from 5 styles of hour/minute hands and the color of the second hand; note, battery usage increases when the second hand is in use.
 
-Four [4] informational areas show local weather, health data, the day and date, and a battery ring with phone connection and Quiet Time status. Tap the watch to cycle through steps, distance, active calories, active minutes, sleep, and if supported, the heart rate. Hide individual information areas for a simpler look, or enable the option that moves them away from the hands when there is space.
+Four [4] informational areas show local weather, health data, the day and date, and a battery ring with phone connection and Quiet Time status. Tap the watch to cycle through steps, distance, active calories, active minutes, sleep, and if supported, the heart rate. Hide individual information areas for a simpler look, or enable the option that moves them around the hands, spreading them evenly through the free space.
 
 Features:
  - A light or dark background

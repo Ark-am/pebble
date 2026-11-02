@@ -34,6 +34,8 @@
   #define TEXT_BOX_WIDTH 80
   #define NAME_BOX_WIDTH 120
   #define CLASSIC_HEIGHT 20
+  #define CONDENSED_HEIGHT 30
+  #define SHADOW_OFFSET 2
   #define CLASSIC_STROKE 3
   #define MINUTE_TICK_LENGTH 6
   #define HOUR_TICK_LENGTH 9
@@ -57,6 +59,10 @@
   #define TEXT_BOX_WIDTH 56
   #define NAME_BOX_WIDTH 90
   #define CLASSIC_HEIGHT 15
+  #define CONDENSED_HEIGHT 20
+  // Black-and-white shadows need the extra pixel to stand clear of what casts
+  // them.
+  #define SHADOW_OFFSET PBL_IF_COLOR_ELSE(1, 2)
   #define CLASSIC_STROKE 2
   #define MINUTE_TICK_LENGTH 4
   #define HOUR_TICK_LENGTH 7
@@ -90,10 +96,13 @@
 #define AVOID_STEPS_ROUND 60
 #define AVOID_PUSHES 3
 #define AVOID_PUSH_COST 3
+// How far out the items sit when they spread around the hands, as a percentage
+// of the distance to the edge of the dial.
+#define SPREAD_PERCENT 42
 #define AVOID_GAP 2
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 10
+#define SETTINGS_VERSION 12
 typedef struct {
   uint8_t version;
   bool dark;
@@ -121,6 +130,10 @@ typedef struct {
   uint8_t hand_style;
   // Added in version 10: whether the small lines between the hour ticks show.
   bool minute_ticks;
+  // Added in version 11: true for the tall, condensed hour numbers.
+  bool condensed_numerals;
+  // Added in version 12.
+  bool shadows;
 } Settings;
 
 // How much of the settings each version saved, so older settings carry over
@@ -135,6 +148,8 @@ static int settings_size(uint8_t version) {
     case 7: return offsetof(Settings, number_font);
     case 8: return offsetof(Settings, hand_style);
     case 9: return offsetof(Settings, minute_ticks);
+    case 10: return offsetof(Settings, condensed_numerals);
+    case 11: return offsetof(Settings, shadows);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -162,11 +177,20 @@ static Layer *s_canvas;
 static StyledFont s_date_font;
 static StyledFont s_label_font;
 
+// A table of the hour numbers' images, by hour (12 first); 0 where no number
+// is drawn.
+#define NUMERAL_TABLE(prefix) { \
+  RESOURCE_ID_##prefix##_12, 0, RESOURCE_ID_##prefix##_2, RESOURCE_ID_##prefix##_3, \
+  RESOURCE_ID_##prefix##_4, 0, RESOURCE_ID_##prefix##_6, 0, RESOURCE_ID_##prefix##_8, \
+  RESOURCE_ID_##prefix##_9, RESOURCE_ID_##prefix##_10, 0, \
+}
+
 #if defined(PBL_COLOR)
 // Smooth images of the hour numbers, already turned to follow the dial and
-// made by tools/make_numerals.py, by hour (12 first); 0 where no number is
-// drawn.
+// made by tools/make_numerals.py.
 #if PBL_DISPLAY_WIDTH >= 200
+static const uint32_t CONDENSED_BLACK[12] = NUMERAL_TABLE(NUMERAL_CONDENSED_LARGE_BLACK);
+static const uint32_t CONDENSED_WHITE[12] = NUMERAL_TABLE(NUMERAL_CONDENSED_LARGE_WHITE);
 static const uint32_t NUMERAL_BLACK[12] = {
   RESOURCE_ID_NUMERAL_LARGE_BLACK_12, 0, RESOURCE_ID_NUMERAL_LARGE_BLACK_2,
   RESOURCE_ID_NUMERAL_LARGE_BLACK_3, RESOURCE_ID_NUMERAL_LARGE_BLACK_4, 0,
@@ -180,6 +204,8 @@ static const uint32_t NUMERAL_WHITE[12] = {
   RESOURCE_ID_NUMERAL_LARGE_WHITE_9, RESOURCE_ID_NUMERAL_LARGE_WHITE_10, 0,
 };
 #else
+static const uint32_t CONDENSED_BLACK[12] = NUMERAL_TABLE(NUMERAL_CONDENSED_SMALL_BLACK);
+static const uint32_t CONDENSED_WHITE[12] = NUMERAL_TABLE(NUMERAL_CONDENSED_SMALL_WHITE);
 static const uint32_t NUMERAL_BLACK[12] = {
   RESOURCE_ID_NUMERAL_SMALL_BLACK_12, 0, RESOURCE_ID_NUMERAL_SMALL_BLACK_2,
   RESOURCE_ID_NUMERAL_SMALL_BLACK_3, RESOURCE_ID_NUMERAL_SMALL_BLACK_4, 0,
@@ -193,6 +219,11 @@ static const uint32_t NUMERAL_WHITE[12] = {
   RESOURCE_ID_NUMERAL_SMALL_WHITE_9, RESOURCE_ID_NUMERAL_SMALL_WHITE_10, 0,
 };
 #endif
+#else
+// Hard-edged images of the condensed hour numbers, used as masks. These
+// watches draw their classic numbers as strokes.
+static const uint32_t CONDENSED_MASK[12] = NUMERAL_TABLE(NUMERAL_CONDENSED_MASK);
+#endif
 
 static GBitmap *s_numerals[12];
 
@@ -202,6 +233,32 @@ static void unload_numerals(void) {
       gbitmap_destroy(s_numerals[i]);
       s_numerals[i] = NULL;
     }
+  }
+}
+
+#if defined(PBL_COLOR)
+// Recolours a number's image, keeping its soft edges. The image comes back as
+// either a palette or a byte per pixel, depending on its shades.
+static void tint_numeral(GBitmap *bitmap, GColor color) {
+  const uint8_t rgb = color.argb & 0x3F;
+  const GBitmapFormat format = gbitmap_get_format(bitmap);
+  if (format == GBitmapFormat8Bit) {
+    const GSize size = gbitmap_get_bounds(bitmap).size;
+    const int stride = gbitmap_get_bytes_per_row(bitmap);
+    uint8_t *data = gbitmap_get_data(bitmap);
+    for (int y = 0; y < size.h; y++) {
+      for (int x = 0; x < size.w; x++) {
+        data[y * stride + x] = (data[y * stride + x] & 0xC0) | rgb;
+      }
+    }
+    return;
+  }
+  GColor *palette = gbitmap_get_palette(bitmap);
+  const int colours = format == GBitmapFormat1BitPalette ? 2
+                      : format == GBitmapFormat2BitPalette ? 4
+                      : format == GBitmapFormat4BitPalette ? 16 : 0;
+  for (int i = 0; palette && i < colours; i++) {
+    palette[i].argb = (palette[i].argb & 0xC0) | rgb;
   }
 }
 #endif
@@ -380,16 +437,20 @@ static void apply_palette(void) {
   s_palette.second_hand = s_palette.foreground;
 #endif
 
-#if defined(PBL_COLOR)
   // The numbers' images match the text colour; only those shown are loaded.
   unload_numerals();
-  const uint32_t *ids = s_settings.dark ? NUMERAL_WHITE : NUMERAL_BLACK;
-  for (int hour = 0; hour < 12; hour++) {
+#if defined(PBL_COLOR)
+  const uint32_t *ids = s_settings.condensed_numerals
+    ? (s_settings.dark ? CONDENSED_WHITE : CONDENSED_BLACK)
+    : (s_settings.dark ? NUMERAL_WHITE : NUMERAL_BLACK);
+#else
+  const uint32_t *ids = s_settings.condensed_numerals ? CONDENSED_MASK : NULL;
+#endif
+  for (int hour = 0; ids && hour < 12; hour++) {
     if (hour_has_numeral(hour) && ids[hour]) {
       s_numerals[hour] = gbitmap_create_with_resource(ids[hour]);
     }
   }
-#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -652,26 +713,37 @@ static NOINLINE void draw_ticks(GContext *ctx, GRect bounds, GPoint centre) {
   }
 }
 
-// The area an hour number covers, just inside the ticks. Colour watches use
-// the size of the number's image, and black-and-white watches a square as
+// How tall the hour numbers are, which the layout leaves room for.
+static int16_t numeral_height(void) {
+  return s_settings.condensed_numerals ? CONDENSED_HEIGHT : CLASSIC_HEIGHT;
+}
+
+// The area an hour number covers, just inside the ticks: the size of the
+// number's image, or on black-and-white watches, without one, a square as
 // wide as the number. Classic numbers turn with the dial, so their height
 // faces the ticks; the upright modern 3 and 9 face them with their width.
 static GRect numeral_rect(GRect bounds, GPoint centre, int hour) {
   const int32_t angle = TRIG_MAX_ANGLE * hour / 12;
   const int32_t edge = edge_distance(bounds, angle);
-#if defined(PBL_COLOR)
-  const GSize size = gbitmap_get_bounds(s_numerals[hour]).size;
-  const int16_t width = size.w;
-  const int16_t height = size.h;
+  int16_t width;
+  int16_t height;
+  if (s_numerals[hour]) {
+    const GSize size = gbitmap_get_bounds(s_numerals[hour]).size;
+    width = size.w;
+    height = size.h;
+  } else {
+#if !defined(PBL_COLOR)
+    const int length = hour == 0 || hour >= 10 ? 2 : 1;
+    width = (length * GLYPH_WIDTH + (length - 1) * GLYPH_GAP) * CLASSIC_HEIGHT / GLYPH_HEIGHT;
+    if (width < CLASSIC_HEIGHT) {
+      width = CLASSIC_HEIGHT;
+    }
+    height = width;
 #else
-  const int length = hour == 0 || hour >= 10 ? 2 : 1;
-  int16_t width = (length * GLYPH_WIDTH + (length - 1) * GLYPH_GAP) * CLASSIC_HEIGHT / GLYPH_HEIGHT;
-  if (width < CLASSIC_HEIGHT) {
-    width = CLASSIC_HEIGHT;
-  }
-  const int16_t height = width;
+    return GRectZero;
 #endif
-  const int32_t reach = s_settings.modern_numerals && hour % 6 ? width / 2 : CLASSIC_HEIGHT / 2;
+  }
+  const int32_t reach = s_settings.modern_numerals && hour % 6 ? width / 2 : numeral_height() / 2;
   const GPoint at = ray_point(centre, angle, edge - HOUR_TICK_LENGTH - NUMERAL_GAP - reach);
   return GRect(at.x - width / 2, at.y - height / 2, width, height);
 }
@@ -699,7 +771,7 @@ static bool line_covered(GPoint a, GPoint b, const GRect *covers, int count) {
 // Hour numbers and the index lines between them. Any that would run into the
 // information on the dial are left out.
 static NOINLINE void draw_hours(GContext *ctx, GRect bounds, GPoint centre, const GRect *covers,
-                       int cover_count) {
+                       int cover_count, int16_t shadow) {
   for (int hour = 0; hour < 12; hour++) {
     const int32_t angle = TRIG_MAX_ANGLE * hour / 12;
     if (!hour_has_numeral(hour)) {
@@ -709,21 +781,38 @@ static NOINLINE void draw_hours(GContext *ctx, GRect bounds, GPoint centre, cons
       if (!line_covered(inner, outer, covers, cover_count)) {
         graphics_context_set_stroke_color(ctx, s_palette.foreground);
         graphics_context_set_stroke_width(ctx, 1);
-        graphics_draw_line(ctx, inner, outer);
+        graphics_draw_line(ctx, GPoint(inner.x + shadow, inner.y + shadow),
+                           GPoint(outer.x + shadow, outer.y + shadow));
       }
       continue;
     }
 
-    const GRect area = numeral_rect(bounds, centre, hour);
+    GRect area = numeral_rect(bounds, centre, hour);
     if (rect_covered(area, covers, cover_count)) {
       continue;
     }
+    area.origin.x += shadow;
+    area.origin.y += shadow;
+    if (s_numerals[hour]) {
+      // The images are already turned and sized to fill the area. Colour ones
+      // carry their own transparency; the masks add to or clear the dial.
+      graphics_context_set_compositing_mode(ctx,
+        PBL_IF_COLOR_ELSE(GCompOpSet, s_settings.dark ? GCompOpOr : GCompOpClear));
 #if defined(PBL_COLOR)
-    // The images are already turned and sized to fill the area.
-    graphics_context_set_compositing_mode(ctx, GCompOpSet);
-    graphics_draw_bitmap_in_rect(ctx, s_numerals[hour], area);
-    graphics_context_set_compositing_mode(ctx, GCompOpAssign);
-#else
+      if (shadow) {
+        tint_numeral(s_numerals[hour], s_palette.foreground);
+      }
+#endif
+      graphics_draw_bitmap_in_rect(ctx, s_numerals[hour], area);
+      graphics_context_set_compositing_mode(ctx, GCompOpAssign);
+#if defined(PBL_COLOR)
+      if (shadow) {
+        tint_numeral(s_numerals[hour], s_settings.dark ? GColorWhite : GColorBlack);
+      }
+#endif
+      continue;
+    }
+#if !defined(PBL_COLOR)
     char text[3];
     snprintf(text, sizeof(text), "%d", hour == 0 ? 12 : hour);
     // The tops of the classic numbers face outward, except on the lower half
@@ -1259,6 +1348,72 @@ static NOINLINE void draw_hub(GContext *ctx, GPoint centre) {
   graphics_fill_circle(ctx, centre, 1);
 }
 
+// The hands and the hub, with the second hand, if shown, on top: a thin line
+// with a short tail, pinned by a dot over the other hands.
+static NOINLINE void draw_hands(GContext *ctx, GPoint centre, int32_t hour_angle,
+                                int16_t hour_length, int32_t minute_angle,
+                                int16_t minute_length, int32_t second_angle,
+                                int16_t second_length) {
+  draw_hand(ctx, centre, hour_angle, hour_length, HOUR_HAND_WIDTH, false);
+  draw_hand(ctx, centre, minute_angle, minute_length, MINUTE_HAND_WIDTH, true);
+  draw_hub(ctx, centre);
+
+  if (s_settings.second_hand) {
+    graphics_context_set_stroke_color(ctx, s_palette.second_hand);
+    graphics_context_set_stroke_width(ctx, 1);
+    graphics_draw_line(ctx, ray_point(centre, second_angle + TRIG_MAX_ANGLE / 2, LEAF_RADIUS * 2),
+                       ray_point(centre, second_angle, second_length));
+    graphics_context_set_fill_color(ctx, s_palette.second_hand);
+    graphics_fill_circle(ctx, centre, LEAF_RADIUS / 2);
+  }
+}
+
+// Everything drawn while this palette is set comes out as a flat shadow: grey
+// on colour watches, and in the text colour on black-and-white ones, which
+// soften_shadows then breaks up.
+static void set_shadow_palette(void) {
+  const GColor shadow = PBL_IF_COLOR_ELSE(s_settings.dark ? GColorDarkGray : GColorLightGray,
+                                          s_palette.foreground);
+  s_palette = (Palette) {
+    .background = shadow, .foreground = shadow, .leaf = shadow, .ring = shadow,
+    .ring_empty = shadow, .connected = shadow, .disconnected = shadow, .sun = shadow,
+    .rain = shadow, .second_hand = shadow,
+  };
+}
+
+#if !defined(PBL_COLOR)
+// Black-and-white watches have no grey, so every other pixel of the dial goes
+// back to the dial colour. It runs before anything else is drawn on the dial,
+// and leaves the black corners alone.
+static NOINLINE void soften_shadows(GContext *ctx, GRect bounds) {
+  GBitmap *frame = graphics_capture_frame_buffer(ctx);
+  if (!frame) {
+    return;
+  }
+  uint8_t *data = gbitmap_get_data(frame);
+  const int stride = gbitmap_get_bytes_per_row(frame);
+  const int top = bounds.origin.y;
+  const int bottom = top + bounds.size.h - 1;
+  for (int y = top; y <= bottom; y++) {
+    const int from_edge = y - top < bottom - y ? y - top : bottom - y;
+    const int rise = CORNER_RADIUS - from_edge;
+    const int inset = rise > 0
+      ? CORNER_RADIUS - isqrt(CORNER_RADIUS * CORNER_RADIUS - rise * rise) + 2 : 0;
+    const int right = bounds.origin.x + bounds.size.w - inset;
+    for (int x = bounds.origin.x + inset; x < right; x++) {
+      if ((x + y) & 1) {
+        if (s_settings.dark) {
+          data[y * stride + x / 8] &= ~(1 << (x % 8));
+        } else {
+          data[y * stride + x / 8] |= 1 << (x % 8);
+        }
+      }
+    }
+  }
+  graphics_release_frame_buffer(ctx, frame);
+}
+#endif
+
 // ---------------------------------------------------------------------------
 // Layout
 
@@ -1402,17 +1557,19 @@ typedef struct {
   GRect bounds;
   GPoint centre;
   Hand hands[2];
+  int32_t hand_angles[2];
   GRect numerals[12];  // Empty for hours without a number.
   GRect name;          // Empty when no name is shown.
 } Obstacles;
 
-// Whether an item could sit in a rectangle: inside the dial, clear of both
-// hands, the other items, the hour numbers and the name.
-static bool item_is_clear(Item item, GRect rect, const GRect *rects, const Obstacles *o) {
+// Whether an item could sit in a rectangle: inside the dial, clear of the
+// other items, the hour numbers and the name, and if asked, of both hands.
+static bool item_is_clear(Item item, GRect rect, const GRect *rects, const Obstacles *o,
+                          bool clear_of_hands) {
   if (!rect_in_dial(rect, o->bounds, o->centre)) {
     return false;
   }
-  for (int i = 0; i < 2; i++) {
+  for (int i = 0; clear_of_hands && i < 2; i++) {
     if (hand_crosses(&o->hands[i], rect)) {
       return false;
     }
@@ -1434,54 +1591,140 @@ static bool item_is_clear(Item item, GRect rect, const GRect *rects, const Obsta
   return true;
 }
 
-// Moves each item around the centre and outward, by as little as possible, to
-// where neither hand crosses it. With an item hidden, the others may go all
-// the way round the dial into the space it leaves. An item with nowhere clear
-// to go stays where it was, partly covered.
+// The shortest turn from one angle to another, either way.
+static int32_t turn_between(int32_t from, int32_t to) {
+  const int32_t turn = abs(from - to) % TRIG_MAX_ANGLE;
+  return turn > TRIG_MAX_ANGLE / 2 ? TRIG_MAX_ANGLE - turn : turn;
+}
+
+// Spreads the items evenly around the hands. The hands split the dial into two
+// spaces; each takes the share of the items that leaves them the most room,
+// spaced evenly across it. The items keep their order around the dial and take
+// the places nearest their usual ones, so they travel round with the hands.
+static NOINLINE void spread_items(GPoint *points, GRect *rects, const GRect *extents,
+                                  const Obstacles *o) {
+  static const Item ORDER[ITEM_COUNT] = { ITEM_HEALTH, ITEM_BATTERY, ITEM_DATE, ITEM_WEATHER };
+  Item items[ITEM_COUNT];
+  int shown = 0;
+  for (int i = 0; i < ITEM_COUNT; i++) {
+    if (item_shown(ORDER[i])) {
+      items[shown++] = ORDER[i];
+    }
+  }
+  if (!shown) {
+    return;
+  }
+
+  const int32_t first = o->hand_angles[0] < o->hand_angles[1] ? o->hand_angles[0]
+                                                              : o->hand_angles[1];
+  const int32_t second = o->hand_angles[0] < o->hand_angles[1] ? o->hand_angles[1]
+                                                               : o->hand_angles[0];
+  const int32_t between = second - first;
+  const int32_t around = TRIG_MAX_ANGLE - between;
+
+  int in_between = 0;
+  int32_t widest = -1;
+  for (int count = 0; count <= shown; count++) {
+    const int32_t inside = count ? between / count : TRIG_MAX_ANGLE;
+    const int32_t outside = count < shown ? around / (shown - count) : TRIG_MAX_ANGLE;
+    const int32_t room = inside < outside ? inside : outside;
+    if (room > widest) {
+      widest = room;
+      in_between = count;
+    }
+  }
+
+  // The places, clockwise, each in the middle of its share of the space.
+  int32_t angles[ITEM_COUNT];
+  for (int i = 0; i < shown; i++) {
+    angles[i] = i < in_between
+      ? first + between * (2 * i + 1) / (2 * in_between)
+      : second + around * (2 * (i - in_between) + 1) / (2 * (shown - in_between));
+    angles[i] %= TRIG_MAX_ANGLE;
+  }
+
+  // Which place the first item takes, for the least travel overall.
+  int start = 0;
+  int32_t least = INT32_MAX;
+  for (int offset = 0; offset < shown; offset++) {
+    int32_t travel = 0;
+    for (int i = 0; i < shown; i++) {
+      const GPoint home = points[items[i]];
+      travel += turn_between(atan2_lookup(home.x - o->centre.x, o->centre.y - home.y),
+                             angles[(i + offset) % shown]);
+    }
+    if (travel < least) {
+      least = travel;
+      start = offset;
+    }
+  }
+
+  const int32_t reach_x = edge_distance(o->bounds, TRIG_MAX_ANGLE / 4) * SPREAD_PERCENT / 100;
+  const int32_t reach_y = edge_distance(o->bounds, 0) * SPREAD_PERCENT / 100;
+  for (int i = 0; i < shown; i++) {
+    const int32_t angle = angles[(i + start) % shown];
+    const Item item = items[i];
+    points[item] = GPoint(o->centre.x + sin_lookup(angle) * reach_x / TRIG_MAX_RATIO,
+                          o->centre.y - cos_lookup(angle) * reach_y / TRIG_MAX_RATIO);
+    rects[item] = GRect(points[item].x + extents[item].origin.x,
+                        points[item].y + extents[item].origin.y,
+                        extents[item].size.w, extents[item].size.h);
+  }
+}
+
+// Finds the nearest clear place for an item: no move, then one step around
+// either way, and so on, with steps outward mixed in by their cost.
+static bool place_item(Item item, GPoint *points, GRect *rects, const GRect *extents,
+                       const Obstacles *o, int max_steps, bool clear_of_hands) {
+  const GPoint centre = o->centre;
+  const int32_t dx = points[item].x - centre.x;
+  const int32_t dy = points[item].y - centre.y;
+  for (int cost = 0; cost <= max_steps + AVOID_PUSHES * AVOID_PUSH_COST; cost++) {
+    for (int push = 0; push <= AVOID_PUSHES; push++) {
+      const int steps = cost - push * AVOID_PUSH_COST;
+      if (steps < 0 || steps > max_steps) {
+        continue;
+      }
+      for (int direction = 1; direction >= -1; direction -= 2) {
+        // No turn, and half a turn, are the same either way.
+        if ((steps == 0 || steps == AVOID_STEPS_ROUND) && direction < 0) {
+          continue;
+        }
+        const int32_t angle = steps * direction * AVOID_STEP;
+        const int32_t sin = sin_lookup(angle);
+        const int32_t cos = cos_lookup(angle);
+        const int32_t scale = 6 + push;
+        const GPoint at = GPoint(
+          centre.x + (dx * cos - dy * sin) / TRIG_MAX_RATIO * scale / 6,
+          centre.y + (dx * sin + dy * cos) / TRIG_MAX_RATIO * scale / 6);
+        const GRect rect = GRect(at.x + extents[item].origin.x, at.y + extents[item].origin.y,
+                                 extents[item].size.w, extents[item].size.h);
+        if (item_is_clear(item, rect, rects, o, clear_of_hands)) {
+          points[item] = at;
+          rects[item] = rect;
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+// Spreads the items around the hands, then moves any still in the way of
+// something around the centre and outward, by as little as possible. An item
+// with no place clear of the hands settles for one clear of everything else,
+// partly covered, so that it never hides an hour number or another item.
 static NOINLINE void avoid_hands(GPoint *points, GRect *rects, const GRect *extents,
                         const Obstacles *o) {
-  const GPoint centre = o->centre;
+  spread_items(points, rects, extents, o);
   int shown = 0;
   for (int item = 0; item < ITEM_COUNT; item++) {
     shown += item_shown(item) ? 1 : 0;
   }
   const int max_steps = shown < ITEM_COUNT ? AVOID_STEPS_ROUND : AVOID_STEPS;
   for (int item = 0; item < ITEM_COUNT; item++) {
-    if (!item_shown(item)) {
-      continue;
-    }
-    const int32_t dx = points[item].x - centre.x;
-    const int32_t dy = points[item].y - centre.y;
-    // Smallest move first: no move, then one step around either way, and so
-    // on, with steps outward mixed in by their cost.
-    bool placed = false;
-    for (int cost = 0; cost <= max_steps + AVOID_PUSHES * AVOID_PUSH_COST && !placed; cost++) {
-      for (int push = 0; push <= AVOID_PUSHES && !placed; push++) {
-        const int steps = cost - push * AVOID_PUSH_COST;
-        if (steps < 0 || steps > max_steps) {
-          continue;
-        }
-        for (int direction = 1; direction >= -1 && !placed; direction -= 2) {
-          // No turn, and half a turn, are the same either way.
-          if ((steps == 0 || steps == AVOID_STEPS_ROUND) && direction < 0) {
-            continue;
-          }
-          const int32_t angle = steps * direction * AVOID_STEP;
-          const int32_t sin = sin_lookup(angle);
-          const int32_t cos = cos_lookup(angle);
-          const int32_t scale = 6 + push;
-          const GPoint at = GPoint(
-            centre.x + (dx * cos - dy * sin) / TRIG_MAX_RATIO * scale / 6,
-            centre.y + (dx * sin + dy * cos) / TRIG_MAX_RATIO * scale / 6);
-          const GRect rect = GRect(at.x + extents[item].origin.x, at.y + extents[item].origin.y,
-                                   extents[item].size.w, extents[item].size.h);
-          if (item_is_clear(item, rect, rects, o)) {
-            points[item] = at;
-            rects[item] = rect;
-            placed = true;
-          }
-        }
-      }
+    if (item_shown(item) && !place_item(item, points, rects, extents, o, max_steps, true)) {
+      place_item(item, points, rects, extents, o, AVOID_STEPS_ROUND, false);
     }
   }
 }
@@ -1496,22 +1739,22 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   graphics_context_set_antialiased(ctx, true);
   fill_dial(ctx, layer_get_bounds(layer), bounds);
 
-  draw_ticks(ctx, bounds, centre);
-
   const int32_t reach_x = edge_distance(bounds, TRIG_MAX_ANGLE / 4);
   const int32_t reach_y = edge_distance(bounds, 0);
   const int16_t row = reach_y * 29 / 100;
 
-  // The name sits halfway between the 12 and the complications below it.
-  const int16_t below_numeral = reach_y - HOUR_TICK_LENGTH - NUMERAL_GAP - CLASSIC_HEIGHT;
+  // The name sits halfway between the 12 and the complications below it, in
+  // the smaller font where the tall numbers leave less room.
+  const int16_t below_numeral = reach_y - HOUR_TICK_LENGTH - NUMERAL_GAP - numeral_height();
   const int16_t above_row = row + (DATE_HEIGHT + LINE_GAP + LABEL_HEIGHT) / 2;
   const int16_t name_y = centre.y - (below_numeral + above_row) / 2;
+  const StyledFont *name_font = s_settings.condensed_numerals ? &s_label_font : &s_date_font;
+  const int16_t name_height = s_settings.condensed_numerals ? LABEL_HEIGHT : DATE_HEIGHT;
   GRect name = GRectZero;
   if (s_settings.dial_name[0]) {
-    draw_text_box(ctx, s_settings.dial_name, s_date_font.font, GPoint(centre.x, name_y),
-                  name_y - DATE_HEIGHT / 2, s_date_font.pad, DATE_HEIGHT, NAME_BOX_WIDTH);
-    const int16_t width = text_width_in(s_settings.dial_name, s_date_font.font, NAME_BOX_WIDTH);
-    name = GRect(centre.x - width / 2, name_y - DATE_HEIGHT / 2, width, DATE_HEIGHT);
+    const int16_t width = text_width_in(s_settings.dial_name, name_font->font,
+                                        NAME_BOX_WIDTH);
+    name = GRect(centre.x - width / 2, name_y - name_height / 2, width, name_height);
   }
 
   // The minute hand reaches the minute ticks; the hour and second hands are
@@ -1522,6 +1765,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   const int16_t hour_length = inside_ticks * 65 / 100;
   const int32_t minute_angle = TRIG_MAX_ANGLE * t->tm_min / 60;
   const int32_t hour_angle = TRIG_MAX_ANGLE * ((t->tm_hour % 12) * 60 + t->tm_min) / 720;
+  const int32_t second_angle = TRIG_MAX_ANGLE * t->tm_sec / 60;
 
   const int16_t side = reach_x * 32 / 100;
   // Kept off the stack, which drawing text in a bundled font needs.
@@ -1550,6 +1794,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
         make_hand(centre, hour_angle, hour_length, HOUR_HAND_WIDTH, false),
         make_hand(centre, minute_angle, minute_length, MINUTE_HAND_WIDTH, true),
       },
+      .hand_angles = { hour_angle, minute_angle },
       .name = name,
     };
     for (int hour = 0; hour < 12; hour++) {
@@ -1557,7 +1802,35 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
     }
     avoid_hands(points, covers, extents, &o);
   }
-  draw_hours(ctx, bounds, centre, covers, ITEM_COUNT + 1);
+
+  if (s_settings.shadows) {
+    // The shadows go down first, falling to the lower right, so that nothing
+    // on the dial is lost under them.
+    static Palette saved;
+    saved = s_palette;
+    set_shadow_palette();
+    const GPoint shadow_centre = GPoint(centre.x + SHADOW_OFFSET, centre.y + SHADOW_OFFSET);
+    draw_ticks(ctx, bounds, shadow_centre);
+    draw_hours(ctx, bounds, centre, covers, ITEM_COUNT + 1, SHADOW_OFFSET);
+    if (item_shown(ITEM_BATTERY)) {
+      graphics_context_set_fill_color(ctx, s_palette.foreground);
+      graphics_fill_circle(ctx, GPoint(points[ITEM_BATTERY].x + SHADOW_OFFSET,
+                                       points[ITEM_BATTERY].y + SHADOW_OFFSET), RING_RADIUS);
+    }
+    draw_hands(ctx, shadow_centre, hour_angle, hour_length, minute_angle, minute_length,
+               second_angle, inside_ticks + 2);
+    s_palette = saved;
+#if !defined(PBL_COLOR)
+    soften_shadows(ctx, bounds);
+#endif
+  }
+
+  draw_ticks(ctx, bounds, centre);
+  if (s_settings.dial_name[0]) {
+    draw_text_box(ctx, s_settings.dial_name, name_font->font, GPoint(centre.x, name_y),
+                  name_y - name_height / 2, name_font->pad, name_height, NAME_BOX_WIDTH);
+  }
+  draw_hours(ctx, bounds, centre, covers, ITEM_COUNT + 1, 0);
 
   if (item_shown(ITEM_WEATHER)) {
     draw_weather(ctx, points[ITEM_WEATHER]);
@@ -1574,20 +1847,8 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
     draw_battery_ring(ctx, points[ITEM_BATTERY]);
   }
 
-  draw_hand(ctx, centre, hour_angle, hour_length, HOUR_HAND_WIDTH, false);
-  draw_hand(ctx, centre, minute_angle, minute_length, MINUTE_HAND_WIDTH, true);
-  draw_hub(ctx, centre);
-
-  if (s_settings.second_hand) {
-    // A thin line with a short tail, pinned by a dot over the other hands.
-    const int32_t second_angle = TRIG_MAX_ANGLE * t->tm_sec / 60;
-    graphics_context_set_stroke_color(ctx, s_palette.second_hand);
-    graphics_context_set_stroke_width(ctx, 1);
-    graphics_draw_line(ctx, ray_point(centre, second_angle + TRIG_MAX_ANGLE / 2, LEAF_RADIUS * 2),
-                       ray_point(centre, second_angle, inside_ticks + 2));
-    graphics_context_set_fill_color(ctx, s_palette.second_hand);
-    graphics_fill_circle(ctx, centre, LEAF_RADIUS / 2);
-  }
+  draw_hands(ctx, centre, hour_angle, hour_length, minute_angle, minute_length, second_angle,
+             inside_ticks + 2);
 }
 
 // ---------------------------------------------------------------------------
@@ -1661,6 +1922,14 @@ static bool read_settings(DictionaryIterator *iterator) {
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_NUMERALS))) {
     s_settings.modern_numerals = tuple_int(tuple) == 1;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_HOUR_FONT))) {
+    s_settings.condensed_numerals = tuple_int(tuple) == 1;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_SHADOWS))) {
+    s_settings.shadows = tuple_int(tuple) != 0;
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_DISCONNECT_VIBE))) {
@@ -1835,9 +2104,7 @@ static void deinit(void) {
   accel_tap_service_unsubscribe();
 #endif
   window_destroy(s_window);
-#if defined(PBL_COLOR)
   unload_numerals();
-#endif
   unload_fonts();
 }
 

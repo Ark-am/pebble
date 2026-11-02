@@ -8,6 +8,7 @@ other styles are bundled fonts in resources/fonts:
     Serif    IBM Plex Serif
     Rounded  Varela Round
     Mono     DM Mono
+    Condensed  Antonio
 
 Each piece of text the face draws is a "role" in tools/fonts.json, with the
 font it normally uses and the visible height of its capitals (or digits)
@@ -37,6 +38,7 @@ STYLES = [
     ('SERIF', 'Serif', 'IBMPlexSerif-Regular.ttf', 'IBMPlexSerif-SemiBold.ttf'),
     ('ROUNDED', 'Rounded', 'VarelaRound-Regular.ttf', 'VarelaRound-Regular.ttf'),
     ('MONO', 'Mono', 'DMMono-Regular.ttf', 'DMMono-Medium.ttf'),
+    ('CONDENSED', 'Condensed', 'Antonio-Regular.ttf', 'Antonio-SemiBold.ttf'),
 ]
 
 PLATFORMS = {
@@ -161,7 +163,7 @@ def main():
 
 // Style 0 is the face's usual font; the bundled ones follow.
 enum { FONT_STYLE_PEBBLE, FONT_STYLE_SERIF, FONT_STYLE_ROUNDED, FONT_STYLE_MONO,
-       FONT_STYLE_COUNT };
+       FONT_STYLE_CONDENSED, FONT_STYLE_COUNT };
 #define CUSTOM_FONT_COUNT (FONT_STYLE_COUNT - 1)
 
 typedef struct {

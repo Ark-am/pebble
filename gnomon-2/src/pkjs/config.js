@@ -6,7 +6,8 @@ var FONT_OPTIONS = [
   { label: 'Default (the face\'s own fonts)', value: '0' },
   { label: 'Serif (IBM Plex Serif)', value: '1' },
   { label: 'Rounded (Varela Round)', value: '2' },
-  { label: 'Mono (DM Mono)', value: '3' }
+  { label: 'Mono (DM Mono)', value: '3' },
+  { label: 'Condensed (Antonio)', value: '4' }
 ];
 
 module.exports = [
@@ -42,11 +43,28 @@ module.exports = [
         ]
       },
       {
+        type: 'select',
+        messageKey: 'HOUR_FONT',
+        label: 'Hour number font',
+        defaultValue: '0',
+        options: [
+          { label: 'Classic: a narrow serif', value: '0' },
+          { label: 'Condensed: tall, straight-sided figures (Antonio)', value: '1' }
+        ]
+      },
+      {
         type: 'toggle',
         messageKey: 'MINUTE_TICKS',
         label: 'Show minute lines',
         description: 'The small lines between the hour marks.',
         defaultValue: true
+      },
+      {
+        type: 'toggle',
+        messageKey: 'SHADOWS',
+        label: 'Show shadows',
+        description: 'Soft shadows under the hour numbers, dial marks, battery ring and hands.',
+        defaultValue: false
       },
       {
         type: 'select',
@@ -149,10 +167,10 @@ module.exports = [
       {
         type: 'toggle',
         messageKey: 'AVOID_HANDS',
-        label: 'Move information clear of the hands',
-        description: 'Each item slides around the centre when a hand would cover it. ' +
-          'With fewer than four items shown, they can go all the way round into ' +
-          'the free space. When there is no room, an item stays where it is.',
+        label: 'Move information around the hands',
+        description: 'The items travel round the dial with the hands, spread evenly ' +
+          'through the free space, however many are shown. When there is no room, ' +
+          'an item may be partly covered by a hand.',
         defaultValue: false
       }
     ]

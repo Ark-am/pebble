@@ -47,7 +47,9 @@
       "SECOND_HAND_COLOR",
       "INFO_FONT",
       "HAND_STYLE",
-      "MINUTE_TICKS"
+      "MINUTE_TICKS",
+      "HOUR_FONT",
+      "SHADOWS"
     ],
     "resources": {
       "media": [
@@ -56,6 +58,190 @@
           "name": "IMAGE_MENU_ICON",
           "file": "images/menu_icon.png",
           "menuIcon": true
+        },
+        {
+          "type": "font",
+          "name": "FONT_SERIF_DATE_LARGE_18",
+          "file": "fonts/IBMPlexSerif-SemiBold.ttf",
+          "characterRegex": "[ -~\u00b0]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_ROUNDED_DATE_LARGE_19",
+          "file": "fonts/VarelaRound-Regular.ttf",
+          "characterRegex": "[ -~\u00b0]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_MONO_DATE_LARGE_19",
+          "file": "fonts/DMMono-Medium.ttf",
+          "characterRegex": "[ -~\u00b0]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_CONDENSED_DATE_LARGE_20",
+          "file": "fonts/Antonio-SemiBold.ttf",
+          "characterRegex": "[ -~\u00b0]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_SERIF_DATE_SMALL_16",
+          "file": "fonts/IBMPlexSerif-SemiBold.ttf",
+          "characterRegex": "[ -~\u00b0]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_ROUNDED_DATE_SMALL_17",
+          "file": "fonts/VarelaRound-Regular.ttf",
+          "characterRegex": "[ -~\u00b0]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_MONO_DATE_SMALL_17",
+          "file": "fonts/DMMono-Medium.ttf",
+          "characterRegex": "[ -~\u00b0]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_CONDENSED_DATE_SMALL_15",
+          "file": "fonts/Antonio-SemiBold.ttf",
+          "characterRegex": "[ -~\u00b0]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_SERIF_LABEL_LARGE_15",
+          "file": "fonts/IBMPlexSerif-Regular.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_ROUNDED_LABEL_LARGE_14",
+          "file": "fonts/VarelaRound-Regular.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_MONO_LABEL_LARGE_15",
+          "file": "fonts/DMMono-Regular.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_CONDENSED_LABEL_LARGE_15",
+          "file": "fonts/Antonio-Regular.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_SERIF_LABEL_SMALL_13",
+          "file": "fonts/IBMPlexSerif-Regular.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_ROUNDED_LABEL_SMALL_12",
+          "file": "fonts/VarelaRound-Regular.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_MONO_LABEL_SMALL_13",
+          "file": "fonts/DMMono-Regular.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_CONDENSED_LABEL_SMALL_12",
+          "file": "fonts/Antonio-Regular.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
         },
         {
           "type": "png",
@@ -346,139 +532,377 @@
           ]
         },
         {
-          "type": "font",
-          "name": "FONT_SERIF_DATE_LARGE_18",
-          "file": "fonts/IBMPlexSerif-SemiBold.ttf",
-          "characterRegex": "[ -~\u00b0]",
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_LARGE_BLACK_12",
+          "file": "images/numerals/numeral_condensed_large_black_12.png",
           "targetPlatforms": [
             "emery",
             "gabbro"
           ]
         },
         {
-          "type": "font",
-          "name": "FONT_ROUNDED_DATE_LARGE_19",
-          "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[ -~\u00b0]",
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_LARGE_BLACK_2",
+          "file": "images/numerals/numeral_condensed_large_black_2.png",
           "targetPlatforms": [
             "emery",
             "gabbro"
           ]
         },
         {
-          "type": "font",
-          "name": "FONT_MONO_DATE_LARGE_19",
-          "file": "fonts/DMMono-Medium.ttf",
-          "characterRegex": "[ -~\u00b0]",
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_LARGE_BLACK_3",
+          "file": "images/numerals/numeral_condensed_large_black_3.png",
           "targetPlatforms": [
             "emery",
             "gabbro"
           ]
         },
         {
-          "type": "font",
-          "name": "FONT_SERIF_DATE_SMALL_16",
-          "file": "fonts/IBMPlexSerif-SemiBold.ttf",
-          "characterRegex": "[ -~\u00b0]",
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_LARGE_BLACK_4",
+          "file": "images/numerals/numeral_condensed_large_black_4.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_LARGE_BLACK_6",
+          "file": "images/numerals/numeral_condensed_large_black_6.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_LARGE_BLACK_8",
+          "file": "images/numerals/numeral_condensed_large_black_8.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_LARGE_BLACK_9",
+          "file": "images/numerals/numeral_condensed_large_black_9.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_LARGE_BLACK_10",
+          "file": "images/numerals/numeral_condensed_large_black_10.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_LARGE_WHITE_12",
+          "file": "images/numerals/numeral_condensed_large_white_12.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_LARGE_WHITE_2",
+          "file": "images/numerals/numeral_condensed_large_white_2.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_LARGE_WHITE_3",
+          "file": "images/numerals/numeral_condensed_large_white_3.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_LARGE_WHITE_4",
+          "file": "images/numerals/numeral_condensed_large_white_4.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_LARGE_WHITE_6",
+          "file": "images/numerals/numeral_condensed_large_white_6.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_LARGE_WHITE_8",
+          "file": "images/numerals/numeral_condensed_large_white_8.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_LARGE_WHITE_9",
+          "file": "images/numerals/numeral_condensed_large_white_9.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_LARGE_WHITE_10",
+          "file": "images/numerals/numeral_condensed_large_white_10.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_SMALL_BLACK_12",
+          "file": "images/numerals/numeral_condensed_small_black_12.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_SMALL_BLACK_2",
+          "file": "images/numerals/numeral_condensed_small_black_2.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_SMALL_BLACK_3",
+          "file": "images/numerals/numeral_condensed_small_black_3.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_SMALL_BLACK_4",
+          "file": "images/numerals/numeral_condensed_small_black_4.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_SMALL_BLACK_6",
+          "file": "images/numerals/numeral_condensed_small_black_6.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_SMALL_BLACK_8",
+          "file": "images/numerals/numeral_condensed_small_black_8.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_SMALL_BLACK_9",
+          "file": "images/numerals/numeral_condensed_small_black_9.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_SMALL_BLACK_10",
+          "file": "images/numerals/numeral_condensed_small_black_10.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_SMALL_WHITE_12",
+          "file": "images/numerals/numeral_condensed_small_white_12.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_SMALL_WHITE_2",
+          "file": "images/numerals/numeral_condensed_small_white_2.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_SMALL_WHITE_3",
+          "file": "images/numerals/numeral_condensed_small_white_3.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_SMALL_WHITE_4",
+          "file": "images/numerals/numeral_condensed_small_white_4.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_SMALL_WHITE_6",
+          "file": "images/numerals/numeral_condensed_small_white_6.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_SMALL_WHITE_8",
+          "file": "images/numerals/numeral_condensed_small_white_8.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_SMALL_WHITE_9",
+          "file": "images/numerals/numeral_condensed_small_white_9.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "png",
+          "name": "NUMERAL_CONDENSED_SMALL_WHITE_10",
+          "file": "images/numerals/numeral_condensed_small_white_10.png",
+          "targetPlatforms": [
+            "basalt",
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "NUMERAL_CONDENSED_MASK_12",
+          "file": "images/numerals/numeral_condensed_mask_12.png",
+          "memoryFormat": "1Bit",
           "targetPlatforms": [
             "aplite",
-            "basalt",
-            "chalk",
             "diorite",
             "flint"
           ]
         },
         {
-          "type": "font",
-          "name": "FONT_ROUNDED_DATE_SMALL_17",
-          "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[ -~\u00b0]",
+          "type": "bitmap",
+          "name": "NUMERAL_CONDENSED_MASK_2",
+          "file": "images/numerals/numeral_condensed_mask_2.png",
+          "memoryFormat": "1Bit",
           "targetPlatforms": [
             "aplite",
-            "basalt",
-            "chalk",
             "diorite",
             "flint"
           ]
         },
         {
-          "type": "font",
-          "name": "FONT_MONO_DATE_SMALL_17",
-          "file": "fonts/DMMono-Medium.ttf",
-          "characterRegex": "[ -~\u00b0]",
+          "type": "bitmap",
+          "name": "NUMERAL_CONDENSED_MASK_3",
+          "file": "images/numerals/numeral_condensed_mask_3.png",
+          "memoryFormat": "1Bit",
           "targetPlatforms": [
             "aplite",
-            "basalt",
-            "chalk",
             "diorite",
             "flint"
           ]
         },
         {
-          "type": "font",
-          "name": "FONT_SERIF_LABEL_LARGE_15",
-          "file": "fonts/IBMPlexSerif-Regular.ttf",
-          "characterRegex": "[ -~]",
-          "targetPlatforms": [
-            "emery",
-            "gabbro"
-          ]
-        },
-        {
-          "type": "font",
-          "name": "FONT_ROUNDED_LABEL_LARGE_14",
-          "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[ -~]",
-          "targetPlatforms": [
-            "emery",
-            "gabbro"
-          ]
-        },
-        {
-          "type": "font",
-          "name": "FONT_MONO_LABEL_LARGE_15",
-          "file": "fonts/DMMono-Regular.ttf",
-          "characterRegex": "[ -~]",
-          "targetPlatforms": [
-            "emery",
-            "gabbro"
-          ]
-        },
-        {
-          "type": "font",
-          "name": "FONT_SERIF_LABEL_SMALL_13",
-          "file": "fonts/IBMPlexSerif-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "type": "bitmap",
+          "name": "NUMERAL_CONDENSED_MASK_4",
+          "file": "images/numerals/numeral_condensed_mask_4.png",
+          "memoryFormat": "1Bit",
           "targetPlatforms": [
             "aplite",
-            "basalt",
-            "chalk",
             "diorite",
             "flint"
           ]
         },
         {
-          "type": "font",
-          "name": "FONT_ROUNDED_LABEL_SMALL_12",
-          "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "type": "bitmap",
+          "name": "NUMERAL_CONDENSED_MASK_6",
+          "file": "images/numerals/numeral_condensed_mask_6.png",
+          "memoryFormat": "1Bit",
           "targetPlatforms": [
             "aplite",
-            "basalt",
-            "chalk",
             "diorite",
             "flint"
           ]
         },
         {
-          "type": "font",
-          "name": "FONT_MONO_LABEL_SMALL_13",
-          "file": "fonts/DMMono-Regular.ttf",
-          "characterRegex": "[ -~]",
+          "type": "bitmap",
+          "name": "NUMERAL_CONDENSED_MASK_8",
+          "file": "images/numerals/numeral_condensed_mask_8.png",
+          "memoryFormat": "1Bit",
           "targetPlatforms": [
             "aplite",
-            "basalt",
-            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "NUMERAL_CONDENSED_MASK_9",
+          "file": "images/numerals/numeral_condensed_mask_9.png",
+          "memoryFormat": "1Bit",
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "NUMERAL_CONDENSED_MASK_10",
+          "file": "images/numerals/numeral_condensed_mask_10.png",
+          "memoryFormat": "1Bit",
+          "targetPlatforms": [
+            "aplite",
             "diorite",
             "flint"
           ]

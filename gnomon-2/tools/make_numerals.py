@@ -7,6 +7,11 @@ instead. Each number is rendered large from Noto Serif Display Bold, narrowed to
 turned to follow the dial and scaled down, which leaves soft edges. Black and
 white versions cover the light and dark backgrounds.
 
+The condensed numbers are taller and come from Antonio. Black-and-white watches
+draw their classic numbers as strokes, but use images for the condensed ones:
+a single hard-edged mask each, drawn on or cleared from the dial for either
+background.
+
 Run from the project directory after changing the font, sizes or angles:
 
     python3 tools/make_numerals.py
@@ -20,18 +25,24 @@ import os
 
 from PIL import Image, ImageDraw, ImageFont
 
-FONT = '/usr/share/fonts/truetype/noto/NotoSerifDisplay-Bold.ttf'
-CONDENSE = 0.62  # Width scale that gives the tall, narrow classic numbers.
-EMBOLDEN = 2  # Extra outline, in hundredths of the digit height, so thin
-             # strokes survive being scaled down.
+# The styles: resource prefix, font, width scale (the classic numbers are
+# narrowed to a tall shape), extra outline in hundredths of the digit height so
+# thin strokes survive being scaled down, and the digit heights in pixels,
+# matching CLASSIC_HEIGHT and CONDENSED_HEIGHT in src/c/main.c, for the colour
+# watches of each size.
+STYLES = [
+    ('numeral', '/usr/share/fonts/truetype/noto/NotoSerifDisplay-Bold.ttf', 0.62, 2,
+     {'large': (20, ['emery', 'gabbro']), 'small': (15, ['basalt', 'chalk'])}),
+    ('numeral_condensed', 'resources/fonts/Antonio-Regular.ttf', 1, 0,
+     {'large': (30, ['emery', 'gabbro']), 'small': (20, ['basalt', 'chalk'])}),
+]
 SUPERSAMPLE = 8
 
-# Digit height in pixels, matching CLASSIC_HEIGHT in src/c/main.c, and the
-# colour watches each size is for.
-SIZES = {
-    'large': (20, ['emery', 'gabbro']),
-    'small': (15, ['basalt', 'chalk']),
-}
+# The masks for black-and-white watches.
+MASK_FONT = 'resources/fonts/Antonio-SemiBold.ttf'
+MASK_HEIGHT = 20
+MASK_PLATFORMS = ['aplite', 'diorite', 'flint']
+
 COLOURS = {'black': (0, 0, 0), 'white': (255, 255, 255)}
 
 # Clockwise turn for each number: tops face outward, except on the lower half
@@ -42,20 +53,24 @@ TURNS = {12: 0, 2: 60, 3: 0, 4: -60, 6: 0, 8: 60, 9: 0, 10: -60}
 OUT_DIR = 'resources/images/numerals'
 
 
-def render(text, height, colour, turn):
-    font = ImageFont.truetype(FONT, 100 * SUPERSAMPLE)
+def render_mask(font_file, condense, embolden, text, height, turn):
+    font = ImageFont.truetype(font_file, 100 * SUPERSAMPLE)
     canvas = Image.new('L', (len(text) * 80 * SUPERSAMPLE, 140 * SUPERSAMPLE), 0)
     ImageDraw.Draw(canvas).text((10 * SUPERSAMPLE, 0), text, font=font, fill=255,
-                                stroke_width=EMBOLDEN * SUPERSAMPLE, stroke_fill=255)
+                                stroke_width=embolden * SUPERSAMPLE, stroke_fill=255)
     mask = canvas.crop(canvas.getbbox())
     scale = height * SUPERSAMPLE / mask.height
-    mask = mask.resize((round(mask.width * scale * CONDENSE), height * SUPERSAMPLE),
+    mask = mask.resize((round(mask.width * scale * condense), height * SUPERSAMPLE),
                        Image.LANCZOS)
     # PIL turns counter-clockwise.
     mask = mask.rotate(-turn, resample=Image.BICUBIC, expand=True)
     size = (max(1, round(mask.width / SUPERSAMPLE)), max(1, round(mask.height / SUPERSAMPLE)))
-    mask = mask.resize(size, Image.LANCZOS)
-    image = Image.new('RGBA', size, colour + (0,))
+    return mask.resize(size, Image.LANCZOS)
+
+
+def render(style, text, height, colour, turn):
+    mask = render_mask(style[1], style[2], style[3], text, height, turn)
+    image = Image.new('RGBA', mask.size, colour + (0,))
     image.putalpha(mask)
     return image
 
@@ -63,18 +78,31 @@ def render(text, height, colour, turn):
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     entries = []
-    for size_name, (height, platforms) in SIZES.items():
-        for colour_name, colour in COLOURS.items():
-            for hour, turn in TURNS.items():
-                name = 'numeral_%s_%s_%d' % (size_name, colour_name, hour)
-                path = os.path.join(OUT_DIR, name + '.png')
-                render(str(hour), height, colour, turn).save(path)
-                entries.append({
-                    'type': 'png',
-                    'name': name.upper(),
-                    'file': os.path.relpath(path, 'resources'),
-                    'targetPlatforms': platforms,
-                })
+    for style in STYLES:
+        for size_name, (height, platforms) in style[4].items():
+            for colour_name, colour in COLOURS.items():
+                for hour, turn in TURNS.items():
+                    name = '%s_%s_%s_%d' % (style[0], size_name, colour_name, hour)
+                    path = os.path.join(OUT_DIR, name + '.png')
+                    render(style, str(hour), height, colour, turn).save(path)
+                    entries.append({
+                        'type': 'png',
+                        'name': name.upper(),
+                        'file': os.path.relpath(path, 'resources'),
+                        'targetPlatforms': platforms,
+                    })
+    for hour, turn in TURNS.items():
+        name = 'numeral_condensed_mask_%d' % hour
+        path = os.path.join(OUT_DIR, name + '.png')
+        mask = render_mask(MASK_FONT, 1, 0, str(hour), MASK_HEIGHT, turn)
+        mask.point(lambda alpha: 255 if alpha >= 128 else 0).convert('1').save(path)
+        entries.append({
+            'type': 'bitmap',
+            'name': name.upper(),
+            'file': os.path.relpath(path, 'resources'),
+            'memoryFormat': '1Bit',
+            'targetPlatforms': MASK_PLATFORMS,
+        })
 
     with open('package.json') as f:
         package = json.load(f)

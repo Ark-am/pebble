@@ -30,7 +30,7 @@ Open the watchface's settings in the Pebble phone app:
 | Second hand colour | Red (default), Orange, Amber, Green, Teal, Blue, Violet, Rose, or the same black or white as the text. Colour watches only. |
 | Name on the dial | Any text, shown below the 12 (default "Pebble"). Leave it empty to show no name. Long names are cut off with "…". |
 | Weather, Health, Date, Battery and connection | Each can be turned off to hide that item; all are on by default |
-| Move information clear of the hands | Off (default) or on. Each item slides around the centre, and outward if needed, when a hand would cover it. When fewer than four items are shown, the others can go all the way round the dial into the free space. When there is no room it stays where it is, partly covered. |
+| Move information around the hands | Off (default) or on. The items travel round the dial with the hands. The two hands split the dial into two spaces; each takes the share of the items that leaves them the most room, spaced evenly across it, however many items are shown. An item still in the way moves round or outward a little. When there is no room it may be partly covered by a hand, but it keeps clear of the hour numbers and the other items. |
 | Temperature | Celsius (default) or Fahrenheit |
 | Vibrate when the phone disconnects | On (default) or off |
 
@@ -44,6 +44,15 @@ Bold, narrowed to a condensed shape, into `resources/images/numerals/`; run it
 again after changing the font, sizes or angles. Black-and-white watches cannot
 show soft edges, so they draw the numbers as line strokes from glyph outlines
 in `src/c/main.c`, where only the digits 0, 1, 2, 3, 4, 6, 8 and 9 are defined.
+The taller condensed numbers are images on every watch, hard-edged masks on
+black-and-white ones, also made by `tools/make_numerals.py`.
+
+## Shadows
+
+**Show shadows**, off by default, adds shadows falling to the lower right under
+the hour numbers, dial marks, battery ring and hands. Colour watches draw them
+in grey; black-and-white watches have no grey, so theirs are a pattern of every
+other pixel.
 
 ## Weather
 
@@ -56,8 +65,7 @@ reading arrives, the temperature shows `--°`.
 ## Font styles
 
 **Information font** chooses the font for the date, weather, health
-information and the name on the dial. The hour numbers always keep their own
-style. It offers:
+information and the name on the dial. It offers:
 
 | Style | Font |
 | --- | --- |
@@ -65,6 +73,11 @@ style. It offers:
 | Serif | IBM Plex Serif |
 | Rounded | Varela Round |
 | Mono | DM Mono |
+| Condensed | Antonio |
+
+**Hour number font** chooses between the classic narrow serif and tall,
+straight-sided Antonio figures. The condensed numbers take up more of the dial,
+so the name on the dial shrinks to the smaller text size to make room.
 
 The bundled fonts are in `resources/fonts`, under the SIL Open Font License
 (the `OFL-*.txt` files there). Pebble's own fonts are very narrow, so the

@@ -10,7 +10,7 @@
 
 // Style 0 is the face's usual font; the bundled ones follow.
 enum { FONT_STYLE_PEBBLE, FONT_STYLE_SERIF, FONT_STYLE_ROUNDED, FONT_STYLE_MONO,
-       FONT_STYLE_COUNT };
+       FONT_STYLE_CONDENSED, FONT_STYLE_COUNT };
 #define CUSTOM_FONT_COUNT (FONT_STYLE_COUNT - 1)
 
 typedef struct {
@@ -51,21 +51,25 @@ static const CustomFont FONTS_DATE[CUSTOM_FONT_COUNT] = {
   { RESOURCE_ID_FONT_SERIF_DATE_LARGE_18, 3 },  // Serif 18px
   { RESOURCE_ID_FONT_ROUNDED_DATE_LARGE_19, 4 },  // Rounded 19px
   { RESOURCE_ID_FONT_MONO_DATE_LARGE_19, 4 },  // Mono 19px
+  { RESOURCE_ID_FONT_CONDENSED_DATE_LARGE_20, 3 },  // Condensed 20px
 };
 static const CustomFont FONTS_LABEL[CUSTOM_FONT_COUNT] = {
   { RESOURCE_ID_FONT_SERIF_LABEL_LARGE_15, 4 },  // Serif 15px
   { RESOURCE_ID_FONT_ROUNDED_LABEL_LARGE_14, 2 },  // Rounded 14px
   { RESOURCE_ID_FONT_MONO_LABEL_LARGE_15, 3 },  // Mono 15px
+  { RESOURCE_ID_FONT_CONDENSED_LABEL_LARGE_15, 2 },  // Condensed 15px
 };
 #else
 static const CustomFont FONTS_DATE[CUSTOM_FONT_COUNT] = {
   { RESOURCE_ID_FONT_SERIF_DATE_SMALL_16, 4 },  // Serif 16px
   { RESOURCE_ID_FONT_ROUNDED_DATE_SMALL_17, 5 },  // Rounded 17px
   { RESOURCE_ID_FONT_MONO_DATE_SMALL_17, 5 },  // Mono 17px
+  { RESOURCE_ID_FONT_CONDENSED_DATE_SMALL_15, 2 },  // Condensed 15px
 };
 static const CustomFont FONTS_LABEL[CUSTOM_FONT_COUNT] = {
   { RESOURCE_ID_FONT_SERIF_LABEL_SMALL_13, 4 },  // Serif 13px
   { RESOURCE_ID_FONT_ROUNDED_LABEL_SMALL_12, 3 },  // Rounded 12px
   { RESOURCE_ID_FONT_MONO_LABEL_SMALL_13, 3 },  // Mono 13px
+  { RESOURCE_ID_FONT_CONDENSED_LABEL_SMALL_12, 2 },  // Condensed 12px
 };
 #endif
