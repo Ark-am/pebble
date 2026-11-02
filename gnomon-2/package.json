@@ -49,7 +49,9 @@
       "HAND_STYLE",
       "MINUTE_TICKS",
       "HOUR_FONT",
-      "SHADOWS"
+      "SHADOWS",
+      "HAND_COLOR",
+      "HAND_FILL_COLOR"
     ],
     "resources": {
       "media": [

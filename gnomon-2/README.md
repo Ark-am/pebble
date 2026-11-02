@@ -26,6 +26,8 @@ Open the watchface's settings in the Pebble phone app:
 | Hour numbers | Classic: 12, 2, 4, 6, 8 and 10, turned to follow the dial (default). Modern: 12, 3, 6 and 9, upright. Both use the same condensed serif numbers. |
 | Hour and minute hands | Leaf (default): a fine line from a leaf-shaped base. Baton: slim solid bars with a grey inlay (on the larger watches) and pointed ends. Dauphine: faceted spears, half light and half dark. Breguet: fine needles that taper to a point through an open ring. Sword: narrow blades that widen two thirds of the way out, then sweep to a point. |
 | Show minute lines | On (default) or off. Off leaves only the hour ticks around the edge. |
+| Hour and minute hand colour | The same black or white as the text (default), or Red, Orange, Amber, Green, Teal, Blue, Violet or Rose. It colours the hands' outlines and solid parts and the ring of the centre cap. Colour watches only. |
+| Colour inside the hands | Grey (default), the same colour as the hands, or any of the hand colours, for the leaf, inlay, facet or blade, depending on the hand style, and the middle of the centre cap. Breguet hands are solid with an open ring, so they have no inside to colour. Colour watches only. |
 | Second hand | Off (default) or on. It updates every second, which uses more battery. |
 | Second hand colour | Red (default), Orange, Amber, Green, Teal, Blue, Violet, Rose, or the same black or white as the text. Colour watches only. |
 | Name on the dial | Any text, shown below the 12 (default "Pebble"). Leave it empty to show no name. Long names are cut off with "…". |

@@ -10,6 +10,26 @@ var FONT_OPTIONS = [
   { label: 'Condensed (Antonio)', value: '4' }
 ];
 
+// Colours for the hands, as decimal 0xRRGGBB; -1 follows the text colour.
+var HAND_COLORS = [
+  { label: 'Red', value: '16711680' },
+  { label: 'Orange', value: '16733440' },
+  { label: 'Amber', value: '16755200' },
+  { label: 'Green', value: '43520' },
+  { label: 'Teal', value: '43690' },
+  { label: 'Blue', value: '22015' },
+  { label: 'Violet', value: '11163135' },
+  { label: 'Rose', value: '16711765' },
+  { label: 'Same as the text (black or white)', value: '-1' }
+];
+
+// Colours for the inside of the hands: the same ones, plus the usual grey and
+// the colour chosen for the hands.
+var HAND_FILL_COLORS = [
+  { label: 'Grey', value: '-2' },
+  { label: 'Same as the hands', value: '-3' }
+].concat(HAND_COLORS);
+
 module.exports = [
   {
     type: 'heading',
@@ -88,6 +108,23 @@ module.exports = [
         ]
       },
       {
+        type: 'select',
+        messageKey: 'HAND_COLOR',
+        label: 'Hour and minute hand colour',
+        description: 'Colour watches only.',
+        defaultValue: '-1',
+        options: HAND_COLORS
+      },
+      {
+        type: 'select',
+        messageKey: 'HAND_FILL_COLOR',
+        label: 'Colour inside the hands',
+        description: 'For the leaf, inlay, facet or blade, and the centre cap, depending ' +
+          'on the hand style. Colour watches only.',
+        defaultValue: '-2',
+        options: HAND_FILL_COLORS
+      },
+      {
         type: 'toggle',
         messageKey: 'SECOND_HAND',
         label: 'Show second hand',
@@ -100,17 +137,7 @@ module.exports = [
         label: 'Second hand colour',
         description: 'Colour watches only.',
         defaultValue: '16711680',
-        options: [
-          { label: 'Red', value: '16711680' },
-          { label: 'Orange', value: '16733440' },
-          { label: 'Amber', value: '16755200' },
-          { label: 'Green', value: '43520' },
-          { label: 'Teal', value: '43690' },
-          { label: 'Blue', value: '22015' },
-          { label: 'Violet', value: '11163135' },
-          { label: 'Rose', value: '16711765' },
-          { label: 'Same as the text (black or white)', value: '-1' }
-        ]
+        options: HAND_COLORS
       },
       {
         type: 'input',

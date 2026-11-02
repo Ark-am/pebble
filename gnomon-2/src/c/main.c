@@ -102,7 +102,7 @@
 #define AVOID_GAP 2
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 12
+#define SETTINGS_VERSION 14
 typedef struct {
   uint8_t version;
   bool dark;
@@ -134,7 +134,18 @@ typedef struct {
   bool condensed_numerals;
   // Added in version 12.
   bool shadows;
+  // Added in version 13. 0 (clear) means the same colour as the text.
+  uint8_t hand_argb;
+  // Added in version 14: the inside of the hands, a colour or a HandFill.
+  uint8_t hand_fill_argb;
 } Settings;
+
+// Values of hand_fill_argb that are not colours, having no opacity bits.
+typedef enum {
+  HAND_FILL_GREY,
+  HAND_FILL_TEXT,
+  HAND_FILL_HAND,
+} HandFill;
 
 // How much of the settings each version saved, so older settings carry over
 // and the fields added since keep their defaults.
@@ -150,6 +161,8 @@ static int settings_size(uint8_t version) {
     case 9: return offsetof(Settings, minute_ticks);
     case 10: return offsetof(Settings, condensed_numerals);
     case 11: return offsetof(Settings, shadows);
+    case 12: return offsetof(Settings, hand_argb);
+    case 13: return offsetof(Settings, hand_fill_argb);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -168,6 +181,7 @@ typedef struct {
   GColor sun;
   GColor rain;
   GColor second_hand;
+  GColor hand;
 } Palette;
 
 static Palette s_palette;
@@ -417,7 +431,6 @@ static void apply_palette(void) {
   s_palette.background = dark ? GColorBlack : GColorWhite;
   s_palette.foreground = dark ? GColorWhite : GColorBlack;
 #if defined(PBL_COLOR)
-  s_palette.leaf = dark ? GColorDarkGray : GColorLightGray;
   s_palette.ring = GColorMintGreen;
   s_palette.ring_empty = GColorBlack;
   s_palette.connected = GColorPictonBlue;
@@ -426,6 +439,14 @@ static void apply_palette(void) {
   s_palette.rain = dark ? GColorPictonBlue : GColorBlue;
   s_palette.second_hand = s_settings.second_hand_argb
     ? (GColor) { .argb = s_settings.second_hand_argb } : s_palette.foreground;
+  s_palette.hand = s_settings.hand_argb
+    ? (GColor) { .argb = s_settings.hand_argb } : s_palette.foreground;
+  switch (s_settings.hand_fill_argb) {
+    case HAND_FILL_GREY: s_palette.leaf = dark ? GColorDarkGray : GColorLightGray; break;
+    case HAND_FILL_TEXT: s_palette.leaf = s_palette.foreground; break;
+    case HAND_FILL_HAND: s_palette.leaf = s_palette.hand; break;
+    default: s_palette.leaf = (GColor) { .argb = s_settings.hand_fill_argb }; break;
+  }
 #else
   s_palette.leaf = s_palette.background;
   s_palette.ring = s_palette.foreground;
@@ -435,6 +456,7 @@ static void apply_palette(void) {
   s_palette.sun = s_palette.foreground;
   s_palette.rain = s_palette.foreground;
   s_palette.second_hand = s_palette.foreground;
+  s_palette.hand = s_palette.foreground;
 #endif
 
   // The numbers' images match the text colour; only those shown are loaded.
@@ -1179,12 +1201,12 @@ static int16_t slim_half_width(bool minute) {
 // the dial colour all the way round, then itself over that, so the border
 // never cuts into the hand.
 static void hand_line(GContext *ctx, GPoint a, GPoint b, int16_t width, bool border) {
-  graphics_context_set_stroke_color(ctx, border ? s_palette.background : s_palette.foreground);
+  graphics_context_set_stroke_color(ctx, border ? s_palette.background : s_palette.hand);
   graphics_context_set_stroke_width(ctx, width + (border ? HAND_GAP * 2 : 0));
   graphics_draw_line(ctx, a, b);
 }
 
-// A filled shape with an outline in the text colour, the given width.
+// A filled shape with an outline in the hands' colour, the given width.
 static void hand_shape(GContext *ctx, GPoint *points, int count, GColor fill,
                        int16_t outline, bool border) {
   GPathInfo info = { .num_points = count, .points = points };
@@ -1195,7 +1217,7 @@ static void hand_shape(GContext *ctx, GPoint *points, int count, GColor fill,
   } else {
     graphics_context_set_fill_color(ctx, fill);
     gpath_draw_filled(ctx, path);
-    graphics_context_set_stroke_color(ctx, s_palette.foreground);
+    graphics_context_set_stroke_color(ctx, s_palette.hand);
     graphics_context_set_stroke_width(ctx, outline);
   }
   gpath_draw_outline(ctx, path);
@@ -1217,7 +1239,7 @@ static void hand_ring(GContext *ctx, GPoint at, int16_t radius, bool border) {
     graphics_context_set_fill_color(ctx, s_palette.background);
     graphics_fill_circle(ctx, at, radius);
   }
-  graphics_context_set_stroke_color(ctx, border ? s_palette.background : s_palette.foreground);
+  graphics_context_set_stroke_color(ctx, border ? s_palette.background : s_palette.hand);
   graphics_context_set_stroke_width(ctx, LEAF_OUTLINE + (border ? HAND_GAP * 2 : 0));
   graphics_draw_circle(ctx, at, radius);
 }
@@ -1238,7 +1260,7 @@ static void draw_hand_parts(GContext *ctx, GPoint centre, int32_t angle, int16_t
         hand_point(centre, angle, half, length - half * 2),
         hand_point(centre, angle, half, -r * 2),
       };
-      hand_shape(ctx, points, ARRAY_LENGTH(points), s_palette.foreground, 1, border);
+      hand_shape(ctx, points, ARRAY_LENGTH(points), s_palette.hand, 1, border);
       if (!border && half >= 3) {
         // A grey inlay down the outer part, like a watch's luminous strip.
         graphics_context_set_stroke_color(ctx, s_palette.leaf);
@@ -1265,10 +1287,10 @@ static void draw_hand_parts(GContext *ctx, GPoint centre, int32_t angle, int16_t
       }
       hand_fill(ctx, points, ARRAY_LENGTH(points), s_palette.leaf);
       GPoint facet[] = { points[0], tip, points[3] };
-      hand_fill(ctx, facet, ARRAY_LENGTH(facet), s_palette.foreground);
+      hand_fill(ctx, facet, ARRAY_LENGTH(facet), s_palette.hand);
       GPathInfo info = { .num_points = ARRAY_LENGTH(points), .points = points };
       GPath *outline = gpath_create(&info);
-      graphics_context_set_stroke_color(ctx, s_palette.foreground);
+      graphics_context_set_stroke_color(ctx, s_palette.hand);
       graphics_context_set_stroke_width(ctx, 1);
       gpath_draw_outline(ctx, outline);
       gpath_destroy(outline);
@@ -1283,7 +1305,7 @@ static void draw_hand_parts(GContext *ctx, GPoint centre, int32_t angle, int16_t
         tip,
         hand_point(centre, angle, half, -r * 2),
       };
-      hand_shape(ctx, needle, ARRAY_LENGTH(needle), s_palette.foreground, 1, border);
+      hand_shape(ctx, needle, ARRAY_LENGTH(needle), s_palette.hand, 1, border);
       hand_ring(ctx, hand_point(centre, angle, 0, length * 70 / 100), bulk, border);
       break;
     }
@@ -1341,10 +1363,10 @@ static NOINLINE void draw_hand(GContext *ctx, GPoint centre, int32_t angle, int1
 static NOINLINE void draw_hub(GContext *ctx, GPoint centre) {
   graphics_context_set_fill_color(ctx, s_palette.leaf);
   graphics_fill_circle(ctx, centre, LEAF_RADIUS + 1);
-  graphics_context_set_stroke_color(ctx, s_palette.foreground);
+  graphics_context_set_stroke_color(ctx, s_palette.hand);
   graphics_context_set_stroke_width(ctx, LEAF_OUTLINE);
   graphics_draw_circle(ctx, centre, LEAF_RADIUS + 1);
-  graphics_context_set_fill_color(ctx, s_palette.foreground);
+  graphics_context_set_fill_color(ctx, s_palette.hand);
   graphics_fill_circle(ctx, centre, 1);
 }
 
@@ -1377,7 +1399,7 @@ static void set_shadow_palette(void) {
   s_palette = (Palette) {
     .background = shadow, .foreground = shadow, .leaf = shadow, .ring = shadow,
     .ring_empty = shadow, .connected = shadow, .disconnected = shadow, .sun = shadow,
-    .rain = shadow, .second_hand = shadow,
+    .rain = shadow, .second_hand = shadow, .hand = shadow,
   };
 }
 
@@ -1968,6 +1990,22 @@ static bool read_settings(DictionaryIterator *iterator) {
     // A colour as 0xRRGGBB, or -1 for the same colour as the text.
     const int32_t color = tuple_int(tuple);
     s_settings.second_hand_argb = color < 0 ? 0 : GColorFromHEX(color).argb;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_HAND_COLOR))) {
+    // A colour as 0xRRGGBB, or -1 for the same colour as the text.
+    const int32_t color = tuple_int(tuple);
+    s_settings.hand_argb = color < 0 ? 0 : GColorFromHEX(color).argb;
+    changed = true;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_HAND_FILL_COLOR))) {
+    // A colour as 0xRRGGBB, or -1 for the text colour, -2 for grey or -3 for
+    // the hands' own colour.
+    const int32_t color = tuple_int(tuple);
+    s_settings.hand_fill_argb = color == -1 ? HAND_FILL_TEXT
+                                : color == -3 ? HAND_FILL_HAND
+                                : color < 0 ? HAND_FILL_GREY
+                                : GColorFromHEX(color).argb;
     changed = true;
   }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_HAND_STYLE))) {
