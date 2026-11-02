@@ -13,10 +13,9 @@ Each plate also holds one of twelve original avatars: Octavo, Sporelet,
 Lumoth, Hornback, Wyrmling, Driftjelly, Hootan, Coilfang, Stingtail, Oculon,
 Skyray and Pincera.
 
-- **Open the selector:** long press the screen on the Pebble Time 2 and Pebble
-  Round 2 (a quick tap or a wrist flick does nothing here), or flick your wrist
-  on watches without a touchscreen. The core's iris closes over the time, the
-  light runs round the plates from the hour and comes to rest on the last avatar
+- **Open the selector:** flick your wrist, or long press the screen on the
+  Pebble Time 2 and Pebble Round 2 (a quick tap does nothing here). The core's
+  iris closes over the time, the light runs round the plates from the hour and comes to rest on the last avatar
   chosen. Each avatar has its own hour plate, and its avatar springs up in the
   core with its name when the light lands there.
 - **Step through them:** on touch watches, swipe across the core: left or up

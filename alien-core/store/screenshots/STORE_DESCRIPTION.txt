@@ -2,7 +2,7 @@ Inspired by Ben 10's Omnitrix watch. Due to copyright and trademark infringement
 
 This watch face has a glowing core and inside sits a ring of twelve armoured plates, showing the time as bright digits or as hands, while the plate for the current hour lights up.
 
-Each plate holds one of twelve original avatars. Long press the screen, or flick your wrist on watches without a touchscreen, and a light runs round the plates like a selector dial. Swipe across the core, or drag round the plates, to scroll through them as the light steps round the hours (or flick again without a touchscreen), then tap the core or let it charge up to transform: the plates flash, sparks and shock rings fly out, and your avatar springs to life, blinking, flapping and scuttling, before the time returns. The face powers up plate by plate when it appears, and a light runs round the ring on the hour. It stays still the rest of the time, so it's easy on the battery.
+Each plate holds one of twelve original avatars. Flick your wrist, or long press the screen on touch watches, and a light runs round the plates like a selector dial. Swipe across the core, or drag round the plates, to scroll through them as the light steps round the hours (or flick again without a touchscreen), then tap the core or let it charge up to transform: the plates flash, sparks and shock rings fly out, and your avatar springs to life, blinking, flapping and scuttling, before the time returns. The face powers up plate by plate when it appears, and a light runs round the ring on the hour. It stays still the rest of the time, so it's easy on the battery.
 
 Features:
 - Digital or analog time in the glowing core, with the day and date
@@ -10,7 +10,7 @@ Features:
 - Your own name in the core, with a choice of three sizes and five font styles
 - Show the name, date, weather, steps, heart rate or battery above and below the time, with neat icons for each
 - The current hour's plate glows, with a dimmer plate for the minutes, so the ring doubles as a clock track
-- Twelve original animated avatars to scroll through and transform into, opened with a long press you can time yourself, or a wrist flick on watches without a touchscreen
+- Twelve original animated avatars to scroll through and transform into, opened with a wrist flick, or a long press you can time yourself on touch watches
 - A transformation animation with an iris, a running light and shock rings, which can be turned off
 - Sound effects on the Pebble Time 2 and Pebble 2 Duo: a ratcheting dial, a note for every plate, and a call for each avatar
 - Eight glow colours on colour watches: alien green, lime, cyan, blue, purple, red, orange and yellow

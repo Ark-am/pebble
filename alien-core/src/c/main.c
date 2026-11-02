@@ -11,9 +11,9 @@
 // plate for the current hour glows, with the current minute's five-minute
 // plate glowing more dimly.
 //
-// Each plate also holds one of twelve avatars. A long press on touch watches,
-// or a flick of the wrist on the others, opens the selector: a light runs round
-// the plates and the avatar of the plate it rests on shows in the core. Swipes
+// Each plate also holds one of twelve avatars. A flick of the wrist, or a long
+// press on touch watches, opens the selector: a light runs round the plates
+// and the avatar of the plate it rests on shows in the core. Swipes
 // or dragging round the plates, or further flicks without a touchscreen, step
 // the light through them. Tapping the core, or leaving it for a few seconds, transforms the face into that avatar: the core flares and opens
 // like an iris, the plates flash, and sparks and shock rings fly out. The
@@ -98,7 +98,7 @@ typedef struct {
   uint8_t version;
   uint8_t style;
   uint8_t glow_argb;
-  // Whether flicks (and taps on touch watches) open the avatars.
+  // Whether flicks (and long presses on touch watches) open the avatars.
   bool animation;
   // Added in version 2: the name in the core, empty to show none, with its
   // size and font style (see font_styles.h).
@@ -1355,15 +1355,21 @@ static void next_frame(void *context) {
 
 static bool touch_in_use(void);
 
-// On watches without a touchscreen, a flick opens the selector, steps through
-// the avatars, or goes back to choosing from the avatar. Touch does all of
-// that on the others, so a shake of the wrist does nothing there.
+// A flick opens the selector. On watches without a touchscreen it also steps
+// through the avatars and goes back to choosing from the avatar; touch does
+// those on the others, so flicks don't get in the way of swiping.
 static void tap_handler(AccelAxisType axis, int32_t direction) {
-  if (!s_settings.animation || touch_in_use()) {
+  if (!s_settings.animation) {
+    return;
+  }
+  if (s_state == STATE_TIME) {
+    open_selector();
+    return;
+  }
+  if (touch_in_use()) {
     return;
   }
   switch (s_state) {
-    case STATE_TIME: open_selector(); break;
     case STATE_SELECTING: step_avatar(true); break;
     case STATE_AVATAR: back_to_selecting(); break;
     default: break;

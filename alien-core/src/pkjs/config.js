@@ -124,8 +124,8 @@ module.exports = [
         type: 'toggle',
         messageKey: 'ANIMATION',
         label: 'Avatars and animations',
-        description: 'Long press the screen, or flick your wrist on watches without a ' +
-          'touchscreen, to choose one of twelve avatars and transform into it. The face ' +
+        description: 'Flick your wrist, or long press the screen on touch watches, to ' +
+          'choose one of twelve avatars and transform into it. The face ' +
           'also powers up when it appears, and a light runs round the ring on the hour. ' +
           'Touch uses a little more battery.',
         defaultValue: true
