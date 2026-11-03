@@ -13,21 +13,16 @@ Each plate also holds one of twelve original avatars: Octavo, Sporelet,
 Lumoth, Hornback, Wyrmling, Driftjelly, Hootan, Coilfang, Stingtail, Oculon,
 Skyray and Pincera.
 
-- **Open the selector:** flick your wrist, or long press the screen on the
-  Pebble Time 2 and Pebble Round 2 (a quick tap does nothing here). The core's
-  iris closes over the time, the light runs round the plates from the hour and comes to rest on the last avatar
-  chosen. Each avatar has its own hour plate, and its avatar springs up in the
-  core with its name when the light lands there.
-- **Step through them:** on touch watches, swipe across the core: left or up
-  for the next avatar, right or down for the one before. You can also drag
-  round the plates to move the light; it snaps to the nearest plate when you
-  let go. On other watches, flick again for the next avatar. The core's ring
+- **Open the selector:** flick your wrist. The core's iris closes over the
+  time, the light runs round the plates from the hour and comes to rest on the
+  last avatar chosen. Each avatar has its own hour plate, and its avatar springs
+  up in the core with its name when the light lands there.
+- **Step through them:** flick again for the next avatar. The core's ring
   charges up clockwise over the time set in Settings (three seconds to begin
-  with); each swipe, drag or flick starts it again.
-- **Transform:** tap the core, or let it finish charging. The iris closes, the
-  plates flash, sparks and shock rings fly out, and the iris opens on the
-  avatar, springing up large and glowing. A tap, or a flick on watches without
-  a touchscreen, goes back to choosing.
+  with); each flick starts it again.
+- **Transform:** let it finish charging. The iris closes, the plates flash,
+  sparks and shock rings fly out, and the iris opens on the avatar, springing
+  up large and glowing. A flick goes back to choosing.
 - **Back to the time:** after four seconds the iris closes again, the ring
   runs on to the hour's plate, and the time returns.
 
@@ -42,8 +37,9 @@ tail, Driftjelly's pulsing bell and Coilfang's flicking tongue.
 - **On the hour:** a light runs once round the ring.
 
 Nothing else moves while the time shows, so the face costs little battery.
-Touch watches keep their touch sensor on while the animations are turned on,
-which uses a little more.
+PebbleOS does not pass touch to watch faces, only to watch apps, so the
+avatars are worked by flicks on every watch, including the Pebble Time 2 and
+Pebble Round 2.
 
 The design is original; it does not use any character, logo or symbol from
 other works.
@@ -54,8 +50,8 @@ The Pebble Time 2 and Pebble 2 Duo have a speaker, so they add sound effects:
 
 - **Opening:** the light ratchets round the plates, its ticks spreading out as it
   slows, over a rising hum.
-- **Stepping:** each plate has its own note, on a scale round the ring, whether
-  you swipe, drag or flick.
+- **Stepping:** each plate has its own note, on a scale round the ring, with each
+  flick.
 - **Charging:** two pips over the last two seconds, rising towards the
   transformation.
 - **Transforming:** a surge up as the iris closes, a low boom as the plates
@@ -94,8 +90,6 @@ Quiet Time, or when the watch is muted.
   default), 5, 10, 15 or 30 seconds
 - **Keep the light on:** on by default; the backlight stays on from the selector
   opening until the time comes back, then goes off as usual
-- **Long press** (touch watches): how long to hold the screen to open the
-  avatars: 0.5, 1 (the default), 1.5, 2 or 3 seconds
 - **Sound effects** (watches with a speaker): Off, Avatars only (the default),
   or Avatars, power-up and on the hour
 - **Volume** (watches with a speaker): Quiet, Medium (the default) or Loud

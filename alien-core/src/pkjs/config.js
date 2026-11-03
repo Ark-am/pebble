@@ -124,10 +124,9 @@ module.exports = [
         type: 'toggle',
         messageKey: 'ANIMATION',
         label: 'Avatars and animations',
-        description: 'Flick your wrist, or long press the screen on touch watches, to ' +
-          'choose one of twelve avatars and transform into it. The face ' +
-          'also powers up when it appears, and a light runs round the ring on the hour. ' +
-          'Touch uses a little more battery.',
+        description: 'Flick your wrist to choose one of twelve avatars and transform ' +
+          'into it. The face ' +
+          'also powers up when it appears, and a light runs round the ring on the hour.',
         defaultValue: true
       },
       {
@@ -135,7 +134,7 @@ module.exports = [
         messageKey: 'SELECT_TIME',
         label: 'Time to choose',
         description: 'How long the selector waits before transforming into the avatar ' +
-          'showing. Each swipe, drag or flick starts it again.',
+          'showing. Each flick starts it again.',
         defaultValue: '3',
         options: [
           { label: '3 seconds', value: '3' },
@@ -152,21 +151,6 @@ module.exports = [
         description: 'While you choose an avatar and until the time comes back. Uses more ' +
           'battery while it is on.',
         defaultValue: true
-      },
-      {
-        type: 'select',
-        messageKey: 'LONG_PRESS',
-        label: 'Long press',
-        description: 'How long to hold the screen to open the avatars.',
-        defaultValue: '10',
-        capabilities: ['TOUCH'],
-        options: [
-          { label: '0.5 seconds', value: '5' },
-          { label: '1 second', value: '10' },
-          { label: '1.5 seconds', value: '15' },
-          { label: '2 seconds', value: '20' },
-          { label: '3 seconds', value: '30' }
-        ]
       }
     ]
   },

@@ -11,11 +11,10 @@
 // plate for the current hour glows, with the current minute's five-minute
 // plate glowing more dimly.
 //
-// Each plate also holds one of twelve avatars. A flick of the wrist, or a long
-// press on touch watches, opens the selector: a light runs round the plates
-// and the avatar of the plate it rests on shows in the core. Swipes
-// or dragging round the plates, or further flicks without a touchscreen, step
-// the light through them. Tapping the core, or leaving it for a few seconds, transforms the face into that avatar: the core flares and opens
+// Each plate also holds one of twelve avatars. A flick of the wrist opens the
+// selector: a light runs round the plates and the avatar of the plate it rests
+// on shows in the core. Further flicks step the light through them. Leaving it
+// for a few seconds transforms the face into that avatar: the core flares and opens
 // like an iris, the plates flash, and sparks and shock rings fly out. The
 // avatars are alive while they show: they blink, sway, flap and scuttle. After
 // a few seconds the time comes back.
@@ -85,7 +84,6 @@ enum { SOUND_OFF, SOUND_AVATARS, SOUND_ALL };
 
 #define VOLUME_MEDIUM 60
 
-#define DEFAULT_LONG_PRESS_TENTHS 10
 #define DEFAULT_SELECT_SECONDS 3
 
 // Values match the STYLE options in src/pkjs/config.js.
@@ -98,7 +96,7 @@ typedef struct {
   uint8_t version;
   uint8_t style;
   uint8_t glow_argb;
-  // Whether flicks (and long presses on touch watches) open the avatars.
+  // Whether flicks open the avatars.
   bool animation;
   // Added in version 2: the name in the core, empty to show none, with its
   // size and font style (see font_styles.h).
@@ -111,11 +109,11 @@ typedef struct {
   // 0 to 100.
   uint8_t sound;
   uint8_t sound_volume;
-  // Added in version 5: how long a press on the screen opens the selector,
-  // in tenths of a second.
+  // Added in version 5, no longer used, and kept so saved settings still line
+  // up.
   uint8_t long_press_tenths;
   // Added in version 6: how long the selector waits before transforming, in
-  // seconds, counted from the last touch or flick.
+  // seconds, counted from the last flick.
   uint8_t select_seconds;
   // Added in version 7: whether the backlight stays on from the selector
   // opening until the time comes back.
@@ -174,7 +172,7 @@ static bool s_daytime = true;
 // ---------------------------------------------------------------------------
 // States
 //
-// The face shows the time until a flick or tap opens the selector. Each
+// The face shows the time until a flick opens the selector. Each
 // state but the time runs on a timer and returns to the time when it is done.
 // Frames come every FRAME_MS while much is moving and every SLOW_FRAME_MS
 // while only an avatar is, and the animations follow the clock, so they take
@@ -199,14 +197,13 @@ typedef enum {
 #define POP_MS 300
 #define OPENING_MS 900
 #define STEP_MS 250
-#define SNAP_MS 200
 #define TRANSFORMING_MS 1000
 #define AVATAR_MS 4000
 #define CLOSING_MS 700
 
 static State s_state = STATE_TIME;
 static int32_t s_state_ms;        // Time spent in the current state.
-static int32_t s_idle_ms;         // Time since the last flick or touch.
+static int32_t s_idle_ms;         // Time since the last flick.
 static AppTimer *s_frame_timer;
 static int32_t s_last_frame;      // The clock at the last frame.
 static int32_t s_life_ms;         // Keeps the avatars moving between states.
@@ -240,7 +237,6 @@ static void settings_set_defaults(Settings *settings) {
     .time_format = TIME_FORMAT_WATCH,
     .sound = SOUND_AVATARS,
     .sound_volume = VOLUME_MEDIUM,
-    .long_press_tenths = DEFAULT_LONG_PRESS_TENTHS,
     .select_seconds = DEFAULT_SELECT_SECONDS,
     .keep_light = true,
     .top_slot = SLOT_NAME,
@@ -1239,11 +1235,10 @@ static void back_to_selecting(void) {
   PLAY(&SFX_BACK, SOUND_AVATARS);
 }
 
-// Steps to the next avatar by turning the ring back one plate, or to the
-// one before by turning it on one.
-static void step_avatar(bool forwards) {
+// Steps to the next avatar, moving the light on one plate.
+static void step_avatar(void) {
   const int32_t from = ring_moving() ? s_ring_to : s_ring;
-  ring_animate(from + (forwards ? -PLATE_ANGLE : PLATE_ANGLE), STEP_MS);
+  ring_animate(from - PLATE_ANGLE, STEP_MS);
   s_idle_ms = 0;
 }
 
@@ -1353,212 +1348,18 @@ static void next_frame(void *context) {
   layer_mark_dirty(s_canvas);
 }
 
-static bool touch_in_use(void);
-
-// A flick opens the selector. On watches without a touchscreen it also steps
-// through the avatars and goes back to choosing from the avatar; touch does
-// those on the others, so flicks don't get in the way of swiping.
+// A flick opens the selector, steps through the avatars, or goes back to
+// choosing from the avatar.
 static void tap_handler(AccelAxisType axis, int32_t direction) {
   if (!s_settings.animation) {
     return;
   }
-  if (s_state == STATE_TIME) {
-    open_selector();
-    return;
-  }
-  if (touch_in_use()) {
-    return;
-  }
   switch (s_state) {
-    case STATE_SELECTING: step_avatar(true); break;
+    case STATE_TIME: open_selector(); break;
+    case STATE_SELECTING: step_avatar(); break;
     case STATE_AVATAR: back_to_selecting(); break;
     default: break;
   }
-}
-
-// ---------------------------------------------------------------------------
-// Touch, on the Pebble Time 2 and Pebble Round 2
-//
-// A long press opens the selector. In the selector, a swipe across the core
-// steps to the next avatar (left or up) or the one before (right or down), a
-// tap on the core picks the avatar, and dragging round the plates turns the
-// ring, snapping to the nearest plate when let go. A tap or drag on the avatar
-// goes back to choosing.
-
-#if defined(_PBL_API_EXISTS_touch_service_subscribe)
-#define DRAG_START_PIXELS 6
-// How far a swipe must go to step to another avatar.
-#define SWIPE_PIXELS 20
-// How far a finger can wander and still be a long press.
-#define LONG_PRESS_SLOP_PIXELS 12
-
-static bool s_touch_subscribed;
-static AppTimer *s_press_timer;
-static bool s_touching;
-static bool s_dragging;
-static bool s_on_plates;    // The touch started on the plates, not the core.
-static GPoint s_touch_start;
-static int32_t s_touch_angle;
-
-static GPoint dial_centre(void) {
-  const GRect bounds = layer_get_unobstructed_bounds(s_canvas);
-  return grect_center_point(&bounds);
-}
-
-static int32_t touch_angle(GPoint at) {
-  const GPoint centre = dial_centre();
-  return atan2_lookup(at.y - centre.y, at.x - centre.x);
-}
-
-static bool in_core(GPoint at) {
-  const GPoint centre = dial_centre();
-  const GRect bounds = layer_get_unobstructed_bounds(s_canvas);
-  const int16_t short_side = bounds.size.w < bounds.size.h ? bounds.size.w : bounds.size.h;
-  const int16_t inner = (short_side / 2 - 2) * CORE_INNER / 100;
-  const int32_t dx = at.x - centre.x;
-  const int32_t dy = at.y - centre.y;
-  return dx * dx + dy * dy <= inner * inner;
-}
-
-static void cancel_long_press(void) {
-  if (s_press_timer) {
-    app_timer_cancel(s_press_timer);
-    s_press_timer = NULL;
-  }
-}
-
-static void long_press_held(void *context) {
-  s_press_timer = NULL;
-  if (s_state == STATE_TIME && s_settings.animation) {
-    open_selector();
-  }
-}
-
-// While the time shows, the only touch that counts is a long press. It is
-// deliberate enough to count on the idle face too, which marks its touches
-// non-navigational, or it would not work until the watch was woken. Those
-// marks are ignored in the selector too, which the long press has opened.
-static void touch_on_time(const TouchEvent *event, GPoint at) {
-  switch (event->type) {
-    case TouchEvent_Touchdown:
-      cancel_long_press();
-      s_touch_start = at;
-      s_press_timer = app_timer_register(s_settings.long_press_tenths * 100, long_press_held,
-                                         NULL);
-      break;
-    case TouchEvent_PositionUpdate:
-      if (abs(at.x - s_touch_start.x) + abs(at.y - s_touch_start.y) > LONG_PRESS_SLOP_PIXELS) {
-        cancel_long_press();
-      }
-      break;
-    case TouchEvent_Liftoff:
-      cancel_long_press();
-      break;
-  }
-}
-
-static void touch_handler(const TouchEvent *event, void *context) {
-  const GPoint at = GPoint(event->x, event->y);
-  if (s_state == STATE_TIME) {
-    touch_on_time(event, at);
-    return;
-  }
-  switch (event->type) {
-    case TouchEvent_Touchdown:
-      s_touching = true;
-      s_dragging = false;
-      s_touch_start = at;
-      s_touch_angle = touch_angle(at);
-      s_on_plates = !in_core(at);
-      break;
-    case TouchEvent_PositionUpdate: {
-      if (!s_touching) {
-        break;
-      }
-      if (!s_dragging && abs(at.x - s_touch_start.x) + abs(at.y - s_touch_start.y)
-          >= DRAG_START_PIXELS) {
-        s_dragging = true;
-        if (s_state == STATE_AVATAR) {
-          back_to_selecting();
-        }
-      }
-      if (s_dragging && s_state == STATE_SELECTING) {
-        s_idle_ms = 0;
-      }
-      if (s_dragging && s_state == STATE_SELECTING && s_on_plates) {
-        // Move the light by how far the finger has gone round the centre.
-        const int32_t angle = touch_angle(at);
-        int32_t turn = angle - s_touch_angle;
-        if (turn > TRIG_MAX_ANGLE / 2) {
-          turn -= TRIG_MAX_ANGLE;
-        } else if (turn < -TRIG_MAX_ANGLE / 2) {
-          turn += TRIG_MAX_ANGLE;
-        }
-        s_touch_angle = angle;
-        s_ring -= turn;
-        s_ring_duration = 0;
-        layer_mark_dirty(s_canvas);
-      }
-      break;
-    }
-    case TouchEvent_Liftoff:
-      if (!s_touching) {
-        break;
-      }
-      s_touching = false;
-      if (s_dragging) {
-        const int16_t dx = at.x - s_touch_start.x;
-        const int16_t dy = at.y - s_touch_start.y;
-        const int16_t across = abs(dx) > abs(dy) ? dx : dy;
-        if (s_state == STATE_SELECTING && !s_on_plates) {
-          if (abs(across) >= SWIPE_PIXELS) {
-            step_avatar(across < 0);
-          }
-        } else if (s_state == STATE_SELECTING) {
-          // Snap to the nearest plate.
-          const int32_t steps = (s_ring + (s_ring >= 0 ? PLATE_ANGLE / 2 : -PLATE_ANGLE / 2))
-            / PLATE_ANGLE;
-          ring_animate(steps * PLATE_ANGLE, SNAP_MS);
-          s_idle_ms = 0;
-        }
-        break;
-      }
-      if (s_state == STATE_SELECTING) {
-        if (in_core(at)) {
-          transform();
-        }
-      } else if (s_state == STATE_AVATAR) {
-        back_to_selecting();
-      }
-      break;
-  }
-}
-#endif
-
-// Whether this watch opens the selector by touch.
-static bool touch_in_use(void) {
-#if defined(_PBL_API_EXISTS_touch_service_subscribe)
-  return s_touch_subscribed;
-#else
-  return false;
-#endif
-}
-
-// Touch is read only while the avatars are turned on, as the touch sensor
-// stays on while anything listens to it.
-static void update_touch(void) {
-#if defined(_PBL_API_EXISTS_touch_service_subscribe)
-  const bool wanted = s_settings.animation && touch_service_is_enabled();
-  if (wanted == s_touch_subscribed) {
-    return;
-  }
-  s_touch_subscribed = wanted;
-  if (wanted) {
-    touch_service_subscribe(touch_handler, NULL);
-  } else {
-    touch_service_unsubscribe();
-  }
-#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -1657,12 +1458,6 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
     s_settings.select_seconds = seconds >= 3 && seconds <= 60 ? seconds : DEFAULT_SELECT_SECONDS;
     changed = true;
   }
-  if ((tuple = dict_find(iterator, MESSAGE_KEY_LONG_PRESS))) {
-    const int32_t tenths = tuple_int(tuple);
-    s_settings.long_press_tenths = tenths >= 3 && tenths <= 50 ? tenths
-                                                               : DEFAULT_LONG_PRESS_TENTHS;
-    changed = true;
-  }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_SOUND_VOLUME))) {
     const int32_t volume = tuple_int(tuple);
     s_settings.sound_volume = volume >= 0 && volume <= 100 ? volume : VOLUME_MEDIUM;
@@ -1680,7 +1475,6 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
     persist_write_data(PERSIST_KEY_SETTINGS, &s_settings, sizeof(s_settings));
     apply_palette();
     load_name_font();
-    update_touch();
     update_light();
     layer_mark_dirty(s_canvas);
   }
@@ -1754,7 +1548,6 @@ static void init(void) {
 
   tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
   accel_tap_service_subscribe(tap_handler);
-  update_touch();
 #if !defined(PBL_PLATFORM_APLITE)
   unobstructed_area_service_subscribe((UnobstructedAreaHandlers) {
     .change = unobstructed_change,
@@ -1771,11 +1564,6 @@ static void deinit(void) {
   }
   tick_timer_service_unsubscribe();
   accel_tap_service_unsubscribe();
-#if defined(_PBL_API_EXISTS_touch_service_subscribe)
-  if (s_touch_subscribed) {
-    touch_service_unsubscribe();
-  }
-#endif
 #if defined(PBL_SPEAKER)
   speaker_stop();
 #endif
