@@ -1,0 +1,16 @@
+Minimalist is primarily for the Pebble 2 Duo (or watches with that resolution). Choose an analog dial with twelve hour marks and two slender hands, or a digital face laid out like a classic LCD watch, with the day, month and date above the time.
+
+Features:
+- Analog or digital style
+- Five hand shapes: baton, dauphine, skeleton, lollipop and leaf
+- Long marks or numbers at 12, 3, 6 and 9 on the analog dial
+- Four font styles for all the text: condensed, serif, rounded and mono
+- Dark or light background
+- Day and date in small capitals, or nothing but the time
+- Your own name on the face, PEBBLE by default, or none at all
+- 12-hour or 24-hour time, with or without a leading zero
+
+Set everything up through the Pebble phone app. The watch keeps your choices, so the face works without the phone nearby.
+
+Created by Ark-am LLC. Discover our work and custom software development services:
+https://ark-am.com/
