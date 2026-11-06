@@ -27,7 +27,7 @@ A growing collection of independent apps and watch faces for the Pebble watches.
 | [Retro F-91W](./retro-f91w/) | Digital face after the classic F-91W: a segmented LCD, a top row for the date, weather, steps or heart rate, and your own brand and labels, LCD and case colours. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Alien Core](./alien-core/) | Alien-tech face with a glowing core inside a ring of armoured plates, digital or analog time, and twelve original avatars to scroll through and transform into by wrist flick or touch. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [World Clock](./world-clock/) | Digital face with the current local time being large and at the top. Beside is the date, and below are the times of two other cities. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
-| [Minimalist](./minimalist/) | Quiet face with an analog dial of twelve hour marks and five hand shapes, or a digital layout like Retro F-91W's, in four font styles, dark or light, with an optional date. | Flint |
+| [Minimalist](./minimalist/) | Quiet face with an analog dial of twelve hour marks and five hand shapes, or a digital layout like Retro F-91W's, in four font styles, dark or light, with an optional date and weather, steps and battery widgets. | Flint |
 
 Follow a project's link for its requirements, build instructions, testing steps, and platform-specific notes, but please try not to follow because we are still new to Python and C languages. 
 

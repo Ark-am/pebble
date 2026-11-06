@@ -4,8 +4,10 @@
 // in one of five shapes. Digital is laid out like Retro F-91W's LCD: a top row
 // with the day and the month and date, and the time below across the width,
 // with PM to its right in 12-hour time. Both styles can hide the date. Both show a
-// name, PEBBLE unless the wearer changes or clears it, and all the text comes
-// in one of four font styles (src/c/font_styles.h). The settings come from the
+// name, PEBBLE unless the wearer changes or clears it, and up to two widgets
+// (weather, steps or battery): beside the centre on the dial, or in a row
+// below the digital time. All the text comes in one of four font
+// styles (src/c/font_styles.h). The settings come from the
 // phone (src/pkjs/config.js) and are kept on the watch.
 
 #include <pebble.h>
@@ -17,14 +19,22 @@
 enum { STYLE_ANALOG = 0, STYLE_DIGITAL = 1 };
 enum { FORMAT_WATCH = 0, FORMAT_12H = 1, FORMAT_24H = 2 };
 enum { HANDS_BATON, HANDS_DAUPHINE, HANDS_SKELETON, HANDS_LOLLIPOP, HANDS_LEAF, HANDS_COUNT };
+// Values match WIDGET_OPTIONS in src/pkjs/config.js.
+// The Pebble 2 Duo has no heart-rate sensor, so there is no heart-rate widget.
+enum { WIDGET_NONE, WIDGET_WEATHER, WIDGET_STEPS, WIDGET_BATTERY, WIDGET_COUNT };
+enum { WIDGET_LEFT, WIDGET_RIGHT };
 
 #define PERSIST_KEY_SETTINGS 1
-#define SETTINGS_VERSION 4
+#define PERSIST_KEY_TEMPERATURE 2
+#define PERSIST_KEY_CONDITION 3
+#define PERSIST_KEY_DAYTIME 4
+#define SETTINGS_VERSION 5
 // Version 1 ended before the name, version 2 before the numbers, and version 3
-// before the font and hand styles.
+// before the font and hand styles, and version 4 before the widgets.
 #define SETTINGS_V1_SIZE offsetof(Settings, brand)
 #define SETTINGS_V2_SIZE offsetof(Settings, numbers)
 #define SETTINGS_V3_SIZE offsetof(Settings, font_style)
+#define SETTINGS_V4_SIZE offsetof(Settings, widgets)
 #define BRAND_LENGTH 16
 
 // Saved with persist_write_data, so only append fields and bump the version.
@@ -39,6 +49,7 @@ typedef struct {
   bool numbers;  // Numerals in place of the analog marks at 12, 3, 6 and 9.
   uint8_t font_style;
   uint8_t hand_style;
+  uint8_t widgets[2];  // Left and right.
 } Settings;
 
 static Settings s_settings = {
@@ -52,7 +63,16 @@ static Settings s_settings = {
   .numbers = false,
   .font_style = FONT_STYLE_CONDENSED,
   .hand_style = HANDS_BATON,
+  .widgets = { WIDGET_NONE, WIDGET_NONE },
 };
+
+// The weather, as the phone last sent it (src/pkjs/index.js); the watch asks
+// for it again every WEATHER_REFRESH_MINUTES while a widget shows it.
+#define WEATHER_REFRESH_MINUTES 30
+#define NO_TEMPERATURE INT32_MIN
+static int32_t s_temperature = NO_TEMPERATURE;
+static char s_condition[8];
+static bool s_daytime = true;
 
 // ---------------------------------------------------------------- Layout
 
@@ -88,6 +108,15 @@ static Settings s_settings = {
 // analog dial, and the top of the date's this far below it.
 #define ANALOG_BRAND_OFFSET 31
 #define ANALOG_DATE_OFFSET 31
+
+// Widgets: an icon WIDGET_ICON_EXTRA px taller than the name's capitals and
+// the value in the name's font, WIDGET_GAP apart. On the dial they sit left
+// and right of the centre, between the hub and the marks or numerals, keeping
+// WIDGET_GAP from both, with the icon above the value. On the digital face
+// they sit in a row ROW_GAP below the time, at its left and right edges, with
+// the icon before the value.
+#define WIDGET_ICON_EXTRA 5
+#define WIDGET_GAP 3
 
 // The name: BRAND_GAP above the digital top row, and BRAND_MARGIN in from the
 // screen's sides.
@@ -129,6 +158,7 @@ static int16_t s_digit_w[2];
 static int16_t s_colon_w[2];
 static int16_t s_colon_box[2];  // The colon's own width, which may be wider.
 static int16_t s_pm_w;
+static int16_t s_numeral_w;  // The wider of the dial's 3 and 9.
 
 static const char *const DAYS[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
 static const char *const MONTHS[] = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN",
@@ -254,6 +284,245 @@ static void draw_hand(GContext *ctx, GPoint centre, int32_t angle, bool minute) 
   }
 }
 
+// ---------------------------------------------------------------- Widgets
+//
+// Small icons drawn in a square of the given size, in percentages of that size
+// so they scale with the text, as in Alien Core.
+
+typedef enum {
+  ICON_NONE,
+  ICON_STEPS,
+  ICON_BATTERY,
+  ICON_SUN,
+  ICON_MOON,
+  ICON_CLOUD,
+  ICON_RAIN,
+  ICON_SNOW,
+  ICON_STORM,
+  ICON_FOG,
+} Icon;
+
+#define PC(origin, percent) ((origin) + size * (percent) / 100)
+
+static void icon_dot(GContext *ctx, GPoint at, int16_t size, int x, int y, int radius) {
+  const int16_t r = size * radius / 100;
+  graphics_fill_circle(ctx, GPoint(PC(at.x, x), PC(at.y, y)), r > 0 ? r : 1);
+}
+
+static void icon_line(GContext *ctx, GPoint at, int16_t size, int x0, int y0, int x1, int y1) {
+  graphics_draw_line(ctx, GPoint(PC(at.x, x0), PC(at.y, y0)), GPoint(PC(at.x, x1), PC(at.y, y1)));
+}
+
+// A cloud across the top of the square, with room for weather below it.
+static void icon_cloud(GContext *ctx, GPoint at, int16_t size) {
+  icon_dot(ctx, at, size, 28, 42, 22);
+  icon_dot(ctx, at, size, 58, 30, 28);
+  icon_dot(ctx, at, size, 78, 46, 18);
+  graphics_fill_rect(ctx, GRect(PC(at.x, 12), PC(at.y, 42), size * 76 / 100, size * 22 / 100), 0,
+                     GCornerNone);
+}
+
+// Two footprints, one a step ahead of the other.
+static void icon_steps(GContext *ctx, GPoint at, int16_t size) {
+  icon_dot(ctx, at, size, 28, 58, 19);
+  icon_dot(ctx, at, size, 28, 88, 11);
+  icon_dot(ctx, at, size, 72, 26, 19);
+  icon_dot(ctx, at, size, 72, 56, 11);
+}
+
+// A battery on its side, wider than its square, filled to the charge.
+static void icon_battery(GContext *ctx, GPoint at, int16_t size) {
+  const int16_t width = size * 3 / 2 - 2;
+  const int16_t height = size * 7 / 10;
+  const GRect body = GRect(at.x, at.y + (size - height) / 2, width, height);
+  const int percent = battery_state_service_peek().charge_percent;
+  graphics_draw_rect(ctx, body);
+  graphics_fill_rect(ctx, GRect(body.origin.x + 2, body.origin.y + 2,
+                                (width - 4) * percent / 100, height - 4), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(body.origin.x + width, body.origin.y + height / 4, 2, height / 2),
+                     0, GCornerNone);
+}
+
+static int16_t icon_width(Icon icon, int16_t size) {
+  return icon == ICON_NONE ? 0 : icon == ICON_BATTERY ? size * 3 / 2 : size;
+}
+
+static void draw_icon(GContext *ctx, Icon icon, GPoint at, int16_t size) {
+  graphics_context_set_fill_color(ctx, foreground());
+  graphics_context_set_stroke_color(ctx, foreground());
+  graphics_context_set_stroke_width(ctx, 1);
+  switch (icon) {
+    case ICON_STEPS: icon_steps(ctx, at, size); break;
+    case ICON_BATTERY: icon_battery(ctx, at, size); break;
+    case ICON_SUN: {
+      icon_dot(ctx, at, size, 50, 50, 25);
+      const GPoint middle = GPoint(PC(at.x, 50), PC(at.y, 50));
+      for (int i = 0; i < 8; i++) {
+        const int32_t angle = TRIG_MAX_ANGLE * i / 8;
+        graphics_draw_line(ctx, along(middle, angle, size * 36 / 100),
+                           along(middle, angle, size * 49 / 100));
+      }
+      break;
+    }
+    case ICON_MOON:
+      icon_dot(ctx, at, size, 50, 50, 44);
+      graphics_context_set_fill_color(ctx, background());
+      icon_dot(ctx, at, size, 70, 36, 38);
+      break;
+    case ICON_CLOUD:
+      icon_cloud(ctx, GPoint(at.x, at.y + size / 8), size);
+      break;
+    case ICON_RAIN:
+      icon_cloud(ctx, at, size);
+      icon_line(ctx, at, size, 28, 74, 20, 96);
+      icon_line(ctx, at, size, 54, 74, 46, 96);
+      icon_line(ctx, at, size, 80, 74, 72, 96);
+      break;
+    case ICON_SNOW:
+      icon_cloud(ctx, at, size);
+      icon_dot(ctx, at, size, 24, 84, 7);
+      icon_dot(ctx, at, size, 50, 92, 7);
+      icon_dot(ctx, at, size, 76, 84, 7);
+      break;
+    case ICON_STORM:
+      icon_cloud(ctx, at, size);
+      icon_line(ctx, at, size, 58, 66, 42, 84);
+      icon_line(ctx, at, size, 42, 84, 58, 84);
+      icon_line(ctx, at, size, 58, 84, 44, 100);
+      break;
+    case ICON_FOG:
+      icon_cloud(ctx, at, size);
+      icon_line(ctx, at, size, 8, 78, 92, 78);
+      icon_line(ctx, at, size, 20, 94, 80, 94);
+      break;
+    default:
+      break;
+  }
+}
+
+#undef PC
+
+// The icon for the current weather. It is the moon on a clear night.
+static Icon weather_icon(void) {
+  static const struct { const char *word; Icon icon; } ICONS[] = {
+    { "FAIR", ICON_CLOUD }, { "CLOUDY", ICON_CLOUD }, { "FOG", ICON_FOG },
+    { "DRIZZLE", ICON_RAIN }, { "RAIN", ICON_RAIN }, { "SHOWERS", ICON_RAIN },
+    { "SNOW", ICON_SNOW }, { "STORM", ICON_STORM },
+  };
+  if (strcmp(s_condition, "CLEAR") == 0) {
+    return s_daytime ? ICON_SUN : ICON_MOON;
+  }
+  for (size_t i = 0; i < ARRAY_LENGTH(ICONS); i++) {
+    if (strcmp(s_condition, ICONS[i].word) == 0) {
+      return ICONS[i].icon;
+    }
+  }
+  return ICON_CLOUD;
+}
+
+static Icon widget_icon(uint8_t widget) {
+  switch (widget) {
+    case WIDGET_WEATHER: return weather_icon();
+    case WIDGET_STEPS: return ICON_STEPS;
+    case WIDGET_BATTERY: return ICON_BATTERY;
+    default: return ICON_NONE;
+  }
+}
+
+// The value a widget shows beside its icon; -- when there is none yet.
+static void widget_text(uint8_t widget, char *out, size_t size) {
+  out[0] = '\0';
+  switch (widget) {
+    case WIDGET_WEATHER:
+      if (s_temperature == NO_TEMPERATURE) {
+        snprintf(out, size, "--\xc2\xb0");
+      } else {
+        snprintf(out, size, "%d\xc2\xb0", (int)s_temperature);
+      }
+      break;
+    case WIDGET_STEPS: {
+#if defined(PBL_HEALTH)
+      const int steps = health_service_sum_today(HealthMetricStepCount);
+      if (steps >= 1000) {
+        snprintf(out, size, "%d,%03d", steps / 1000, steps % 1000);
+      } else {
+        snprintf(out, size, "%d", steps);
+      }
+#else
+      snprintf(out, size, "--");
+#endif
+      break;
+    }
+    case WIDGET_BATTERY:
+      snprintf(out, size, "%d%%", battery_state_service_peek().charge_percent);
+      break;
+    default:
+      break;
+  }
+}
+
+static int16_t widget_icon_size(void) {
+  return s_text[ROLE_SMALL].height + WIDGET_ICON_EXTRA;
+}
+
+// The height of a widget with its icon above its value.
+static int16_t stacked_widget_height(void) {
+  return widget_icon_size() + WIDGET_GAP + s_text[ROLE_SMALL].height;
+}
+
+// A widget centred on `middle`. Stacked, its icon sits above its value, both
+// centred on x; otherwise the icon comes before the value, starting at `x`
+// (left), ending at it (right) or centred on it. A value too wide for `room`
+// ends in an ellipsis.
+static void draw_widget(GContext *ctx, uint8_t widget, GPoint middle, int16_t room,
+                        GTextAlignment alignment, bool stacked) {
+  if (widget == WIDGET_NONE || widget >= WIDGET_COUNT) {
+    return;
+  }
+  char text[16];
+  widget_text(widget, text, sizeof(text));
+  const Text *t = &s_text[ROLE_SMALL];
+  const Icon icon = widget_icon(widget);
+  const int16_t size = widget_icon_size();
+  const int16_t icon_w = icon_width(icon, size);
+  const int16_t text_w = graphics_text_layout_get_content_size(
+    text, t->font, GRect(0, 0, 200, 50), GTextOverflowModeFill, GTextAlignmentLeft).w;
+  GPoint icon_at;
+  GRect text_box;
+  if (stacked) {
+    const int16_t shown_w = text_w < room ? text_w : room;
+    const int16_t top = middle.y - stacked_widget_height() / 2;
+    const int16_t text_top = top + size + WIDGET_GAP;
+    icon_at = GPoint(middle.x - icon_w / 2, top);
+    text_box = GRect(middle.x - shown_w / 2 - 1, text_top - t->top, shown_w + 2,
+                     t->top + t->height + 4);
+  } else {
+    const int16_t room_w = room - icon_w - WIDGET_GAP;
+    const int16_t shown_w = text_w < room_w ? text_w : room_w;
+    const int16_t total = icon_w + WIDGET_GAP + shown_w;
+    const int16_t start = alignment == GTextAlignmentLeft ? middle.x
+                        : alignment == GTextAlignmentRight ? middle.x - total
+                        : middle.x - total / 2;
+    icon_at = GPoint(start, middle.y - size / 2);
+    text_box = GRect(start + icon_w + WIDGET_GAP, middle.y - t->height / 2 - t->top, shown_w + 2,
+                     t->top + t->height + 4);
+  }
+  draw_icon(ctx, icon, icon_at, size);
+  graphics_context_set_text_color(ctx, foreground());
+  graphics_draw_text(ctx, text, t->font, text_box, GTextOverflowModeTrailingEllipsis,
+                     stacked ? GTextAlignmentCenter : GTextAlignmentLeft, NULL);
+}
+
+static bool widgets_shown(void) {
+  return s_settings.widgets[WIDGET_LEFT] != WIDGET_NONE ||
+         s_settings.widgets[WIDGET_RIGHT] != WIDGET_NONE;
+}
+
+static bool weather_shown(void) {
+  return s_settings.widgets[WIDGET_LEFT] == WIDGET_WEATHER ||
+         s_settings.widgets[WIDGET_RIGHT] == WIDGET_WEATHER;
+}
+
 static void draw_analog(GContext *ctx, GRect bounds) {
   const GPoint centre = grect_center_point(&bounds);
   graphics_context_set_stroke_color(ctx, foreground());
@@ -290,6 +559,18 @@ static void draw_analog(GContext *ctx, GRect bounds) {
     snprintf(date, sizeof(date), "%s %d", DAYS[s_now.tm_wday], s_now.tm_mday);
     draw_text_at(ctx, date, ROLE_DATE, 0, centre.y + ANALOG_DATE_OFFSET, bounds.size.w,
                  GTextAlignmentCenter);
+  }
+
+  // The widgets, centred between the hub and the 9 and 3.
+  if (widgets_shown()) {
+    const int16_t outer = MARK_INSET + (s_settings.numbers ? s_numeral_w : MARK_LONG) + WIDGET_GAP;
+    const int16_t inner = centre.x - HUB_RADIUS - WIDGET_GAP;
+    const int16_t room = inner - outer;
+    draw_widget(ctx, s_settings.widgets[WIDGET_LEFT], GPoint(outer + room / 2, centre.y), room,
+                GTextAlignmentCenter, true);
+    draw_widget(ctx, s_settings.widgets[WIDGET_RIGHT],
+                GPoint(bounds.size.w - outer - room / 2, centre.y), room, GTextAlignmentCenter,
+                true);
   }
 
   const int32_t minute_angle = TRIG_MAX_ANGLE * s_now.tm_min / 60;
@@ -338,7 +619,9 @@ static void draw_digital(GContext *ctx, GRect bounds) {
   const int16_t pm_h = s_text[ROLE_SMALL].height;
   const int16_t time_h = s_text[time_role].height;
   const int16_t row_h = s_settings.show_date ? s_text[ROLE_ROW].height : 0;
-  const int16_t block = (brand ? brand_h + BRAND_GAP : 0) + (row_h ? row_h + ROW_GAP : 0) + time_h;
+  const int16_t widgets_h = widgets_shown() ? widget_icon_size() : 0;
+  const int16_t block = (brand ? brand_h + BRAND_GAP : 0) + (row_h ? row_h + ROW_GAP : 0) + time_h +
+                        (widgets_h ? ROW_GAP + widgets_h : 0);
   const int16_t top = (bounds.size.h - block) / 2;
   const int16_t row_top = top + (brand ? brand_h + BRAND_GAP : 0);
   const int16_t time_top = row_top + (row_h ? row_h + ROW_GAP : 0);
@@ -356,6 +639,16 @@ static void draw_digital(GContext *ctx, GRect bounds) {
     draw_text_at(ctx, DAYS[s_now.tm_wday], ROLE_ROW, left, row_top, width, GTextAlignmentLeft);
     draw_text_at(ctx, date, ROLE_ROW, left, row_top, width - (twenty_four ? DATE_NUDGE : 0),
                  GTextAlignmentRight);
+  }
+
+  // The widgets, in a row below the time at its left and right edges.
+  if (widgets_h) {
+    const int16_t middle = time_top + time_h + ROW_GAP + widgets_h / 2;
+    const int16_t room = width / 2 - WIDGET_GAP;
+    draw_widget(ctx, s_settings.widgets[WIDGET_LEFT], GPoint(left, middle), room,
+                GTextAlignmentLeft, false);
+    draw_widget(ctx, s_settings.widgets[WIDGET_RIGHT], GPoint(left + width, middle), room,
+                GTextAlignmentRight, false);
   }
 
   // PM, to the right of the time with its bottom on the time's.
@@ -457,12 +750,27 @@ static void load_fonts(void) {
     }
   }
   s_pm_w = text_width("PM", s_text[ROLE_SMALL].font);
+  const int16_t three = text_width("3", s_text[ROLE_NUMERALS].font);
+  const int16_t nine = text_width("9", s_text[ROLE_NUMERALS].font);
+  s_numeral_w = three > nine ? three : nine;
 }
 
 // ---------------------------------------------------------------- Events
 
+static void request_weather(void) {
+  DictionaryIterator *iterator;
+  if (app_message_outbox_begin(&iterator) != APP_MSG_OK) {
+    return;
+  }
+  dict_write_uint8(iterator, MESSAGE_KEY_REQUEST_WEATHER, 1);
+  app_message_outbox_send();
+}
+
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   s_now = *tick_time;
+  if (weather_shown() && tick_time->tm_min % WEATHER_REFRESH_MINUTES == 0) {
+    request_weather();
+  }
   layer_mark_dirty(s_canvas);
 }
 
@@ -471,7 +779,25 @@ static int32_t tuple_int(const Tuple *tuple) {
 }
 
 static void inbox_received(DictionaryIterator *iterator, void *context) {
+  const Settings before = s_settings;
   const Tuple *tuple;
+
+  // The weather, from src/pkjs/index.js.
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_TEMPERATURE))) {
+    s_temperature = tuple->value->int32;
+    persist_write_int(PERSIST_KEY_TEMPERATURE, s_temperature);
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_CONDITION)) && tuple->type == TUPLE_CSTRING) {
+    strncpy(s_condition, tuple->value->cstring, sizeof(s_condition) - 1);
+    s_condition[sizeof(s_condition) - 1] = '\0';
+    persist_write_string(PERSIST_KEY_CONDITION, s_condition);
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_DAYTIME))) {
+    s_daytime = tuple_int(tuple) != 0;
+    persist_write_bool(PERSIST_KEY_DAYTIME, s_daytime);
+  }
+
+  // The settings, from the settings page.
   if ((tuple = dict_find(iterator, MESSAGE_KEY_STYLE))) {
     s_settings.style = tuple_int(tuple) == STYLE_DIGITAL ? STYLE_DIGITAL : STYLE_ANALOG;
   }
@@ -504,7 +830,17 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
     strncpy(s_settings.brand, tuple->value->cstring, BRAND_LENGTH);
     s_settings.brand[BRAND_LENGTH] = '\0';
   }
-  persist_write_data(PERSIST_KEY_SETTINGS, &s_settings, sizeof(s_settings));
+  const uint32_t widget_keys[] = { MESSAGE_KEY_WIDGET_LEFT, MESSAGE_KEY_WIDGET_RIGHT };
+  for (int side = WIDGET_LEFT; side <= WIDGET_RIGHT; side++) {
+    if ((tuple = dict_find(iterator, widget_keys[side]))) {
+      const int32_t widget = tuple_int(tuple);
+      s_settings.widgets[side] = (widget >= 0 && widget < WIDGET_COUNT) ? widget : WIDGET_NONE;
+    }
+  }
+
+  if (memcmp(&before, &s_settings, sizeof(s_settings)) != 0) {
+    persist_write_data(PERSIST_KEY_SETTINGS, &s_settings, sizeof(s_settings));
+  }
   if (s_settings.font_style != font_style) {
     load_fonts();
   }
@@ -519,6 +855,7 @@ static void load_settings(void) {
   const int size = persist_read_data(PERSIST_KEY_SETTINGS, &saved, sizeof(saved));
   // Older versions keep their choices, with the defaults for what they lack.
   if ((saved.version == SETTINGS_VERSION && size == (int)sizeof(saved)) ||
+      (saved.version == 4 && size == (int)SETTINGS_V4_SIZE) ||
       (saved.version == 3 && size == (int)SETTINGS_V3_SIZE) ||
       (saved.version == 2 && size == (int)SETTINGS_V2_SIZE) ||
       (saved.version == 1 && size == (int)SETTINGS_V1_SIZE)) {
@@ -530,6 +867,11 @@ static void load_settings(void) {
     }
     if (s_settings.hand_style >= HANDS_COUNT) {
       s_settings.hand_style = HANDS_BATON;
+    }
+    for (int side = WIDGET_LEFT; side <= WIDGET_RIGHT; side++) {
+      if (s_settings.widgets[side] >= WIDGET_COUNT) {
+        s_settings.widgets[side] = WIDGET_NONE;
+      }
     }
   }
 }
@@ -547,8 +889,21 @@ static void window_unload(Window *window) {
   layer_destroy(s_canvas);
 }
 
+static void load_weather(void) {
+  if (persist_exists(PERSIST_KEY_TEMPERATURE)) {
+    s_temperature = persist_read_int(PERSIST_KEY_TEMPERATURE);
+  }
+  if (persist_exists(PERSIST_KEY_CONDITION)) {
+    persist_read_string(PERSIST_KEY_CONDITION, s_condition, sizeof(s_condition));
+  }
+  if (persist_exists(PERSIST_KEY_DAYTIME)) {
+    s_daytime = persist_read_bool(PERSIST_KEY_DAYTIME);
+  }
+}
+
 static void init(void) {
   load_settings();
+  load_weather();
 
   load_fonts();
 
@@ -564,7 +919,8 @@ static void init(void) {
 
   tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
   app_message_register_inbox_received(inbox_received);
-  app_message_open(128, 16);
+  // Room for every setting the settings page sends at once.
+  app_message_open(256, 16);
 }
 
 static void deinit(void) {

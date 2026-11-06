@@ -18,7 +18,9 @@
       "watchface": true
     },
     "capabilities": [
-      "configurable"
+      "configurable",
+      "location",
+      "health"
     ],
     "messageKeys": [
       "STYLE",
@@ -29,7 +31,14 @@
       "BRAND",
       "NUMBERS",
       "FONT_STYLE",
-      "HAND_STYLE"
+      "HAND_STYLE",
+      "WIDGET_LEFT",
+      "WIDGET_RIGHT",
+      "TEMPERATURE_UNIT",
+      "TEMPERATURE",
+      "CONDITION",
+      "DAYTIME",
+      "REQUEST_WEATHER"
     ],
     "resources": {
       "media": [
@@ -61,7 +70,7 @@
           "type": "font",
           "name": "FONT_DMMONO_MEDIUM_12",
           "file": "fonts/DMMono-Medium.ttf",
-          "characterRegex": "[ -~]"
+          "characterRegex": "[ -~\u00b0]"
         },
         {
           "type": "font",
@@ -121,7 +130,7 @@
           "type": "font",
           "name": "FONT_IBMPLEXSERIF_SEMIBOLD_13",
           "file": "fonts/IBMPlexSerif-SemiBold.ttf",
-          "characterRegex": "[ -~]"
+          "characterRegex": "[ -~\u00b0]"
         },
         {
           "type": "font",
@@ -133,7 +142,7 @@
           "type": "font",
           "name": "FONT_VARELAROUND_REGULAR_13",
           "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[ -~]"
+          "characterRegex": "[ -~\u00b0]"
         },
         {
           "type": "font",

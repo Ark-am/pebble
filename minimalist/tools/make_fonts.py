@@ -41,6 +41,7 @@ STYLES = [
 DIGITS = '0123456789'
 CAPITALS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 ASCII = ''.join(chr(c) for c in range(32, 127))
+DEGREE = '\u00b0'  # for the weather
 
 # Role: characters, bold, sample whose height counts, target height.
 ROLES = {
@@ -49,7 +50,7 @@ ROLES = {
     'ROW': (DIGITS + CAPITALS + ' ', False, 'H', 19),  # the digital top row
     'NUMERALS': (DIGITS, False, '0', 19),          # 12, 3, 6 and 9 on the dial
     'DATE': (DIGITS + CAPITALS + ' ', True, 'H', 11),  # the analog date
-    'SMALL': (ASCII, True, 'H', 9),                # the name and PM
+    'SMALL': (ASCII + DEGREE, True, 'H', 9),       # the name, PM and widgets
 }
 ROLE_ORDER = ['TIME', 'TIME_12H', 'ROW', 'NUMERALS', 'DATE', 'SMALL']
 
@@ -190,9 +191,10 @@ def resource_name(file, size):
 
 
 def character_regex(chars):
-    if set(ASCII) <= chars:
-        return '[ -~]'
     out = ''
+    if set(ASCII) <= chars:
+        out += ' -~'
+        chars = chars - set(ASCII)
     if set(DIGITS) <= chars:
         out += '0-9'
         chars = chars - set(DIGITS)

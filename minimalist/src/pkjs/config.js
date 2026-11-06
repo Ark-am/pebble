@@ -1,6 +1,15 @@
 // Settings page, rendered on the phone by Clay. Each messageKey matches one in
 // package.json; the watch reads them in inbox_received() in src/c/main.c.
 
+// What each widget can show. Values match WIDGET_* in src/c/main.c, and the
+// weather's value matches WIDGET_WEATHER in src/pkjs/index.js.
+var WIDGET_OPTIONS = [
+  { label: 'Nothing', value: '0' },
+  { label: 'Weather', value: '1' },
+  { label: 'Steps', value: '2' },
+  { label: 'Battery', value: '3' }
+];
+
 module.exports = [
   {
     type: 'heading',
@@ -60,6 +69,44 @@ module.exports = [
         description: 'Shown above the centre on the analog face and above the date on the digital face. Leave it empty to hide it.',
         defaultValue: 'PEBBLE',
         attributes: { maxlength: 16, placeholder: 'e.g. PEBBLE' }
+      }
+    ]
+  },
+  {
+    type: 'section',
+    items: [
+      {
+        type: 'heading',
+        defaultValue: 'Widgets'
+      },
+      {
+        type: 'text',
+        defaultValue: 'On the analog face they sit left and right of the centre; on the digital face, in a row below the time.'
+      },
+      {
+        type: 'select',
+        messageKey: 'WIDGET_LEFT',
+        label: 'Left widget',
+        defaultValue: '0',
+        options: WIDGET_OPTIONS
+      },
+      {
+        type: 'select',
+        messageKey: 'WIDGET_RIGHT',
+        label: 'Right widget',
+        defaultValue: '0',
+        options: WIDGET_OPTIONS
+      },
+      {
+        type: 'select',
+        messageKey: 'TEMPERATURE_UNIT',
+        label: 'Temperature',
+        description: 'The weather comes from Open-Meteo for the phone\'s location, every 30 minutes.',
+        defaultValue: 'C',
+        options: [
+          { label: 'Celsius', value: 'C' },
+          { label: 'Fahrenheit', value: 'F' }
+        ]
       }
     ]
   },
