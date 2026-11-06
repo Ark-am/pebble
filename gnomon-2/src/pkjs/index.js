@@ -50,6 +50,7 @@ function sendWeather(position) {
     var current = JSON.parse(request.responseText).current;
     Pebble.sendAppMessage({
       TEMPERATURE: Math.round(current.temperature_2m),
+      TEMPERATURE_UNIT: savedSettings().TEMPERATURE_UNIT === 'F' ? 'F' : 'C',
       CONDITION: conditionName(current.weather_code),
       DAYTIME: current.is_day
     }, null, function () {

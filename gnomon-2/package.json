@@ -51,7 +51,8 @@
       "HOUR_FONT",
       "SHADOWS",
       "HAND_COLOR",
-      "HAND_FILL_COLOR"
+      "HAND_FILL_COLOR",
+      "WEATHER_COLORS"
     ],
     "resources": {
       "media": [

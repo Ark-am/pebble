@@ -64,6 +64,17 @@ which needs no account or API key. The watch requests an update every 30
 minutes and keeps the last reading if the phone is unavailable. Until the first
 reading arrives, the temperature shows `--°`.
 
+On colour watches, **Weather colours** chooses how the weather looks:
+
+| Choice | Icon | Temperature |
+| --- | --- | --- |
+| Colourful (default) | Yellow sun with orange rays, pale yellow moon, grey clouds with a darker rim (darker still for rain and storms), blue rain, icy blue snow, grey-blue fog and a yellow lightning bolt | Coloured by warmth: icy blue at 0 °C (32 °F) and below, blue to 9 °C, green to 19 °C, orange to 27 °C, then red |
+| Colourful icon | As above | The text colour |
+| Classic | Black or white, with a yellow sun and blue rain | The text colour |
+
+The phone sends its temperature unit with each reading so that the colours
+follow the same bands in °F.
+
 ## Font styles
 
 **Information font** chooses the font for the date, weather, health

@@ -170,6 +170,19 @@ module.exports = [
         defaultValue: true
       },
       {
+        type: 'select',
+        messageKey: 'WEATHER_COLORS',
+        label: 'Weather colours',
+        description: 'Colour watches only.',
+        defaultValue: '0',
+        options: [
+          { label: 'Colourful: the icon, and the temperature from blue when cold ' +
+            'to red when hot', value: '0' },
+          { label: 'Colourful icon, temperature in the text colour', value: '1' },
+          { label: 'Classic: black or white, with a yellow sun and blue rain', value: '2' }
+        ]
+      },
+      {
         type: 'toggle',
         messageKey: 'SHOW_HEALTH',
         label: 'Health',

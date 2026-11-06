@@ -19,6 +19,7 @@
 #define PERSIST_KEY_TEMPERATURE 3
 #define PERSIST_KEY_CONDITION 4
 #define PERSIST_KEY_DAYTIME 5
+#define PERSIST_KEY_FAHRENHEIT 6
 
 #define WEATHER_REFRESH_MINUTES 30
 #define NO_TEMPERATURE INT32_MIN
@@ -102,7 +103,7 @@
 #define AVOID_GAP 2
 
 // Saved with persist_write_data, so only append fields and bump the version.
-#define SETTINGS_VERSION 14
+#define SETTINGS_VERSION 15
 typedef struct {
   uint8_t version;
   bool dark;
@@ -138,6 +139,8 @@ typedef struct {
   uint8_t hand_argb;
   // Added in version 14: the inside of the hands, a colour or a HandFill.
   uint8_t hand_fill_argb;
+  // Added in version 15: the WeatherColors.
+  uint8_t weather_colors;
 } Settings;
 
 // Values of hand_fill_argb that are not colours, having no opacity bits.
@@ -146,6 +149,14 @@ typedef enum {
   HAND_FILL_TEXT,
   HAND_FILL_HAND,
 } HandFill;
+
+// How the weather is coloured on colour watches; values match the settings page.
+typedef enum {
+  WEATHER_COLORS_FULL,     // A colourful icon, and the temperature coloured by warmth.
+  WEATHER_COLORS_ICON,     // A colourful icon only.
+  WEATHER_COLORS_CLASSIC,  // Black or white, with a yellow sun and blue rain.
+  WEATHER_COLORS_COUNT,
+} WeatherColors;
 
 // How much of the settings each version saved, so older settings carry over
 // and the fields added since keep their defaults.
@@ -163,6 +174,7 @@ static int settings_size(uint8_t version) {
     case 11: return offsetof(Settings, shadows);
     case 12: return offsetof(Settings, hand_argb);
     case 13: return offsetof(Settings, hand_fill_argb);
+    case 14: return offsetof(Settings, weather_colors);
     case SETTINGS_VERSION: return sizeof(Settings);
     default: return -1;
   }
@@ -179,7 +191,16 @@ typedef struct {
   GColor connected;
   GColor disconnected;
   GColor sun;
+  GColor rays;
+  GColor moon;
+  GColor cloud;
+  GColor cloud_edge;
+  GColor rain_cloud;
+  GColor rain_cloud_edge;
   GColor rain;
+  GColor snow;
+  GColor fog;
+  GColor bolt;
   GColor second_hand;
   GColor hand;
 } Palette;
@@ -282,6 +303,8 @@ static bool s_bluetooth_connected;
 static int32_t s_temperature = NO_TEMPERATURE;
 static char s_condition[16];
 static bool s_daytime = true;
+// The phone sends temperatures in the unit chosen in the settings.
+static bool s_fahrenheit;
 
 // ---------------------------------------------------------------------------
 // Health metrics
@@ -437,6 +460,24 @@ static void apply_palette(void) {
   s_palette.disconnected = GColorRed;
   s_palette.sun = GColorChromeYellow;
   s_palette.rain = dark ? GColorPictonBlue : GColorBlue;
+  if (s_settings.weather_colors == WEATHER_COLORS_CLASSIC) {
+    s_palette.rays = s_palette.sun;
+    s_palette.bolt = s_palette.sun;
+    s_palette.moon = s_palette.cloud = s_palette.cloud_edge = s_palette.foreground;
+    s_palette.rain_cloud = s_palette.rain_cloud_edge = s_palette.foreground;
+    s_palette.snow = s_palette.fog = s_palette.foreground;
+  } else {
+    // Pale clouds with a rim, greyer when they bring rain.
+    s_palette.rays = GColorOrange;
+    s_palette.moon = dark ? GColorPastelYellow : GColorRajah;
+    s_palette.cloud = dark ? GColorWhite : GColorLightGray;
+    s_palette.cloud_edge = dark ? GColorLightGray : GColorDarkGray;
+    s_palette.rain_cloud = dark ? GColorLightGray : GColorDarkGray;
+    s_palette.rain_cloud_edge = dark ? GColorDarkGray : GColorBlack;
+    s_palette.snow = dark ? GColorCeleste : GColorVividCerulean;
+    s_palette.fog = dark ? GColorLightGray : GColorCadetBlue;
+    s_palette.bolt = dark ? GColorYellow : GColorChromeYellow;
+  }
   s_palette.second_hand = s_settings.second_hand_argb
     ? (GColor) { .argb = s_settings.second_hand_argb } : s_palette.foreground;
   s_palette.hand = s_settings.hand_argb
@@ -453,8 +494,10 @@ static void apply_palette(void) {
   s_palette.ring_empty = s_palette.background;
   s_palette.connected = s_palette.foreground;
   s_palette.disconnected = s_palette.background;
-  s_palette.sun = s_palette.foreground;
-  s_palette.rain = s_palette.foreground;
+  s_palette.sun = s_palette.rays = s_palette.moon = s_palette.foreground;
+  s_palette.cloud = s_palette.cloud_edge = s_palette.foreground;
+  s_palette.rain_cloud = s_palette.rain_cloud_edge = s_palette.foreground;
+  s_palette.rain = s_palette.snow = s_palette.fog = s_palette.bolt = s_palette.foreground;
   s_palette.second_hand = s_palette.foreground;
   s_palette.hand = s_palette.foreground;
 #endif
@@ -849,8 +892,9 @@ static NOINLINE void draw_hours(GContext *ctx, GRect bounds, GPoint centre, cons
 }
 
 static void draw_text_box(GContext *ctx, const char *text, GFont font, GPoint centre,
-                          int16_t visible_top, int16_t pad, int16_t height, int16_t width) {
-  graphics_context_set_text_color(ctx, s_palette.foreground);
+                          int16_t visible_top, int16_t pad, int16_t height, int16_t width,
+                          GColor color) {
+  graphics_context_set_text_color(ctx, color);
   graphics_draw_text(ctx, text, font,
                      GRect(centre.x - width / 2, visible_top - pad, width,
                            height + pad * 2),
@@ -858,16 +902,17 @@ static void draw_text_box(GContext *ctx, const char *text, GFont font, GPoint ce
 }
 
 static void draw_text_line(GContext *ctx, const char *text, GFont font, GPoint centre,
-                           int16_t visible_top, int16_t pad, int16_t height) {
-  draw_text_box(ctx, text, font, centre, visible_top, pad, height, TEXT_BOX_WIDTH);
+                           int16_t visible_top, int16_t pad, int16_t height, GColor color) {
+  draw_text_box(ctx, text, font, centre, visible_top, pad, height, TEXT_BOX_WIDTH, color);
 }
 
 // A bold value above a small label, centred on a point.
 static void draw_complication(GContext *ctx, GPoint at, const char *value, const char *label) {
   const int16_t top = at.y - (DATE_HEIGHT + LINE_GAP + LABEL_HEIGHT) / 2;
-  draw_text_line(ctx, value, s_date_font.font, at, top, s_date_font.pad, DATE_HEIGHT);
+  draw_text_line(ctx, value, s_date_font.font, at, top, s_date_font.pad, DATE_HEIGHT,
+                 s_palette.foreground);
   draw_text_line(ctx, label, s_label_font.font, at, top + DATE_HEIGHT + LINE_GAP,
-                 s_label_font.pad, LABEL_HEIGHT);
+                 s_label_font.pad, LABEL_HEIGHT, s_palette.foreground);
 }
 
 // ---------------------------------------------------------------------------
@@ -936,15 +981,26 @@ static void draw_cloud(GContext *ctx, GPoint bottom, int16_t radius, int16_t gro
                      0, GCornerNone);
 }
 
+// A cloud in one colour with a rim in another, unless they are the same.
+static void draw_rimmed_cloud(GContext *ctx, GPoint bottom, int16_t radius, GColor fill,
+                              GColor rim) {
+  if (!gcolor_equal(fill, rim)) {
+    draw_cloud(ctx, bottom, radius, 1, rim);
+  }
+  draw_cloud(ctx, bottom, radius, 0, fill);
+}
+
+// A cloud in front of a sun or moon, with a gap in the dial colour round it.
 static void draw_outlined_cloud(GContext *ctx, GPoint bottom, int16_t radius) {
-  draw_cloud(ctx, bottom, radius, 1, s_palette.background);
-  draw_cloud(ctx, bottom, radius, 0, s_palette.foreground);
+  const bool rimmed = !gcolor_equal(s_palette.cloud, s_palette.cloud_edge);
+  draw_cloud(ctx, bottom, radius, rimmed ? 2 : 1, s_palette.background);
+  draw_rimmed_cloud(ctx, bottom, radius, s_palette.cloud, s_palette.cloud_edge);
 }
 
 static void draw_sun(GContext *ctx, GPoint centre, int16_t radius) {
   graphics_context_set_fill_color(ctx, s_palette.sun);
   graphics_fill_circle(ctx, centre, radius);
-  graphics_context_set_stroke_color(ctx, s_palette.sun);
+  graphics_context_set_stroke_color(ctx, s_palette.rays);
   graphics_context_set_stroke_width(ctx, 1);
   for (int i = 0; i < 8; i++) {
     const int32_t angle = TRIG_MAX_ANGLE * i / 8;
@@ -954,7 +1010,7 @@ static void draw_sun(GContext *ctx, GPoint centre, int16_t radius) {
 }
 
 static void draw_moon(GContext *ctx, GPoint centre, int16_t radius) {
-  graphics_context_set_fill_color(ctx, s_palette.foreground);
+  graphics_context_set_fill_color(ctx, s_palette.moon);
   graphics_fill_circle(ctx, centre, radius);
   graphics_context_set_fill_color(ctx, s_palette.background);
   graphics_fill_circle(ctx, GPoint(centre.x + radius / 2, centre.y - radius / 3), radius * 5 / 6);
@@ -967,7 +1023,7 @@ static void draw_precipitation(GContext *ctx, GPoint origin, Weather weather) {
     const int16_t x = columns[i];
     switch (weather) {
       case WEATHER_SNOW:
-        graphics_context_set_fill_color(ctx, s_palette.foreground);
+        graphics_context_set_fill_color(ctx, s_palette.snow);
         graphics_fill_circle(ctx, icon_point(origin, x - 1, i % 2 ? 15 : 13), icon_size(3) / 2);
         break;
       case WEATHER_DRIZZLE:
@@ -988,7 +1044,7 @@ static void draw_lightning(GContext *ctx, GPoint origin) {
     icon_point(origin, 14, 9), icon_point(origin, 10, 13),
     icon_point(origin, 14, 13), icon_point(origin, 10, 17),
   };
-  graphics_context_set_stroke_color(ctx, s_palette.sun);
+  graphics_context_set_stroke_color(ctx, s_palette.bolt);
   graphics_context_set_stroke_width(ctx, WEATHER_ICON_STROKE);
   for (size_t i = 1; i < ARRAY_LENGTH(points); i++) {
     graphics_draw_line(ctx, points[i - 1], points[i]);
@@ -1015,10 +1071,11 @@ static NOINLINE void draw_weather_icon(GContext *ctx, GPoint centre, Weather wea
       draw_outlined_cloud(ctx, icon_point(origin, 14, 16), icon_size(5));
       break;
     case WEATHER_CLOUDY:
-      draw_cloud(ctx, icon_point(origin, 11, 16), icon_size(7), 0, s_palette.foreground);
+      draw_rimmed_cloud(ctx, icon_point(origin, 11, 16), icon_size(7), s_palette.cloud,
+                        s_palette.cloud_edge);
       break;
     case WEATHER_FOG:
-      graphics_context_set_stroke_color(ctx, s_palette.foreground);
+      graphics_context_set_stroke_color(ctx, s_palette.fog);
       graphics_context_set_stroke_width(ctx, WEATHER_ICON_STROKE);
       for (int i = 0; i < 3; i++) {
         const int16_t y = 3 + i * 5;
@@ -1026,15 +1083,21 @@ static NOINLINE void draw_weather_icon(GContext *ctx, GPoint centre, Weather wea
         graphics_draw_line(ctx, icon_point(origin, 3 + shift, y), icon_point(origin, 19 + shift, y));
       }
       break;
+    case WEATHER_SNOW:
+      draw_rimmed_cloud(ctx, icon_point(origin, 12, 10), icon_size(5), s_palette.cloud,
+                        s_palette.cloud_edge);
+      draw_precipitation(ctx, origin, weather);
+      break;
     case WEATHER_DRIZZLE:
     case WEATHER_RAIN:
     case WEATHER_SHOWERS:
-    case WEATHER_SNOW:
-      draw_cloud(ctx, icon_point(origin, 12, 10), icon_size(5), 0, s_palette.foreground);
+      draw_rimmed_cloud(ctx, icon_point(origin, 12, 10), icon_size(5), s_palette.rain_cloud,
+                        s_palette.rain_cloud_edge);
       draw_precipitation(ctx, origin, weather);
       break;
     case WEATHER_STORM:
-      draw_cloud(ctx, icon_point(origin, 12, 10), icon_size(5), 0, s_palette.foreground);
+      draw_rimmed_cloud(ctx, icon_point(origin, 12, 10), icon_size(5), s_palette.rain_cloud,
+                        s_palette.rain_cloud_edge);
       draw_lightning(ctx, origin);
       break;
     default:
@@ -1048,6 +1111,31 @@ static void format_temperature(char *buffer, size_t size) {
   } else {
     snprintf(buffer, size, "%d\xc2\xb0", (int)s_temperature);
   }
+}
+
+// The temperature's colour: from icy blue through green to red as it warms,
+// when the settings ask for it, or the text colour.
+static GColor temperature_color(void) {
+#if defined(PBL_COLOR)
+  if (s_settings.weather_colors == WEATHER_COLORS_FULL && s_temperature != NO_TEMPERATURE) {
+    const int32_t celsius = s_fahrenheit ? (s_temperature - 32) * 5 / 9 : s_temperature;
+    const bool dark = s_settings.dark;
+    if (celsius <= 0) {
+      return dark ? GColorCeleste : GColorBlueMoon;
+    }
+    if (celsius < 10) {
+      return dark ? GColorPictonBlue : GColorVividCerulean;
+    }
+    if (celsius < 20) {
+      return dark ? GColorScreaminGreen : GColorIslamicGreen;
+    }
+    if (celsius < 28) {
+      return dark ? GColorChromeYellow : GColorOrange;
+    }
+    return GColorRed;
+  }
+#endif
+  return s_palette.foreground;
 }
 
 static const char *weather_label(void) {
@@ -1065,7 +1153,8 @@ static NOINLINE void draw_weather(GContext *ctx, GPoint at) {
     return;
   }
   const int16_t top = at.y - (DATE_HEIGHT + LINE_GAP + LABEL_HEIGHT) / 2;
-  draw_text_line(ctx, temperature, s_date_font.font, at, top, s_date_font.pad, DATE_HEIGHT);
+  draw_text_line(ctx, temperature, s_date_font.font, at, top, s_date_font.pad, DATE_HEIGHT,
+                 temperature_color());
   draw_weather_icon(ctx, GPoint(at.x, top + DATE_HEIGHT + LINE_GAP + 1 + icon_size(16) / 2),
                     weather);
 }
@@ -1098,8 +1187,10 @@ static NOINLINE void draw_date(GContext *ctx, GPoint at, const struct tm *t) {
   format_date(t, day, date);
 
   const int16_t top = at.y - (DATE_HEIGHT * 2 + LINE_GAP) / 2;
-  draw_text_line(ctx, day, s_date_font.font, at, top, s_date_font.pad, DATE_HEIGHT);
-  draw_text_line(ctx, date, s_date_font.font, at, top + DATE_HEIGHT + LINE_GAP, s_date_font.pad, DATE_HEIGHT);
+  draw_text_line(ctx, day, s_date_font.font, at, top, s_date_font.pad, DATE_HEIGHT,
+                 s_palette.foreground);
+  draw_text_line(ctx, date, s_date_font.font, at, top + DATE_HEIGHT + LINE_GAP, s_date_font.pad,
+                 DATE_HEIGHT, s_palette.foreground);
 }
 
 // A ring of ten segments shows the battery level, full segments green and
@@ -1399,7 +1490,9 @@ static void set_shadow_palette(void) {
   s_palette = (Palette) {
     .background = shadow, .foreground = shadow, .leaf = shadow, .ring = shadow,
     .ring_empty = shadow, .connected = shadow, .disconnected = shadow, .sun = shadow,
-    .rain = shadow, .second_hand = shadow, .hand = shadow,
+    .rays = shadow, .moon = shadow, .cloud = shadow, .cloud_edge = shadow,
+    .rain_cloud = shadow, .rain_cloud_edge = shadow, .rain = shadow, .snow = shadow,
+    .fog = shadow, .bolt = shadow, .second_hand = shadow, .hand = shadow,
   };
 }
 
@@ -1850,7 +1943,8 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   draw_ticks(ctx, bounds, centre);
   if (s_settings.dial_name[0]) {
     draw_text_box(ctx, s_settings.dial_name, name_font->font, GPoint(centre.x, name_y),
-                  name_y - name_height / 2, name_font->pad, name_height, NAME_BOX_WIDTH);
+                  name_y - name_height / 2, name_font->pad, name_height, NAME_BOX_WIDTH,
+                  s_palette.foreground);
   }
   draw_hours(ctx, bounds, centre, covers, ITEM_COUNT + 1, 0);
 
@@ -1998,6 +2092,10 @@ static bool read_settings(DictionaryIterator *iterator) {
     s_settings.hand_argb = color < 0 ? 0 : GColorFromHEX(color).argb;
     changed = true;
   }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_WEATHER_COLORS))) {
+    s_settings.weather_colors = tuple_int(tuple) % WEATHER_COLORS_COUNT;
+    changed = true;
+  }
   if ((tuple = dict_find(iterator, MESSAGE_KEY_HAND_FILL_COLOR))) {
     // A colour as 0xRRGGBB, or -1 for the text colour, -2 for grey or -3 for
     // the hands' own colour.
@@ -2036,6 +2134,12 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
   if (daytime) {
     s_daytime = daytime->value->int32 != 0;
     persist_write_bool(PERSIST_KEY_DAYTIME, s_daytime);
+  }
+  // Sent with each reading, and by the settings page as "C" or "F".
+  const Tuple *unit = dict_find(iterator, MESSAGE_KEY_TEMPERATURE_UNIT);
+  if (unit && unit->type == TUPLE_CSTRING) {
+    s_fahrenheit = strcmp(unit->value->cstring, "F") == 0;
+    persist_write_bool(PERSIST_KEY_FAHRENHEIT, s_fahrenheit);
   }
 
   if (read_settings(iterator)) {
@@ -2089,6 +2193,7 @@ static void load_saved_state(void) {
   if (persist_exists(PERSIST_KEY_DAYTIME)) {
     s_daytime = persist_read_bool(PERSIST_KEY_DAYTIME);
   }
+  s_fahrenheit = persist_read_bool(PERSIST_KEY_FAHRENHEIT);
 #if defined(PBL_HEALTH)
   s_metric = persist_exists(PERSIST_KEY_METRIC)
     ? (Metric)persist_read_int(PERSIST_KEY_METRIC) % METRIC_COUNT
