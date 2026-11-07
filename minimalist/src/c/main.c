@@ -92,39 +92,53 @@ static bool s_daytime = true;
 
 // ---------------------------------------------------------------- Layout
 
+// Everything is laid out for the Pebble 2 Duo's 144 x 168 screen and scaled
+// for the others: the dial's parts by GEO, with the screen's shorter side, and
+// the gaps around the text by TEXT, with the font sizes (tools/make_fonts.py).
+// Both are exactly 1 on the 144 px wide watches.
+#define GEO_SCALE ((PBL_DISPLAY_WIDTH < PBL_DISPLAY_HEIGHT ? PBL_DISPLAY_WIDTH \
+                                                          : PBL_DISPLAY_HEIGHT) * 100 / 144)
+#define GEO(x) ((x) * GEO_SCALE / 100)
+#if PBL_DISPLAY_WIDTH >= 200
+#define TEXT_SCALE 135
+#else
+#define TEXT_SCALE 100
+#endif
+#define TEXT(x) ((x) * TEXT_SCALE / 100)
+
 // Hour marks sit this far in from the screen edge.
-#define MARK_INSET 5
-#define MARK_LONG 12   // 12, 3, 6 and 9
+#define MARK_INSET GEO(5)
+#define MARK_LONG GEO(12)   // 12, 3, 6 and 9
 // Or, in their place, numerals with their outer edge at MARK_INSET.
-#define MARK_SHORT 7
-#define MARK_LONG_WIDTH 3
+#define MARK_SHORT GEO(7)
+#define MARK_LONG_WIDTH GEO(3)
 #define MARK_SHORT_WIDTH 1
 
-#define HOUR_HAND_LENGTH 42
+#define HOUR_HAND_LENGTH GEO(42)
 // The minute hand reaches just into the long marks at 3 and 9.
-#define MINUTE_HAND_LENGTH 59
-#define HUB_RADIUS 5
+#define MINUTE_HAND_LENGTH GEO(59)
+#define HUB_RADIUS GEO(5)
 // Baton: lines this wide.
-#define HOUR_BATON_WIDTH 7
-#define MINUTE_BATON_WIDTH 5
+#define HOUR_BATON_WIDTH GEO(7)
+#define MINUTE_BATON_WIDTH GEO(5)
 // Dauphine, skeleton and leaf: half the width at the widest point.
-#define HOUR_HALF_WIDTH 6
-#define MINUTE_HALF_WIDTH 5
-#define SKELETON_HOUR_HALF_WIDTH 4
-#define SKELETON_MINUTE_HALF_WIDTH 3
+#define HOUR_HALF_WIDTH GEO(6)
+#define MINUTE_HALF_WIDTH GEO(5)
+#define SKELETON_HOUR_HALF_WIDTH GEO(4)
+#define SKELETON_MINUTE_HALF_WIDTH GEO(3)
 // How far the shapes reach back past the centre.
-#define HAND_TAIL 6
+#define HAND_TAIL GEO(6)
 // Lollipop: a line this wide, ending in a ring of this radius at the tip.
-#define HOUR_LOLLIPOP_WIDTH 4
-#define MINUTE_LOLLIPOP_WIDTH 2
-#define HOUR_RING_RADIUS 6
-#define MINUTE_RING_RADIUS 5
-#define RING_THICKNESS 2
+#define HOUR_LOLLIPOP_WIDTH GEO(4)
+#define MINUTE_LOLLIPOP_WIDTH GEO(2)
+#define HOUR_RING_RADIUS GEO(6)
+#define MINUTE_RING_RADIUS GEO(5)
+#define RING_THICKNESS GEO(2)
 
 // The bottom of the name's capitals sits this far above the centre on the
 // analog dial, and the top of the date's this far below it.
-#define ANALOG_BRAND_OFFSET 31
-#define ANALOG_DATE_OFFSET 31
+#define ANALOG_BRAND_OFFSET GEO(31)
+#define ANALOG_DATE_OFFSET GEO(31)
 
 // Widgets: an icon WIDGET_ICON_EXTRA px taller than the name's capitals and
 // the value in the name's font, WIDGET_GAP apart. On the dial they sit left
@@ -132,13 +146,13 @@ static bool s_daytime = true;
 // WIDGET_GAP from both, with the icon above the value. On the digital face
 // they sit in a row ROW_GAP below the time, at its left and right edges, with
 // the icon before the value.
-#define WIDGET_ICON_EXTRA 5
-#define WIDGET_GAP 3
+#define WIDGET_ICON_EXTRA TEXT(5)
+#define WIDGET_GAP TEXT(3)
 
 // The name: BRAND_GAP above the digital top row, and BRAND_MARGIN in from the
 // screen's sides.
-#define BRAND_GAP 8
-#define BRAND_MARGIN 8
+#define BRAND_GAP TEXT(8)
+#define BRAND_MARGIN TEXT(8)
 
 // Digital, after Retro F-91W's LCD: the top row, ROW_GAP above the time, has
 // the day at the left and the month and date at the right. In 12-hour time,
@@ -146,8 +160,8 @@ static bool s_daytime = true;
 // set smaller to leave room for it (ROLE_TIME_12H). The sizes and offsets of
 // the text for each font style are in src/c/font_styles.h, and PM_GAP matches
 // tools/make_fonts.py.
-#define ROW_GAP 10
-#define PM_GAP 3
+#define ROW_GAP TEXT(10)
+#define PM_GAP TEXT(3)
 // Moves the date left so its last digit lines up with the time's; measured in
 // the emulator, and the same for all four font styles. In 12-hour time the
 // date lines up with PM, which needs no nudge.
@@ -201,6 +215,10 @@ static GPoint along(GPoint centre, int32_t angle, int32_t distance) {
 // How far a ray from the centre at `angle` travels before reaching the edge
 // of `bounds` inset by MARK_INSET, so the marks follow the rectangle.
 static int32_t distance_to_edge(GRect bounds, int32_t angle) {
+#if defined(PBL_ROUND)
+  // Round screens: the edge is the same distance away all round.
+  return bounds.size.w / 2 - MARK_INSET;
+#else
   const int32_t half_w = bounds.size.w / 2 - MARK_INSET;
   const int32_t half_h = bounds.size.h / 2 - MARK_INSET;
   const int32_t dx = abs(sin_lookup(angle));
@@ -216,6 +234,7 @@ static int32_t distance_to_edge(GRect bounds, int32_t angle) {
     }
   }
   return distance;
+#endif
 }
 
 // Draws `text` in the font for `role` with its visible text starting at `top`.
@@ -549,7 +568,7 @@ static bool widgets_shown(void) {
 
 // The Bluetooth sign with a small cross at its lower right, in a square
 // BT_SIGN_EXTRA px taller than the name's capitals, centred on `middle`.
-#define BT_SIGN_EXTRA 7
+#define BT_SIGN_EXTRA TEXT(7)
 static void draw_disconnected(GContext *ctx, GPoint middle) {
   const int16_t size = s_text[ROLE_SMALL].height + BT_SIGN_EXTRA;
   const GPoint at = GPoint(middle.x - size / 2, middle.y - size / 2);

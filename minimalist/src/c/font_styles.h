@@ -27,6 +27,55 @@ typedef struct {
   int8_t colon_w[2];  // The width of each time's colon, with space each side.
 } FontStyle;
 
+// The Pebble Time 2 and Pebble Round 2 take the larger sizes.
+#if PBL_DISPLAY_WIDTH >= 200
+static const FontStyle FONT_STYLES[FONT_STYLE_COUNT] = {
+  {  // Condensed (Antonio)
+    .roles = {
+      { RESOURCE_ID_FONT_ANTONIO_REGULAR_89, NULL, 12, 78 },
+      { RESOURCE_ID_FONT_ANTONIO_REGULAR_79, NULL, 10, 70 },
+      { RESOURCE_ID_FONT_ANTONIO_REGULAR_28, NULL, 4, 24 },
+      { RESOURCE_ID_FONT_ANTONIO_REGULAR_28, NULL, 3, 25 },
+      { 0, FONT_KEY_GOTHIC_24_BOLD, 10, 14 },
+      { 0, FONT_KEY_GOTHIC_18_BOLD, 7, 11 },
+    },
+    .colon_w = { 22, 19 },
+  },
+  {  // Serif (IBM Plex Serif)
+    .roles = {
+      { RESOURCE_ID_FONT_IBMPLEXSERIF_REGULAR_64, NULL, 19, 46 },
+      { RESOURCE_ID_FONT_IBMPLEXSERIF_REGULAR_53, NULL, 15, 39 },
+      { RESOURCE_ID_FONT_IBMPLEXSERIF_REGULAR_26, NULL, 8, 18 },
+      { RESOURCE_ID_FONT_IBMPLEXSERIF_REGULAR_36, NULL, 11, 25 },
+      { RESOURCE_ID_FONT_IBMPLEXSERIF_SEMIBOLD_20, NULL, 6, 14 },
+      { RESOURCE_ID_FONT_IBMPLEXSERIF_SEMIBOLD_17, NULL, 5, 12 },
+    },
+    .colon_w = { 21, 17 },
+  },
+  {  // Rounded (Varela Round)
+    .roles = {
+      { RESOURCE_ID_FONT_VARELAROUND_REGULAR_62, NULL, 18, 45 },
+      { RESOURCE_ID_FONT_VARELAROUND_REGULAR_50, NULL, 14, 37 },
+      { RESOURCE_ID_FONT_VARELAROUND_REGULAR_24, NULL, 7, 17 },
+      { RESOURCE_ID_FONT_VARELAROUND_REGULAR_35, NULL, 11, 24 },
+      { RESOURCE_ID_FONT_VARELAROUND_REGULAR_19, NULL, 6, 13 },
+      { RESOURCE_ID_FONT_VARELAROUND_REGULAR_18, NULL, 6, 12 },
+    },
+    .colon_w = { 20, 17 },
+  },
+  {  // Mono (DM Mono)
+    .roles = {
+      { RESOURCE_ID_FONT_DMMONO_REGULAR_64, NULL, 18, 47 },
+      { RESOURCE_ID_FONT_DMMONO_REGULAR_56, NULL, 15, 42 },
+      { RESOURCE_ID_FONT_DMMONO_REGULAR_29, NULL, 8, 21 },
+      { RESOURCE_ID_FONT_DMMONO_REGULAR_36, NULL, 11, 25 },
+      { RESOURCE_ID_FONT_DMMONO_MEDIUM_20, NULL, 6, 14 },
+      { RESOURCE_ID_FONT_DMMONO_MEDIUM_18, NULL, 6, 12 },
+    },
+    .colon_w = { 22, 19 },
+  },
+};
+#else
 static const FontStyle FONT_STYLES[FONT_STYLE_COUNT] = {
   {  // Condensed (Antonio)
     .roles = {
@@ -73,3 +122,4 @@ static const FontStyle FONT_STYLES[FONT_STYLE_COUNT] = {
     .colon_w = { 18, 15 },
   },
 };
+#endif

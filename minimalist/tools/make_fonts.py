@@ -9,9 +9,10 @@ then works out where Pebble puts the glyphs: Pebble draws a glyph's baseline
 (size - height above the baseline) pixels down. That rule reproduces the
 offsets measured in the emulator for Antonio.
 
-The Condensed style keeps the face's original look: Antonio at fixed sizes for
-the time, the top row and the numerals, and Pebble's own Gothic for the small
-text.
+The Condensed style keeps the face's original look on the Pebble 2 Duo: Antonio
+at fixed sizes for the time, the top row and the numerals, and Pebble's own
+Gothic for the small text. The Pebble Time 2 and Pebble Round 2 get every size
+TEXT_SCALE larger (see GROUPS).
 
 Run from the project directory (needs Python with Pillow) after changing the
 styles or the roles:
@@ -54,18 +55,39 @@ ROLES = {
 }
 ROLE_ORDER = ['TIME', 'TIME_12H', 'ROW', 'NUMERALS', 'DATE', 'SMALL']
 
-# The Condensed style's fixed sizes, and Pebble's fonts with the offsets and
-# heights measured in the emulator.
-CONDENSED_SIZES = {'TIME': 66, 'ROW': 22, 'NUMERALS': 22}
-CONDENSED_SYSTEM = {
-    'DATE': ('FONT_KEY_GOTHIC_18_BOLD', 7, 11),
-    'SMALL': ('FONT_KEY_GOTHIC_14_BOLD', 5, 9),
+# Two sets of sizes: the Pebble 2 Duo's, also used by the other watches with
+# screens up to 180 px wide, and one TEXT_SCALE larger for the Pebble Time 2
+# and Pebble Round 2 (TEXT_SCALE in src/c/main.c).
+#
+# The Condensed style keeps the Pebble 2 Duo's fixed sizes of Antonio, and
+# Pebble's own Gothic for the small text; the offsets and heights of Gothic
+# were measured in the emulator, as was the width of PM in it.
+#
+# Widths from src/c/main.c: the time may be TIME_MAX_WIDTH wide, and in 12-hour
+# time so may the time with PM_GAP and PM to its right; the top row spans the
+# same width and must leave at least ROW_MIN_GAP between the day and the date.
+GROUPS = {
+    'small': {
+        'platforms': ['aplite', 'basalt', 'chalk', 'diorite', 'flint'],
+        'scale': 100,
+        'condensed_sizes': {'TIME': 66, 'ROW': 22, 'NUMERALS': 22},
+        'condensed_system': {
+            'DATE': ('FONT_KEY_GOTHIC_18_BOLD', 7, 11),
+            'SMALL': ('FONT_KEY_GOTHIC_14_BOLD', 5, 9),
+        },
+        'gothic_pm_width': 17,
+    },
+    'large': {
+        'platforms': ['emery', 'gabbro'],
+        'scale': 135,
+        'condensed_sizes': {},
+        'condensed_system': {
+            'DATE': ('FONT_KEY_GOTHIC_24_BOLD', 10, 14),
+            'SMALL': ('FONT_KEY_GOTHIC_18_BOLD', 7, 11),
+        },
+        'gothic_pm_width': 22,
+    },
 }
-GOTHIC_14_BOLD_PM_WIDTH = 17
-
-# Widths from src/c/main.c: the time may be this wide, and in 12-hour time so
-# may the time with PM_GAP and PM to its right; the top row spans the same
-# width and must leave at least ROW_MIN_GAP between the day and the date.
 TIME_MAX_WIDTH = 130
 PM_GAP = 3
 ROW_MIN_GAP = 12
@@ -122,9 +144,15 @@ def row_width(font):
     return day + date
 
 
-def choose(path, role, fits):
+def scaled(value, group):
+    # As TEXT() in src/c/main.c.
+    return value * GROUPS[group]['scale'] // 100
+
+
+def choose(path, role, fits, group):
     """The largest size within the role's height for which fits(font) holds."""
     _, _, sample, target = ROLES[role]
+    target = scaled(target, group)
     best = None
     for size in range(6, target * 3):
         font = ImageFont.truetype(path, size)
@@ -136,52 +164,65 @@ def choose(path, role, fits):
 
 
 def main():
-    resources = {}  # (file, size) -> set of characters
-    table = {}      # style -> role -> (resource name or system key, top, height)
-    extras = {}     # style -> colon cells of the two times
+    resources = {}  # (file, size) -> [set of characters, set of platforms]
+    tables = {}     # group -> style -> role -> (resource or system key, top, height)
+    extras = {}     # group -> style -> colon cells of the two times
+    for group in GROUPS:
+        tables[group], extras[group] = generate(group, resources)
+    write_package(resources)
+    write_header(tables, extras)
 
+
+def generate(group, resources):
+    spec = GROUPS[group]
+    max_width = scaled(TIME_MAX_WIDTH, group)
+    pm_gap = scaled(PM_GAP, group)
+    min_gap = scaled(ROW_MIN_GAP, group)
+    table = {}
+    extras = {}
     for name, label, regular, bold in STYLES:
         table[name] = {}
         fonts = {}
+        pm = pm_width(name, bold, group)
         for role in ROLE_ORDER:
             chars, is_bold, sample, target = ROLES[role]
-            if name == 'CONDENSED' and role in CONDENSED_SYSTEM:
-                table[name][role] = CONDENSED_SYSTEM[role]
+            if name == 'CONDENSED' and role in spec['condensed_system']:
+                table[name][role] = spec['condensed_system'][role]
                 continue
             file = bold if is_bold else regular
             path = os.path.join(FONT_DIR, file)
-            pm = pm_width(name, bold)
-            if name == 'CONDENSED' and role in CONDENSED_SIZES:
-                size = CONDENSED_SIZES[role]
+            if name == 'CONDENSED' and role in spec['condensed_sizes']:
+                size = spec['condensed_sizes'][role]
             elif role == 'TIME':
-                size = choose(path, role, lambda f: time_width(f) <= TIME_MAX_WIDTH)
+                size = choose(path, role, lambda f: time_width(f) <= max_width, group)
             elif role == 'TIME_12H':
-                size = choose(path, role, lambda f: time_width(f) + PM_GAP + pm <= TIME_MAX_WIDTH)
+                size = choose(path, role, lambda f: time_width(f) + pm_gap + pm <= max_width,
+                              group)
             elif role == 'ROW':
                 budget = min(time_width(fonts['TIME']),
-                             time_width(fonts['TIME_12H']) + PM_GAP + pm) - ROW_MIN_GAP
-                size = choose(path, role, lambda f: row_width(f) <= budget)
+                             time_width(fonts['TIME_12H']) + pm_gap + pm) - min_gap
+                size = choose(path, role, lambda f: row_width(f) <= budget, group)
             else:
-                size = choose(path, role, lambda f: True)
+                size = choose(path, role, lambda f: True, group)
             font = ImageFont.truetype(path, size)
             fonts[role] = font
             top, height = metrics(font, size, sample)
-            resources.setdefault((file, size), set()).update(chars)
+            entry = resources.setdefault((file, size), [set(), set()])
+            entry[0].update(chars)
+            entry[1].update(spec['platforms'])
             table[name][role] = (resource_name(file, size), top, height)
         extras[name] = (colon_cell(fonts['TIME']), colon_cell(fonts['TIME_12H']))
-        print('%-9s time %2d px (12-hour %2d px), row %2d px, numerals %2d px' % (
-            name, table[name]['TIME'][2], table[name]['TIME_12H'][2], table[name]['ROW'][2],
-            table[name]['NUMERALS'][2]))
-
-    write_package(resources)
-    write_header(table, extras)
+        print('%-5s %-9s time %2d px (12-hour %2d px), row %2d px, numerals %2d px' % (
+            group, name, table[name]['TIME'][2], table[name]['TIME_12H'][2],
+            table[name]['ROW'][2], table[name]['NUMERALS'][2]))
+    return table, extras
 
 
-def pm_width(style, bold):
+def pm_width(style, bold, group):
     if style == 'CONDENSED':
-        return GOTHIC_14_BOLD_PM_WIDTH
+        return GROUPS[group]['gothic_pm_width']
     path = os.path.join(FONT_DIR, bold)
-    size = choose(path, 'SMALL', lambda f: True)
+    size = choose(path, 'SMALL', lambda f: True, group)
     return width(ImageFont.truetype(path, size), 'PM')
 
 
@@ -210,12 +251,14 @@ def write_package(resources):
     with open('package.json') as f:
         package = json.load(f)
     media = [m for m in package['pebble']['resources']['media'] if m['type'] != 'font']
-    for (file, size), chars in sorted(resources.items()):
+    order = [p for group in GROUPS.values() for p in group['platforms']]
+    for (file, size), (chars, platforms) in sorted(resources.items()):
         media.append({
             'type': 'font',
             'name': resource_name(file, size),
             'file': 'fonts/' + file,
             'characterRegex': character_regex(chars),
+            'targetPlatforms': sorted(platforms, key=order.index),
         })
     package['pebble']['resources']['media'] = media
     with open('package.json', 'w') as f:
@@ -223,7 +266,7 @@ def write_package(resources):
         f.write('\n')
 
 
-def write_header(table, extras):
+def style_rows(table, extras):
     rows = []
     for name, label, _, _ in STYLES:
         cells = []
@@ -235,6 +278,10 @@ def write_header(table, extras):
                 cells.append('      { RESOURCE_ID_%s, NULL, %d, %d },' % (source, top, height))
         rows.append('  {  // %s\n    .roles = {\n%s\n    },\n    .colon_w = { %d, %d },\n  },' % (
             (label, '\n'.join(cells)) + extras[name]))
+    return '\n'.join(rows)
+
+
+def write_header(tables, extras):
     with open(HEADER, 'w') as f:
         f.write('''// Generated by tools/make_fonts.py; do not edit.
 //
@@ -265,10 +312,17 @@ typedef struct {
   int8_t colon_w[2];  // The width of each time's colon, with space each side.
 } FontStyle;
 
+// The Pebble Time 2 and Pebble Round 2 take the larger sizes.
+#if PBL_DISPLAY_WIDTH >= 200
 static const FontStyle FONT_STYLES[FONT_STYLE_COUNT] = {
 %s
 };
-''' % '\n'.join(rows))
+#else
+static const FontStyle FONT_STYLES[FONT_STYLE_COUNT] = {
+%s
+};
+#endif
+''' % (style_rows(tables['large'], extras['large']), style_rows(tables['small'], extras['small'])))
 
 
 if __name__ == '__main__':

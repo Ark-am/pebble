@@ -12,7 +12,13 @@
     "sdkVersion": "3",
     "enableMultiJS": true,
     "targetPlatforms": [
-      "flint"
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
     ],
     "watchapp": {
       "watchface": true
@@ -55,127 +61,476 @@
           "type": "font",
           "name": "FONT_ANTONIO_REGULAR_22",
           "file": "fonts/Antonio-Regular.ttf",
-          "characterRegex": "[0-9A-Z ]"
+          "characterRegex": "[0-9A-Z ]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_ANTONIO_REGULAR_28",
+          "file": "fonts/Antonio-Regular.ttf",
+          "characterRegex": "[0-9A-Z ]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_ANTONIO_REGULAR_59",
           "file": "fonts/Antonio-Regular.ttf",
-          "characterRegex": "[0-9:]"
+          "characterRegex": "[0-9:]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_ANTONIO_REGULAR_66",
           "file": "fonts/Antonio-Regular.ttf",
-          "characterRegex": "[0-9:]"
+          "characterRegex": "[0-9:]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_ANTONIO_REGULAR_79",
+          "file": "fonts/Antonio-Regular.ttf",
+          "characterRegex": "[0-9:]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_ANTONIO_REGULAR_89",
+          "file": "fonts/Antonio-Regular.ttf",
+          "characterRegex": "[0-9:]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_DMMONO_MEDIUM_12",
           "file": "fonts/DMMono-Medium.ttf",
-          "characterRegex": "[ -~\u00b0]"
+          "characterRegex": "[ -~\u00b0]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_DMMONO_MEDIUM_16",
           "file": "fonts/DMMono-Medium.ttf",
-          "characterRegex": "[ -~]"
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_DMMONO_MEDIUM_18",
+          "file": "fonts/DMMono-Medium.ttf",
+          "characterRegex": "[ -~\u00b0]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_DMMONO_MEDIUM_20",
+          "file": "fonts/DMMono-Medium.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_DMMONO_REGULAR_21",
           "file": "fonts/DMMono-Regular.ttf",
-          "characterRegex": "[0-9A-Z ]"
+          "characterRegex": "[0-9A-Z ]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_DMMONO_REGULAR_28",
           "file": "fonts/DMMono-Regular.ttf",
-          "characterRegex": "[0-9]"
+          "characterRegex": "[0-9]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_DMMONO_REGULAR_29",
+          "file": "fonts/DMMono-Regular.ttf",
+          "characterRegex": "[0-9A-Z ]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_DMMONO_REGULAR_36",
+          "file": "fonts/DMMono-Regular.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_DMMONO_REGULAR_41",
           "file": "fonts/DMMono-Regular.ttf",
-          "characterRegex": "[0-9:]"
+          "characterRegex": "[0-9:]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_DMMONO_REGULAR_48",
           "file": "fonts/DMMono-Regular.ttf",
-          "characterRegex": "[0-9:]"
+          "characterRegex": "[0-9:]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_DMMONO_REGULAR_56",
+          "file": "fonts/DMMono-Regular.ttf",
+          "characterRegex": "[0-9:]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_DMMONO_REGULAR_64",
+          "file": "fonts/DMMono-Regular.ttf",
+          "characterRegex": "[0-9:]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_IBMPLEXSERIF_REGULAR_19",
           "file": "fonts/IBMPlexSerif-Regular.ttf",
-          "characterRegex": "[0-9A-Z ]"
+          "characterRegex": "[0-9A-Z ]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_IBMPLEXSERIF_REGULAR_26",
+          "file": "fonts/IBMPlexSerif-Regular.ttf",
+          "characterRegex": "[0-9A-Z ]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_IBMPLEXSERIF_REGULAR_27",
           "file": "fonts/IBMPlexSerif-Regular.ttf",
-          "characterRegex": "[0-9]"
+          "characterRegex": "[0-9]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_IBMPLEXSERIF_REGULAR_36",
+          "file": "fonts/IBMPlexSerif-Regular.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_IBMPLEXSERIF_REGULAR_39",
           "file": "fonts/IBMPlexSerif-Regular.ttf",
-          "characterRegex": "[0-9:]"
+          "characterRegex": "[0-9:]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_IBMPLEXSERIF_REGULAR_48",
           "file": "fonts/IBMPlexSerif-Regular.ttf",
-          "characterRegex": "[0-9:]"
+          "characterRegex": "[0-9:]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_IBMPLEXSERIF_REGULAR_53",
+          "file": "fonts/IBMPlexSerif-Regular.ttf",
+          "characterRegex": "[0-9:]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_IBMPLEXSERIF_REGULAR_64",
+          "file": "fonts/IBMPlexSerif-Regular.ttf",
+          "characterRegex": "[0-9:]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_IBMPLEXSERIF_SEMIBOLD_13",
           "file": "fonts/IBMPlexSerif-SemiBold.ttf",
-          "characterRegex": "[ -~\u00b0]"
+          "characterRegex": "[ -~\u00b0]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_IBMPLEXSERIF_SEMIBOLD_16",
           "file": "fonts/IBMPlexSerif-SemiBold.ttf",
-          "characterRegex": "[ -~]"
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_IBMPLEXSERIF_SEMIBOLD_17",
+          "file": "fonts/IBMPlexSerif-SemiBold.ttf",
+          "characterRegex": "[ -~\u00b0]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_IBMPLEXSERIF_SEMIBOLD_20",
+          "file": "fonts/IBMPlexSerif-SemiBold.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_VARELAROUND_REGULAR_13",
           "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[ -~\u00b0]"
+          "characterRegex": "[ -~\u00b0]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_VARELAROUND_REGULAR_16",
           "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[ -~]"
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_VARELAROUND_REGULAR_18",
           "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[0-9A-Z ]"
+          "characterRegex": "[ -~\u00b0]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint",
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_VARELAROUND_REGULAR_19",
+          "file": "fonts/VarelaRound-Regular.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_VARELAROUND_REGULAR_24",
+          "file": "fonts/VarelaRound-Regular.ttf",
+          "characterRegex": "[0-9A-Z ]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_VARELAROUND_REGULAR_27",
           "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[0-9]"
+          "characterRegex": "[0-9]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_VARELAROUND_REGULAR_35",
+          "file": "fonts/VarelaRound-Regular.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_VARELAROUND_REGULAR_38",
           "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[0-9:]"
+          "characterRegex": "[0-9:]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_VARELAROUND_REGULAR_46",
           "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[0-9:]"
+          "characterRegex": "[0-9:]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_VARELAROUND_REGULAR_50",
+          "file": "fonts/VarelaRound-Regular.ttf",
+          "characterRegex": "[0-9:]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_VARELAROUND_REGULAR_62",
+          "file": "fonts/VarelaRound-Regular.ttf",
+          "characterRegex": "[0-9:]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
         }
       ]
     }

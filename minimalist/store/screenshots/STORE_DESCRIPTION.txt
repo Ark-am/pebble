@@ -1,4 +1,4 @@
-Minimalist is primarily for the Pebble 2 Duo (or watches with that resolution). Heavily inspired by Pebble's Minimal Analog watch face. With this watch face, you can choose an analog dial with twelve hour marks and two slender hands, or a digital face laid out like a classic LCD watch, with the day, month and date above the time.
+Minimalist was designed for the Pebble 2 Duo and works on every Pebble watch. Heavily inspired by Pebble's Minimal Analog watch face. With this watch face, you can choose an analog dial with twelve hour marks and two slender hands, or a digital face laid out like a classic LCD watch, with the day, month and date above the time.
 
 Features:
 - Analog or digital style

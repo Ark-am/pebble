@@ -1,6 +1,8 @@
 # Minimalist
 
-A quiet watch face for the Pebble 2 Duo, in an analog or a digital style.
+A quiet watch face for every Pebble watch, in an analog or a digital style.
+It was designed on the Pebble 2 Duo, and the other watches get the same
+layout scaled to their screens.
 
 The analog style has twelve hour marks around the edge of the screen, longer
 and heavier at 12, 3, 6 and 9, and two hands meeting at a small hub. Those
@@ -53,8 +55,9 @@ all the text comes in one of four font styles.
   icon for the conditions (a moon on a clear night), today's steps, or the
   battery's charge with a battery filled to match. On the dial the icon sits
   above the value; on the digital face it sits before it. A value shows `--`
-  until there is one. The Pebble 2 Duo has no heart-rate sensor, so there is
-  no heart-rate widget.
+  until there is one. The original Pebble and Pebble Steel have no step
+  counter, so their steps always show `--`. The Pebble 2 Duo has no
+  heart-rate sensor, so there is no heart-rate widget.
 - **Show the battery:** all the time (the default), or only once the charge
   falls to 50%, 30%, 20% or 10% or less. Until then a battery widget is
   hidden. On the digital face, the widget row also goes, so the time sits a
@@ -130,4 +133,18 @@ Turning Bluetooth off in the emulator (`pebble emu-bt-connection --connected
 no`) also cuts the SDK's link to it, so check the disconnection sign in the
 emulator window rather than with `pebble screenshot`.
 
-Supported platform: Flint (Pebble 2 Duo).
+Supported platforms: Aplite, Basalt, Chalk, Diorite, Emery, Flint and Gabbro.
+
+## Other watches
+
+The layout is drawn for the Pebble 2 Duo's 144 x 168 screen. The Pebble,
+Pebble Time and Pebble 2 have the same screen, so they look exactly the same.
+On the others, `GEO` in `src/c/main.c` scales the dial's marks, hands and
+spacing with the screen's shorter side, and `TEXT` scales the gaps around the
+text. Round watches (the Pebble Time Round and Pebble Round 2) put the marks
+around a circle. The Pebble Time Round uses the Pebble 2 Duo's font sizes;
+the Pebble Time 2 and Pebble Round 2 use a larger set, made by
+`tools/make_fonts.py`. Colour watches show the face in black and white too.
+
+Store screenshots for the Pebble 2 Duo, Pebble Time 2 and Pebble Round 2 are
+in `store/screenshots`, named by watch model.
