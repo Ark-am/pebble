@@ -33,9 +33,21 @@ all the text comes in one of four font styles.
   fonts are wider, so their digital time and top row are smaller, to fit the
   screen's width.
 - **Show the date:** on by default
+- **Show when the phone disconnects:** on by default. While the phone is out
+  of reach, a Bluetooth sign with a small cross appears at the top: halfway
+  between the 12 and the name on the dial (or in the name's place when there
+  is none), and above the name on the digital face. Nothing else moves when it
+  comes and goes. As the phone disconnects, the watch also buzzes three
+  times, 0.8 seconds each with short pauses, except during Quiet Time.
+  Pebble's vibration has no strength setting, so the length is what makes it
+  intense.
 - **Name:** the text shown on the face, PEBBLE by default, up to 16
   characters. Leave it empty to hide it. A name too wide for the screen ends
   in an ellipsis.
+- **Widget in place of the name:** Nothing (the default), Weather, Steps or
+  Battery, shown where the name would be when the name is empty, with its
+  icon before its value. It follows the same battery setting as the other
+  widgets.
 - **Left widget** and **Right widget:** Nothing (the default), Weather,
   Steps or Battery. Each shows an icon with its value: the temperature with an
   icon for the conditions (a moon on a clear night), today's steps, or the
@@ -43,6 +55,10 @@ all the text comes in one of four font styles.
   above the value; on the digital face it sits before it. A value shows `--`
   until there is one. The Pebble 2 Duo has no heart-rate sensor, so there is
   no heart-rate widget.
+- **Show the battery:** all the time (the default), or only once the charge
+  falls to 50%, 30%, 20% or 10% or less. Until then a battery widget is
+  hidden. On the digital face, the widget row also goes, so the time sits a
+  little lower until the battery shows.
 - **Temperature:** Celsius (the default) or Fahrenheit
 - **Hands:** Baton (plain lines, the default), Dauphine (tapered from the
   centre), Skeleton (an open outline with a pointed tip), Lollipop (a thin
@@ -83,8 +99,8 @@ place as the digits change.
 The bundled fonts are in `resources/fonts`, under the SIL Open Font License
 (the `OFL-*.txt` files there). `tools/make_fonts.py` sizes each font style
 for every piece of text: the digital time (and its smaller 12-hour size),
-the top row, the dial's numerals, the analog date, and the name, PM and
-widgets. Each gets the largest size that is no
+the top row, the dial's numerals, the analog date and the name (one size),
+and PM and the widgets. Each gets the largest size that is no
 taller than the Condensed style's text and still fits its width. The script
 also works out where Pebble draws each font's glyphs in their text box. It
 writes the font resources into `package.json` and the sizes into
@@ -109,5 +125,9 @@ pebble send-app-message --emulator flint --int 10000=1   # switch to digital
 
 The message key numbers are in `build/js/message_keys.json`. Pass several
 settings after a single `--int`.
+
+Turning Bluetooth off in the emulator (`pebble emu-bt-connection --connected
+no`) also cuts the SDK's link to it, so check the disconnection sign in the
+emulator window rather than with `pebble screenshot`.
 
 Supported platform: Flint (Pebble 2 Duo).

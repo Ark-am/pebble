@@ -11,8 +11,8 @@ enum { FONT_STYLE_CONDENSED, FONT_STYLE_SERIF, FONT_STYLE_ROUNDED, FONT_STYLE_MO
        FONT_STYLE_COUNT };
 
 // The digital time, the same in 12-hour time (leaving room for PM to its
-// right), the digital top row, the dial's numerals, the analog date, and the
-// name and PM.
+// right), the digital top row, the dial's numerals, the analog date and the
+// name, and PM and the widgets.
 enum { ROLE_TIME, ROLE_TIME_12H, ROLE_ROW, ROLE_NUMERALS, ROLE_DATE, ROLE_SMALL, ROLE_COUNT };
 
 typedef struct {

@@ -38,7 +38,10 @@
       "TEMPERATURE",
       "CONDITION",
       "DAYTIME",
-      "REQUEST_WEATHER"
+      "REQUEST_WEATHER",
+      "SHOW_DISCONNECT",
+      "BATTERY_BELOW",
+      "WIDGET_TOP"
     ],
     "resources": {
       "media": [
@@ -76,7 +79,7 @@
           "type": "font",
           "name": "FONT_DMMONO_MEDIUM_16",
           "file": "fonts/DMMono-Medium.ttf",
-          "characterRegex": "[0-9A-Z ]"
+          "characterRegex": "[ -~]"
         },
         {
           "type": "font",
@@ -136,7 +139,7 @@
           "type": "font",
           "name": "FONT_IBMPLEXSERIF_SEMIBOLD_16",
           "file": "fonts/IBMPlexSerif-SemiBold.ttf",
-          "characterRegex": "[0-9A-Z ]"
+          "characterRegex": "[ -~]"
         },
         {
           "type": "font",
@@ -148,7 +151,7 @@
           "type": "font",
           "name": "FONT_VARELAROUND_REGULAR_16",
           "file": "fonts/VarelaRound-Regular.ttf",
-          "characterRegex": "[0-9A-Z ]"
+          "characterRegex": "[ -~]"
         },
         {
           "type": "font",

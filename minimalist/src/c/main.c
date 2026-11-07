@@ -6,7 +6,9 @@
 // with PM to its right in 12-hour time. Both styles can hide the date. Both show a
 // name, PEBBLE unless the wearer changes or clears it, and up to two widgets
 // (weather, steps or battery): beside the centre on the dial, or in a row
-// below the digital time. All the text comes in one of four font
+// below the digital time. A crossed-out Bluetooth sign shows while the phone
+// is disconnected, and the watch buzzes long and hard as it goes, unless the
+// wearer turns it off. All the text comes in one of four font
 // styles (src/c/font_styles.h). The settings come from the
 // phone (src/pkjs/config.js) and are kept on the watch.
 
@@ -28,13 +30,18 @@ enum { WIDGET_LEFT, WIDGET_RIGHT };
 #define PERSIST_KEY_TEMPERATURE 2
 #define PERSIST_KEY_CONDITION 3
 #define PERSIST_KEY_DAYTIME 4
-#define SETTINGS_VERSION 5
+#define SETTINGS_VERSION 8
 // Version 1 ended before the name, version 2 before the numbers, and version 3
-// before the font and hand styles, and version 4 before the widgets.
+// before the font and hand styles, version 4 before the widgets, and version 5
+// before the disconnection sign, version 6 before the battery threshold, and
+// version 7 before the widget in the name's place.
 #define SETTINGS_V1_SIZE offsetof(Settings, brand)
 #define SETTINGS_V2_SIZE offsetof(Settings, numbers)
 #define SETTINGS_V3_SIZE offsetof(Settings, font_style)
 #define SETTINGS_V4_SIZE offsetof(Settings, widgets)
+#define SETTINGS_V5_SIZE offsetof(Settings, show_disconnect)
+#define SETTINGS_V6_SIZE offsetof(Settings, battery_below)
+#define SETTINGS_V7_SIZE offsetof(Settings, widget_top)
 #define BRAND_LENGTH 16
 
 // Saved with persist_write_data, so only append fields and bump the version.
@@ -50,6 +57,9 @@ typedef struct {
   uint8_t font_style;
   uint8_t hand_style;
   uint8_t widgets[2];  // Left and right.
+  bool show_disconnect;  // The Bluetooth sign while the phone is disconnected.
+  uint8_t battery_below;  // Show the battery widget only at or below this %; 0 is always.
+  uint8_t widget_top;  // Shown in the name's place when the name is empty.
 } Settings;
 
 static Settings s_settings = {
@@ -64,7 +74,13 @@ static Settings s_settings = {
   .font_style = FONT_STYLE_CONDENSED,
   .hand_style = HANDS_BATON,
   .widgets = { WIDGET_NONE, WIDGET_NONE },
+  .show_disconnect = true,
+  .battery_below = 0,
+  .widget_top = WIDGET_NONE,
 };
+
+// Whether the phone is connected, kept up to date by connection_service.
+static bool s_connected = true;
 
 // The weather, as the phone last sent it (src/pkjs/index.js); the watch asks
 // for it again every WEATHER_REFRESH_MINUTES while a widget shows it.
@@ -84,24 +100,25 @@ static bool s_daytime = true;
 #define MARK_LONG_WIDTH 3
 #define MARK_SHORT_WIDTH 1
 
-#define HOUR_HAND_LENGTH 36
-#define MINUTE_HAND_LENGTH 54
-#define HUB_RADIUS 4
+#define HOUR_HAND_LENGTH 42
+// The minute hand reaches just into the long marks at 3 and 9.
+#define MINUTE_HAND_LENGTH 59
+#define HUB_RADIUS 5
 // Baton: lines this wide.
-#define HOUR_BATON_WIDTH 5
-#define MINUTE_BATON_WIDTH 3
+#define HOUR_BATON_WIDTH 7
+#define MINUTE_BATON_WIDTH 5
 // Dauphine, skeleton and leaf: half the width at the widest point.
-#define HOUR_HALF_WIDTH 5
-#define MINUTE_HALF_WIDTH 4
-#define SKELETON_HOUR_HALF_WIDTH 3
-#define SKELETON_MINUTE_HALF_WIDTH 2
+#define HOUR_HALF_WIDTH 6
+#define MINUTE_HALF_WIDTH 5
+#define SKELETON_HOUR_HALF_WIDTH 4
+#define SKELETON_MINUTE_HALF_WIDTH 3
 // How far the shapes reach back past the centre.
-#define HAND_TAIL 5
+#define HAND_TAIL 6
 // Lollipop: a line this wide, ending in a ring of this radius at the tip.
-#define HOUR_LOLLIPOP_WIDTH 3
-#define MINUTE_LOLLIPOP_WIDTH 1
-#define HOUR_RING_RADIUS 5
-#define MINUTE_RING_RADIUS 4
+#define HOUR_LOLLIPOP_WIDTH 4
+#define MINUTE_LOLLIPOP_WIDTH 2
+#define HOUR_RING_RADIUS 6
+#define MINUTE_RING_RADIUS 5
 #define RING_THICKNESS 2
 
 // The bottom of the name's capitals sits this far above the centre on the
@@ -212,7 +229,7 @@ static void draw_text_at(GContext *ctx, const char *text, int role, int16_t x, i
 // The name, centred on one line with its capitals starting at `top`; a name
 // too long for the screen ends in an ellipsis.
 static void draw_brand(GContext *ctx, GRect bounds, int16_t top) {
-  const Text *t = &s_text[ROLE_SMALL];
+  const Text *t = &s_text[ROLE_DATE];
   graphics_context_set_text_color(ctx, foreground());
   graphics_draw_text(ctx, s_settings.brand, t->font,
                      GRect(BRAND_MARGIN, top - t->top, bounds.size.w - BRAND_MARGIN * 2,
@@ -474,9 +491,21 @@ static int16_t stacked_widget_height(void) {
 // centred on x; otherwise the icon comes before the value, starting at `x`
 // (left), ending at it (right) or centred on it. A value too wide for `room`
 // ends in an ellipsis.
+// Whether a widget shows now: the battery can wait until the charge falls to
+// the chosen level.
+static bool widget_visible(uint8_t widget) {
+  if (widget == WIDGET_NONE || widget >= WIDGET_COUNT) {
+    return false;
+  }
+  if (widget == WIDGET_BATTERY && s_settings.battery_below) {
+    return battery_state_service_peek().charge_percent <= s_settings.battery_below;
+  }
+  return true;
+}
+
 static void draw_widget(GContext *ctx, uint8_t widget, GPoint middle, int16_t room,
                         GTextAlignment alignment, bool stacked) {
-  if (widget == WIDGET_NONE || widget >= WIDGET_COUNT) {
+  if (!widget_visible(widget)) {
     return;
   }
   char text[16];
@@ -514,13 +543,45 @@ static void draw_widget(GContext *ctx, uint8_t widget, GPoint middle, int16_t ro
 }
 
 static bool widgets_shown(void) {
-  return s_settings.widgets[WIDGET_LEFT] != WIDGET_NONE ||
-         s_settings.widgets[WIDGET_RIGHT] != WIDGET_NONE;
+  return widget_visible(s_settings.widgets[WIDGET_LEFT]) ||
+         widget_visible(s_settings.widgets[WIDGET_RIGHT]);
+}
+
+// The Bluetooth sign with a small cross at its lower right, in a square
+// BT_SIGN_EXTRA px taller than the name's capitals, centred on `middle`.
+#define BT_SIGN_EXTRA 7
+static void draw_disconnected(GContext *ctx, GPoint middle) {
+  const int16_t size = s_text[ROLE_SMALL].height + BT_SIGN_EXTRA;
+  const GPoint at = GPoint(middle.x - size / 2, middle.y - size / 2);
+  // The sign sits a little left of centre, to make room for the cross.
+  const GPoint sign = GPoint(at.x - size * 3 / 16, at.y);
+#define P(origin, px, py) GPoint((origin).x + size * (px) / 100, (origin).y + size * (py) / 100)
+  graphics_context_set_stroke_color(ctx, foreground());
+  graphics_context_set_stroke_width(ctx, 1);
+  graphics_draw_line(ctx, P(sign, 50, 0), P(sign, 50, 100));
+  graphics_draw_line(ctx, P(sign, 50, 0), P(sign, 78, 25));
+  graphics_draw_line(ctx, P(sign, 78, 25), P(sign, 22, 75));
+  graphics_draw_line(ctx, P(sign, 22, 25), P(sign, 78, 75));
+  graphics_draw_line(ctx, P(sign, 78, 75), P(sign, 50, 100));
+  graphics_draw_line(ctx, P(at, 70, 62), P(at, 100, 92));
+  graphics_draw_line(ctx, P(at, 100, 62), P(at, 70, 92));
+#undef P
+}
+
+static bool disconnect_shown(void) {
+  return s_settings.show_disconnect && !s_connected;
+}
+
+// The widget in the name's place, if the name is empty and it shows now.
+static uint8_t top_widget(void) {
+  return !s_settings.brand[0] && widget_visible(s_settings.widget_top) ? s_settings.widget_top
+                                                                       : WIDGET_NONE;
 }
 
 static bool weather_shown(void) {
   return s_settings.widgets[WIDGET_LEFT] == WIDGET_WEATHER ||
-         s_settings.widgets[WIDGET_RIGHT] == WIDGET_WEATHER;
+         s_settings.widgets[WIDGET_RIGHT] == WIDGET_WEATHER ||
+         (!s_settings.brand[0] && s_settings.widget_top == WIDGET_WEATHER);
 }
 
 static void draw_analog(GContext *ctx, GRect bounds) {
@@ -551,8 +612,25 @@ static void draw_analog(GContext *ctx, GRect bounds) {
     draw_text_at(ctx, "9", ROLE_NUMERALS, MARK_INSET, middle, w, GTextAlignmentLeft);
   }
 
+  const int16_t brand_top = centre.y - ANALOG_BRAND_OFFSET - s_text[ROLE_DATE].height;
+  const int16_t brand_middle = brand_top + s_text[ROLE_DATE].height / 2;
+  const uint8_t widget_top = top_widget();
   if (s_settings.brand[0]) {
-    draw_brand(ctx, bounds, centre.y - ANALOG_BRAND_OFFSET - s_text[ROLE_SMALL].height);
+    draw_brand(ctx, bounds, brand_top);
+  } else if (widget_top != WIDGET_NONE) {
+    draw_widget(ctx, widget_top, GPoint(centre.x, brand_middle), bounds.size.w - BRAND_MARGIN * 2,
+                GTextAlignmentCenter, false);
+  }
+  // The disconnection sign: halfway between the 12 and the name (or the
+  // widget in its place), or in the name's place when there is neither.
+  if (disconnect_shown()) {
+    const int16_t twelve = MARK_INSET + (s_settings.numbers ? s_text[ROLE_NUMERALS].height
+                                                             : MARK_LONG);
+    const int16_t line_top = s_settings.brand[0] ? brand_top
+                           : widget_top != WIDGET_NONE ? brand_middle - widget_icon_size() / 2
+                           : -1;
+    const int16_t middle = line_top >= 0 ? (twelve + line_top) / 2 : brand_middle;
+    draw_disconnected(ctx, GPoint(centre.x, middle));
   }
   if (s_settings.show_date) {
     char date[8];
@@ -614,8 +692,10 @@ static void draw_digital(GContext *ctx, GRect bounds) {
   const int16_t left = (bounds.size.w - width) / 2;
 
   // From the top: the name, the top row and the time, centred together.
-  const bool brand = s_settings.brand[0] != '\0';
-  const int16_t brand_h = s_text[ROLE_SMALL].height;
+  // The name's line holds the name, or the widget in its place.
+  const uint8_t widget_top = top_widget();
+  const bool brand = s_settings.brand[0] != '\0' || widget_top != WIDGET_NONE;
+  const int16_t brand_h = s_settings.brand[0] ? s_text[ROLE_DATE].height : widget_icon_size();
   const int16_t pm_h = s_text[ROLE_SMALL].height;
   const int16_t time_h = s_text[time_role].height;
   const int16_t row_h = s_settings.show_date ? s_text[ROLE_ROW].height : 0;
@@ -626,8 +706,16 @@ static void draw_digital(GContext *ctx, GRect bounds) {
   const int16_t row_top = top + (brand ? brand_h + BRAND_GAP : 0);
   const int16_t time_top = row_top + (row_h ? row_h + ROW_GAP : 0);
 
-  if (brand) {
+  if (s_settings.brand[0]) {
     draw_brand(ctx, bounds, top);
+  } else if (widget_top != WIDGET_NONE) {
+    draw_widget(ctx, widget_top, GPoint(bounds.size.w / 2, top + brand_h / 2),
+                bounds.size.w - BRAND_MARGIN * 2, GTextAlignmentCenter, false);
+  }
+  // The disconnection sign, halfway between the top of the screen and the
+  // rest, so nothing moves when it comes and goes.
+  if (disconnect_shown()) {
+    draw_disconnected(ctx, GPoint(bounds.size.w / 2, top / 2));
   }
 
   graphics_context_set_text_color(ctx, foreground());
@@ -766,6 +854,26 @@ static void request_weather(void) {
   app_message_outbox_send();
 }
 
+// Three long buzzes when the phone disconnects, so it is hard to miss. Pebble
+// has no strength setting, so the length makes it intense.
+static const uint32_t DISCONNECT_VIBE[] = { 800, 200, 800, 200, 800 };
+
+// Redraws as the charge changes, so the battery widget appears on time.
+static void battery_handler(BatteryChargeState state) {
+  layer_mark_dirty(s_canvas);
+}
+
+static void connection_handler(bool connected) {
+  if (s_connected && !connected && s_settings.show_disconnect && !quiet_time_is_active()) {
+    vibes_enqueue_custom_pattern((VibePattern) {
+      .durations = DISCONNECT_VIBE,
+      .num_segments = ARRAY_LENGTH(DISCONNECT_VIBE),
+    });
+  }
+  s_connected = connected;
+  layer_mark_dirty(s_canvas);
+}
+
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   s_now = *tick_time;
   if (weather_shown() && tick_time->tm_min % WEATHER_REFRESH_MINUTES == 0) {
@@ -830,6 +938,17 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
     strncpy(s_settings.brand, tuple->value->cstring, BRAND_LENGTH);
     s_settings.brand[BRAND_LENGTH] = '\0';
   }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_BATTERY_BELOW))) {
+    const int32_t below = tuple_int(tuple);
+    s_settings.battery_below = (below > 0 && below < 100) ? below : 0;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_SHOW_DISCONNECT))) {
+    s_settings.show_disconnect = tuple_int(tuple) != 0;
+  }
+  if ((tuple = dict_find(iterator, MESSAGE_KEY_WIDGET_TOP))) {
+    const int32_t widget = tuple_int(tuple);
+    s_settings.widget_top = (widget >= 0 && widget < WIDGET_COUNT) ? widget : WIDGET_NONE;
+  }
   const uint32_t widget_keys[] = { MESSAGE_KEY_WIDGET_LEFT, MESSAGE_KEY_WIDGET_RIGHT };
   for (int side = WIDGET_LEFT; side <= WIDGET_RIGHT; side++) {
     if ((tuple = dict_find(iterator, widget_keys[side]))) {
@@ -855,6 +974,9 @@ static void load_settings(void) {
   const int size = persist_read_data(PERSIST_KEY_SETTINGS, &saved, sizeof(saved));
   // Older versions keep their choices, with the defaults for what they lack.
   if ((saved.version == SETTINGS_VERSION && size == (int)sizeof(saved)) ||
+      (saved.version == 7 && size == (int)SETTINGS_V7_SIZE) ||
+      (saved.version == 6 && size == (int)SETTINGS_V6_SIZE) ||
+      (saved.version == 5 && size == (int)SETTINGS_V5_SIZE) ||
       (saved.version == 4 && size == (int)SETTINGS_V4_SIZE) ||
       (saved.version == 3 && size == (int)SETTINGS_V3_SIZE) ||
       (saved.version == 2 && size == (int)SETTINGS_V2_SIZE) ||
@@ -872,6 +994,9 @@ static void load_settings(void) {
       if (s_settings.widgets[side] >= WIDGET_COUNT) {
         s_settings.widgets[side] = WIDGET_NONE;
       }
+    }
+    if (s_settings.widget_top >= WIDGET_COUNT) {
+      s_settings.widget_top = WIDGET_NONE;
     }
   }
 }
@@ -918,6 +1043,11 @@ static void init(void) {
   window_stack_push(s_window, true);
 
   tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
+  s_connected = connection_service_peek_pebble_app_connection();
+  battery_state_service_subscribe(battery_handler);
+  connection_service_subscribe((ConnectionHandlers) {
+    .pebble_app_connection_handler = connection_handler,
+  });
   app_message_register_inbox_received(inbox_received);
   // Room for every setting the settings page sends at once.
   app_message_open(256, 16);
@@ -925,6 +1055,8 @@ static void init(void) {
 
 static void deinit(void) {
   tick_timer_service_unsubscribe();
+  connection_service_unsubscribe();
+  battery_state_service_unsubscribe();
   window_destroy(s_window);
   unload_fonts();
 }

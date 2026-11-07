@@ -63,12 +63,27 @@ module.exports = [
         defaultValue: true
       },
       {
+        type: 'toggle',
+        messageKey: 'SHOW_DISCONNECT',
+        label: 'Show when the phone disconnects',
+        description: 'The watch buzzes three times, long and hard, and a Bluetooth sign with a cross appears at the top while the phone is out of reach. No buzz during Quiet Time.',
+        defaultValue: true
+      },
+      {
         type: 'input',
         messageKey: 'BRAND',
         label: 'Name',
         description: 'Shown above the centre on the analog face and above the date on the digital face. Leave it empty to hide it.',
         defaultValue: 'PEBBLE',
         attributes: { maxlength: 16, placeholder: 'e.g. PEBBLE' }
+      },
+      {
+        type: 'select',
+        messageKey: 'WIDGET_TOP',
+        label: 'Widget in place of the name',
+        description: 'Shown where the name would be, when the name is empty.',
+        defaultValue: '0',
+        options: WIDGET_OPTIONS
       }
     ]
   },
@@ -96,6 +111,20 @@ module.exports = [
         label: 'Right widget',
         defaultValue: '0',
         options: WIDGET_OPTIONS
+      },
+      {
+        type: 'select',
+        messageKey: 'BATTERY_BELOW',
+        label: 'Show the battery',
+        description: 'For a battery widget: all the time, or only once the charge falls to a level.',
+        defaultValue: '0',
+        options: [
+          { label: 'All the time', value: '0' },
+          { label: 'At 50% or less', value: '50' },
+          { label: 'At 30% or less', value: '30' },
+          { label: 'At 20% or less', value: '20' },
+          { label: 'At 10% or less', value: '10' }
+        ]
       },
       {
         type: 'select',

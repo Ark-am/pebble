@@ -1,14 +1,15 @@
-Minimalist is primarily for the Pebble 2 Duo (or watches with that resolution). Choose an analog dial with twelve hour marks and two slender hands, or a digital face laid out like a classic LCD watch, with the day, month and date above the time.
+Minimalist is primarily for the Pebble 2 Duo (or watches with that resolution). Heavily inspired by Pebble's Minimal Analog watch face. With this watch face, you can choose an analog dial with twelve hour marks and two slender hands, or a digital face laid out like a classic LCD watch, with the day, month and date above the time.
 
 Features:
 - Analog or digital style
 - Five hand shapes: baton, dauphine, skeleton, lollipop and leaf
-- Up to two widgets: weather, steps or battery
+- Up to two widgets: weather, steps or battery, with the battery shown all the time or only when it runs low
 - Long marks or numbers at 12, 3, 6 and 9 on the analog dial
 - Four font styles for all the text: condensed, serif, rounded and mono
 - Dark or light background
 - Day and date in small capitals, or nothing but the time
-- Your own name on the face, PEBBLE by default, or none at all
+- Your own name on the face, PEBBLE by default, or a widget in its place
+- A long, strong vibration and a small sign when your phone disconnects, which you can turn off
 - 12-hour or 24-hour time, with or without a leading zero
 
 Set everything up through the Pebble phone app. The watch keeps your choices, so the face works without the phone nearby. The weather comes from Open-Meteo for your phone's location every 30 minutes, and the watch keeps the last reading while the phone is away.

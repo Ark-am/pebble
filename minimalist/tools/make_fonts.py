@@ -49,8 +49,8 @@ ROLES = {
     'TIME_12H': (DIGITS + ':', False, '0', 58),   # the same, leaving room for PM
     'ROW': (DIGITS + CAPITALS + ' ', False, 'H', 19),  # the digital top row
     'NUMERALS': (DIGITS, False, '0', 19),          # 12, 3, 6 and 9 on the dial
-    'DATE': (DIGITS + CAPITALS + ' ', True, 'H', 11),  # the analog date
-    'SMALL': (ASCII + DEGREE, True, 'H', 9),       # the name, PM and widgets
+    'DATE': (ASCII, True, 'H', 11),               # the analog date and the name
+    'SMALL': (ASCII + DEGREE, True, 'H', 9),       # PM and the widgets
 }
 ROLE_ORDER = ['TIME', 'TIME_12H', 'ROW', 'NUMERALS', 'DATE', 'SMALL']
 
@@ -249,8 +249,8 @@ enum { FONT_STYLE_CONDENSED, FONT_STYLE_SERIF, FONT_STYLE_ROUNDED, FONT_STYLE_MO
        FONT_STYLE_COUNT };
 
 // The digital time, the same in 12-hour time (leaving room for PM to its
-// right), the digital top row, the dial's numerals, the analog date, and the
-// name and PM.
+// right), the digital top row, the dial's numerals, the analog date and the
+// name, and PM and the widgets.
 enum { ROLE_TIME, ROLE_TIME_12H, ROLE_ROW, ROLE_NUMERALS, ROLE_DATE, ROLE_SMALL, ROLE_COUNT };
 
 typedef struct {

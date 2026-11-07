@@ -39,7 +39,8 @@ function savedSettings() {
 function weatherShown() {
   var settings = savedSettings();
   return String(settings.WIDGET_LEFT) === WIDGET_WEATHER ||
-    String(settings.WIDGET_RIGHT) === WIDGET_WEATHER;
+    String(settings.WIDGET_RIGHT) === WIDGET_WEATHER ||
+    (settings.BRAND === '' && String(settings.WIDGET_TOP) === WIDGET_WEATHER);
 }
 
 function sendWeather(position) {
