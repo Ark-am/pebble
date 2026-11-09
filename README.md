@@ -18,7 +18,7 @@ A growing collection of independent apps and watch faces for the Pebble watches.
 | --- | --- | --- |
 | [Phone Dialer](./phone-dialer/) | Dial numbers, returns Recent Calls, and calls from Favorites and/or Contacts on a paired Android phone using the native companion app. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Phone Sound Mode](./phone-sound-mode/) | Changes the Android phone's sound mode (Vibrate, Normal, Silent) using the native Android companion app. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
-| [Qibla Compass](./qibla-compass/) | Points toward the Qibla using the watch compass, the phone's location, and magnetic-declination correction. | Emery and Flint, but currently not fully operational |
+| [Qibla Compass](./qibla-compass/) | Points toward the Qibla using the watch compass or the sun, the phone's location, and magnetic-declination correction. | Emery and Flint, but currently not fully operational |
 | [Phone Voice Commands](./phone-voice-commands/) | Sends dictated commands from the watch to a paired Android phone: calls, texts, directions, timers, alarms, media and more. | Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Baltic](./baltic/) | Dress-watch face with Breguet-style numbers, a minute scale, a small seconds dial, and five dial colours. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Gnomon 2](./epoch/) | Classic analog watch-face with turned hour numbers and tapered hands, plus weather, health data, the date, a battery ring, and connection and Quiet Time alerts. Heavily inspired by the Gnomon watch-face. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
@@ -37,7 +37,7 @@ Follow a project's link for its requirements, build instructions, testing steps,
 | --- | --- |
 | [Baltic](./baltic/STORE_DESCRIPTION.txt) | [Phone Dialer](./phone-dialer/store/screenshots/STORE_DESCRIPTION.txt) |
 | [Gnomon 2](./gnomon-2/store/screenshots/STORE_DESCRIPTION.txt) | [Phone Sound Mode](./phone-sound-mode/store/screenshots/STORE_DESCRIPTION.txt) |
-| [Meridian](./meridian/store/screenshots/STORE_DESCRIPTION.txt) | [Qibla Compass](./qibla-compass/STORE_DESCRIPTION.txt) |
+| [Meridian](./meridian/store/screenshots/STORE_DESCRIPTION.txt) | [Qibla Compass](./qibla-compass/store/screenshots/STORE_DESCRIPTION.txt) |
 | [Sketchy Weather Analog](./sketchy-weather-analog/store/screenshots/STORE_DESCRIPTION.txt) |
 | [Retro F-91W](./retro-f91w/store/screenshots/STORE_DESCRIPTION.txt) |
 | [World Clock](./world-clock/store/screenshots/STORE_DESCRIPTION.txt) |

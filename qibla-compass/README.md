@@ -179,7 +179,9 @@ pebble screenshot --emulator emery --no-open qibla-compass.png
 ```
 
 This creates `qibla-compass.png` in the current directory. Store-listing
-screenshots should be captured from the final release build.
+screenshots should be captured from the final release build. They live in
+`store/screenshots/` with the store description, named after the watch model
+(`pebble-time-2_…`).
 
 ### 8. Repeat or stop the test
 
