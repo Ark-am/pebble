@@ -13,14 +13,52 @@ pebble install --phone <ip>           # install to a paired phone
 
 ## Unit tests
 
-The Qibla bearing and magnetic-declination calculations are plain JavaScript
-and can be tested with Node.js 22 or newer, without the Pebble SDK:
+The Qibla bearing, distance, sun-position and magnetic-declination
+calculations are plain JavaScript and can be tested with Node.js 22 or newer,
+without the Pebble SDK:
 
 ```sh
 npm test
 ```
 
-The declination tests use NOAA's official WMM2025 sea-level test values.
+The declination tests use NOAA's official WMM2025 sea-level test values. The
+sun-position tests use the worked example from NREL's Solar Position Algorithm
+report.
+
+## The screen
+
+- **Top line:** the Qibla bearing from true north and its compass direction,
+  such as `58.5° east-northeast`.
+- **Second line:** your coordinates and the distance to Makkah.
+- **Dial:** north is marked with a red `N`. The gold band runs clockwise from
+  north to the Kaaba marker, which is the angle the bearing measures. You are
+  the dot in the middle, and the sun appears on the rim while it is up.
+- **Bottom:** what to do, a line of detail, the two modes, and a padlock.
+
+### Modes
+
+Press **Up** or tap **Compass** for compass mode, and **Down** or tap **Sun**
+for Sun mode. The app remembers the last mode used.
+
+### Still dial
+
+The dial normally turns so that the top of the screen is the way you face.
+To keep it still, with north at the top like a map, tap the **padlock** or
+hold **Select**. Do the same again to let it turn. The app remembers the
+choice.
+
+With the dial still, compass mode shows a white arrow from you the way the
+watch faces; turn until it points at the Kaaba. Sun mode shows the sun and
+your shadow where they are. Pressing Select briefly still retries the sensors.
+
+- **Compass:** the dial turns with the watch's heading, and the triangle at
+  the top shows the way you face. Turn until the Kaaba reaches the triangle.
+  The marker turns green and the watch vibrates when you are within 4°.
+- **Sun:** the dial is set by the sun's position, worked out from your
+  location and the time, so the compass is not needed. Face the sun and turn
+  as shown. When the Qibla is more than 90° from the sun, the app uses your
+  shadow instead, so the turn is shorter and you are not looking at the sun.
+  Sun mode needs the sun above the horizon and no higher than 75°.
 
 ## Testing without a watch
 
@@ -79,7 +117,7 @@ pebble send-app-message --emulator emery \
 
 Expected result:
 
-- The screen shows `Qibla: 277.6°`.
+- The top line shows `277.6° west`, above `From 23.81°N 90.41°E · 5,172 km`.
 - Terminal 1 logs `Location: 23.8103, 90.4125`.
 - Terminal 1 logs the WMM-2025 magnetic declination used to correct the compass.
 
@@ -87,7 +125,7 @@ Expected result:
 
 Message key `16000` is the app's emulator-only magnetic-heading input. It is
 used because current SDK versions do not consistently deliver
-`pebble emu-compass` changes to Alloy apps.
+`pebble emu-compass` changes to Alloy apps. Only debug builds read it.
 
 Run the following commands one at a time in terminal 2:
 
@@ -101,15 +139,38 @@ Expected results:
 
 | Heading | Expected display |
 | --- | --- |
-| `250°` | White arrow and `Turn right 28°` |
-| `278°` | Green arrow and `Qibla aligned` |
-| `310°` | White arrow and `Turn left 32°` |
+| `250°` | Gold Kaaba marker and `Turn right 28°` |
+| `278°` | Green Kaaba marker at the top and `Qibla aligned` |
+| `310°` | Gold Kaaba marker and `Turn left 32°` |
 
 Entering the aligned range (`274°` through `281°` for the Dhaka test)
 also triggers one short vibration. An emulator cannot reproduce the physical
 feel of the vibration, but the green aligned state verifies the same condition.
 
-### 6. Capture a screenshot
+### 6. Test Sun mode
+
+Press Down in the emulator to switch to Sun mode. Sun mode uses the
+emulator's clock, so the result depends on the time of day at the injected
+location. Set a known time and location instead:
+
+```sh
+pebble emu-set-time --emulator emery 1794232800    # 9 Nov 2026 14:00 UTC
+pebble send-app-message --emulator emery \
+  --app-uuid 3935bb82-a179-4900-b46c-8e7f12b6ff71 \
+  --string '15026=1,40.7128,-74.006,,,,,,'
+```
+
+Expected result for New York at 9:00 in the morning:
+
+- The sun is at the top of the dial, and the Kaaba marker is to the left.
+- The screen shows `Turn left 80°` and `after facing the sun at 139° SE`.
+- Hold Select (`pebble emu-button --emulator emery click select --duration 900`)
+  and the dial turns north up, with the sun on the rim at 139°.
+
+When the sun is down (for example, Dhaka at that time), the screen shows
+`The sun has set`.
+
+### 7. Capture a screenshot
 
 With the emulator running:
 
@@ -120,7 +181,7 @@ pebble screenshot --emulator emery --no-open qibla-compass.png
 This creates `qibla-compass.png` in the current directory. Store-listing
 screenshots should be captured from the final release build.
 
-### 7. Repeat or stop the test
+### 8. Repeat or stop the test
 
 After changing the source, rebuild and reinstall:
 
@@ -156,7 +217,8 @@ This app targets **emery** (Pebble Time 2) with a fixed 200 × 228 layout.
 ```
 src/c/mdbl.c                   C glue around the Moddable runtime
 src/embeddedjs/main.js         JavaScript that runs on the watch
-src/embeddedjs/qibla.js        Qibla bearing calculations
+src/embeddedjs/qibla.js        Qibla bearing, distance and compass points
+src/embeddedjs/sun.js          Sun position (NOAA solar equations)
 src/embeddedjs/manifest.json   Moddable manifest
 src/pkjs/index.js              PebbleKit JS (phone-side) code
 test/                          Node.js unit tests for the calculations

@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   calculateQiblaBearing,
+  calculateQiblaDistance,
+  compassPoint,
   normalizeDegrees,
   normalizeSignedDegrees
 } from "../src/embeddedjs/qibla.js";
@@ -32,4 +34,21 @@ test("normalizes headings", () => {
   assert.equal(normalizeDegrees(370), 10);
   assert.equal(normalizeSignedDegrees(190), -170);
   assert.equal(normalizeSignedDegrees(-190), 170);
+});
+
+test("measures the distance to the Kaaba", () => {
+  assert.equal(calculateQiblaDistance(21.422487, KAABA_LONGITUDE), 0);
+  // One degree of latitude along the Kaaba's meridian.
+  const oneDegree = calculateQiblaDistance(22.422487, KAABA_LONGITUDE);
+  assert.ok(Math.abs(oneDegree - 111.195) < 0.01, `got ${oneDegree}`);
+});
+
+test("names the nearest compass point", () => {
+  assert.deepEqual(compassPoint(0), { abbreviation: "N", name: "north" });
+  assert.deepEqual(compassPoint(58.48), { abbreviation: "ENE", name: "east-northeast" });
+  assert.equal(compassPoint(277.6).name, "west");
+  assert.equal(compassPoint(295.15).name, "west-northwest");
+  assert.equal(compassPoint(354).abbreviation, "N");
+  assert.equal(compassPoint(348.74).abbreviation, "NNW");
+  assert.equal(compassPoint(-10).abbreviation, "N");
 });

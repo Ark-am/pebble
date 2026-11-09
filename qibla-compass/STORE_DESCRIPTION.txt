@@ -1,6 +1,12 @@
-Qibla Compass was the first Pebble application Ark-am endeavoured to build. It points you toward the Kaaba in Makkah from wherever you are. Raise your watch and swirl the watch around to calibrate the compass, and an arrow shows which way to turn, with simple directions such as "Turn left 12°". This feature never worked properly and we will revisit the logic after every Pebble OS update until the app is fully functional.
+Qibla Compass was the first Pebble application Ark-am endeavoured to build. It points you toward the Kaaba in Makkah from wherever you are. Raise your watch and swirl the watch around to calibrate the compass, and the dial turns with you to show which way to turn, with simple directions such as "Turn left 12°". This feature never worked properly and we will revisit the logic after every Pebble OS update until the app is fully functional.
 
-When you face the Qibla, the arrow turns green, the screen reads "Qibla aligned", and your watch gives a short vibration, so you can find the direction without staring at the screen. The exact Qibla bearing for your location is also shown.
+When you face the Qibla, the Kaaba marker turns green, the screen reads "Qibla aligned", and your watch gives a short vibration, so you can find the direction without staring at the screen.
+
+The top of the screen shows the Qibla bearing for your location and what it means, such as "58.5° east-northeast", along with your coordinates and the distance to Makkah. The dial marks the angle from north to the Kaaba, so you can see how the bearing is measured.
+
+No compass reading? Press Down, or tap "Sun", for Sun mode. The app works out where the sun is from your location and the time, then tells you how far to turn after facing the sun, or your shadow when that is the shorter turn. Sun mode needs no calibration and is not affected by metal or magnets. It works whenever the sun is up and not directly overhead. Press Up, or tap "Compass", to go back; the app remembers your choice.
+
+Prefer a dial that stays still? Tap the padlock or hold Select, and north stays at the top while an arrow shows the way you face.
 
 For accuracy, the watch corrects its compass from magnetic north to true north using the World Magnetic Model (WMM-2025) for your location and today's date. If the compass needs calibrating, the app asks you to move your watch until it is ready. If your location or compass cannot be read, tap the screen or press Select to try again.
 
