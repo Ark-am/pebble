@@ -1,0 +1,18 @@
+Qibla-Tasbih is a dhikr counter for every Pebble watch. Press any button to count, and the ring around the number fills as you go. The watch vibrates at the end of each set, so you can keep your eyes closed and your attention on your dhikr.
+
+After prayer, it walks you through the tasbih of 100: SubhanAllah 33 times, Alhamdulillah 33 times and Allahu Akbar 34 times, moving on by itself after each 33 with a double vibration, and a long one when you reach 100. If you complete the 100 with La ilaha illallahu wahdahu la sharika lah instead, choose that in the settings.
+
+Features:
+- After-prayer tasbih: 33 + 33 + 34, or 33 + 33 + 33 and La ilaha illallah
+- SubhanAllah, Alhamdulillah, Allahu Akbar, La ilaha illallah, Astaghfirullah, SubhanAllahi wa bihamdihi, Salawat and La hawla wa la quwwata illa billah, each in Arabic with its transliteration and meaning
+- A target for each: 10, 33, 99, 100 or 1000 times, or none, counting in rounds
+- A free counter with no phrase and no target
+- Any button counts; on the Pebble Time 2 and Pebble Round 2, a tap on the screen counts too
+- Hold Up to undo a count, and hold Down to reset (hold Up again to bring the count back)
+- Today's count and your all-time total
+- An optional light vibration on every count
+
+Hold the middle button for the list of dhikr and the settings. Everything stays on your watch: there is nothing to set up on your phone, no account, and it works without your phone nearby. Your counts are kept when you leave the app, so you can pick up where you left off.
+
+Created by Ark-am LLC. Discover our work and custom software development services:
+https://ark-am.com/

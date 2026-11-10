@@ -1,0 +1,228 @@
+{
+  "name": "qibla-tasbih",
+  "author": "ark-am",
+  "version": "1.0.0",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "Qibla-Tasbih",
+    "uuid": "97fd390d-36e0-46df-bb33-6ecdebdf6c90",
+    "sdkVersion": "3",
+    "enableMultiJS": false,
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "messageKeys": [],
+    "resources": {
+      "media": [
+        {
+          "type": "png",
+          "name": "IMAGE_MENU_ICON",
+          "file": "images/menu_icon.png",
+          "menuIcon": true
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_SUBHANALLAH",
+          "file": "images/phrases/subhanallah_small.png",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_SUBHANALLAH",
+          "file": "images/phrases/subhanallah_large.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_ALHAMDULILLAH",
+          "file": "images/phrases/alhamdulillah_small.png",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_ALHAMDULILLAH",
+          "file": "images/phrases/alhamdulillah_large.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_ALLAHU_AKBAR",
+          "file": "images/phrases/allahu_akbar_small.png",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_ALLAHU_AKBAR",
+          "file": "images/phrases/allahu_akbar_large.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_LA_ILAHA_ILLALLAH",
+          "file": "images/phrases/la_ilaha_illallah_small.png",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_LA_ILAHA_ILLALLAH",
+          "file": "images/phrases/la_ilaha_illallah_large.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_ASTAGHFIRULLAH",
+          "file": "images/phrases/astaghfirullah_small.png",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_ASTAGHFIRULLAH",
+          "file": "images/phrases/astaghfirullah_large.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_SUBHANALLAHI_WA_BIHAMDIHI",
+          "file": "images/phrases/subhanallahi_wa_bihamdihi_small.png",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_SUBHANALLAHI_WA_BIHAMDIHI",
+          "file": "images/phrases/subhanallahi_wa_bihamdihi_large.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_SALAWAT",
+          "file": "images/phrases/salawat_small.png",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_SALAWAT",
+          "file": "images/phrases/salawat_large.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_LA_HAWLA",
+          "file": "images/phrases/la_hawla_small.png",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_LA_HAWLA",
+          "file": "images/phrases/la_hawla_large.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_TAHLIL",
+          "file": "images/phrases/tahlil_small.png",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_TAHLIL",
+          "file": "images/phrases/tahlil_large.png",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        }
+      ]
+    }
+  }
+}
