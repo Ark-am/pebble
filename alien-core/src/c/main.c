@@ -26,6 +26,11 @@
 // Watches with a speaker add sound effects: the light ratchets round, each
 // plate has its own note, the transformation surges and booms, and each avatar
 // has a call of its own.
+//
+// The same code builds the Alien Core watch app (app/, which defines
+// ALIEN_CORE_APP). Watch apps get the buttons, and touch on the Pebble Time 2
+// and Pebble Round 2, which PebbleOS keeps from watch faces; see "Buttons and
+// touch" below.
 
 #define PERSIST_KEY_SETTINGS 1
 #define PERSIST_KEY_AVATAR 2
@@ -1235,10 +1240,11 @@ static void back_to_selecting(void) {
   PLAY(&SFX_BACK, SOUND_AVATARS);
 }
 
-// Steps to the next avatar, moving the light on one plate.
-static void step_avatar(void) {
+// Steps to the next avatar by moving the light on one plate, or to the one
+// before by moving it back.
+static void step_avatar(bool forwards) {
   const int32_t from = ring_moving() ? s_ring_to : s_ring;
-  ring_animate(from - PLATE_ANGLE, STEP_MS);
+  ring_animate(from + (forwards ? -PLATE_ANGLE : PLATE_ANGLE), STEP_MS);
   s_idle_ms = 0;
 }
 
@@ -1356,10 +1362,215 @@ static void tap_handler(AccelAxisType axis, int32_t direction) {
   }
   switch (s_state) {
     case STATE_TIME: open_selector(); break;
-    case STATE_SELECTING: step_avatar(); break;
+    case STATE_SELECTING: step_avatar(true); break;
     case STATE_AVATAR: back_to_selecting(); break;
     default: break;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Buttons and touch, in the watch app only
+//
+// Up, Select or Down opens the selector. In it, Down steps to the next avatar,
+// Up to the one before, and Select transforms straight away. On the avatar,
+// any of them goes back to choosing. Back closes the selector or the avatar
+// and returns to the time, and on the time leaves the app.
+//
+// On the Pebble Time 2 and Pebble Round 2, a tap on the time opens the
+// selector. In it, a swipe across the core steps to the next avatar (left or
+// up) or the one before (right or down), a tap on the core transforms, and
+// dragging round the plates turns the ring, snapping to the nearest plate when
+// let go. A tap or drag on the avatar goes back to choosing.
+
+#if defined(ALIEN_CORE_APP)
+static void select_or_open(bool forwards, bool transform_now) {
+  if (!s_settings.animation) {
+    return;
+  }
+  switch (s_state) {
+    case STATE_TIME:
+    case STATE_POWER_UP:
+    case STATE_CHASE:
+      open_selector();
+      break;
+    case STATE_SELECTING:
+      if (transform_now) {
+        transform();
+      } else {
+        step_avatar(forwards);
+      }
+      break;
+    case STATE_AVATAR:
+      back_to_selecting();
+      break;
+    default:
+      break;
+  }
+}
+
+static void up_click(ClickRecognizerRef recognizer, void *context) {
+  select_or_open(false, false);
+}
+
+static void select_click(ClickRecognizerRef recognizer, void *context) {
+  select_or_open(true, true);
+}
+
+static void down_click(ClickRecognizerRef recognizer, void *context) {
+  select_or_open(true, false);
+}
+
+static void back_click(ClickRecognizerRef recognizer, void *context) {
+  switch (s_state) {
+    case STATE_SELECTING:
+    case STATE_AVATAR:
+      close_to_time();
+      break;
+    case STATE_OPENING:
+    case STATE_TRANSFORMING:
+    case STATE_CLOSING:
+      // Let the animation finish; Back works again once it has.
+      break;
+    default:
+      window_stack_pop(true);
+      break;
+  }
+}
+
+static void click_config(void *context) {
+  window_single_click_subscribe(BUTTON_ID_UP, up_click);
+  window_single_click_subscribe(BUTTON_ID_SELECT, select_click);
+  window_single_click_subscribe(BUTTON_ID_DOWN, down_click);
+  window_single_click_subscribe(BUTTON_ID_BACK, back_click);
+}
+#endif
+
+#if defined(ALIEN_CORE_APP) && defined(_PBL_API_EXISTS_touch_service_subscribe)
+#define ALIEN_CORE_TOUCH
+#define DRAG_START_PIXELS 6
+// How far a swipe must go to step to another avatar.
+#define SWIPE_PIXELS 20
+#define SNAP_MS 200
+
+static bool s_touch_subscribed;
+static bool s_touching;
+static bool s_dragging;
+static bool s_on_plates;    // The touch started on the plates, not the core.
+static GPoint s_touch_start;
+static int32_t s_touch_angle;
+
+static GPoint dial_centre(void) {
+  const GRect bounds = layer_get_unobstructed_bounds(s_canvas);
+  return grect_center_point(&bounds);
+}
+
+static int32_t touch_angle(GPoint at) {
+  const GPoint centre = dial_centre();
+  return atan2_lookup(at.y - centre.y, at.x - centre.x);
+}
+
+// Whether a point is on the core, as canvas_update_proc sizes it.
+static bool in_core(GPoint at) {
+  const GPoint centre = dial_centre();
+  const GRect bounds = layer_get_unobstructed_bounds(s_canvas);
+  const int16_t short_side = bounds.size.w < bounds.size.h ? bounds.size.w : bounds.size.h;
+  const int16_t inner = (short_side / 2 - 2) * CORE_INNER / 100;
+  const int32_t dx = at.x - centre.x;
+  const int32_t dy = at.y - centre.y;
+  return dx * dx + dy * dy <= inner * inner;
+}
+
+static void touch_handler(const TouchEvent *event, void *context) {
+  const GPoint at = GPoint(event->x, event->y);
+  switch (event->type) {
+    case TouchEvent_Touchdown:
+      s_touching = true;
+      s_dragging = false;
+      s_touch_start = at;
+      s_touch_angle = touch_angle(at);
+      s_on_plates = !in_core(at);
+      break;
+    case TouchEvent_PositionUpdate: {
+      if (!s_touching || s_state == STATE_TIME) {
+        break;
+      }
+      if (!s_dragging && abs(at.x - s_touch_start.x) + abs(at.y - s_touch_start.y)
+          >= DRAG_START_PIXELS) {
+        s_dragging = true;
+        if (s_state == STATE_AVATAR) {
+          back_to_selecting();
+        }
+      }
+      if (s_dragging && s_state == STATE_SELECTING) {
+        s_idle_ms = 0;
+      }
+      if (s_dragging && s_state == STATE_SELECTING && s_on_plates) {
+        // Move the light by how far the finger has gone round the centre.
+        const int32_t angle = touch_angle(at);
+        int32_t turn = angle - s_touch_angle;
+        if (turn > TRIG_MAX_ANGLE / 2) {
+          turn -= TRIG_MAX_ANGLE;
+        } else if (turn < -TRIG_MAX_ANGLE / 2) {
+          turn += TRIG_MAX_ANGLE;
+        }
+        s_touch_angle = angle;
+        s_ring -= turn;
+        s_ring_duration = 0;
+        layer_mark_dirty(s_canvas);
+      }
+      break;
+    }
+    case TouchEvent_Liftoff:
+      if (!s_touching) {
+        break;
+      }
+      s_touching = false;
+      if (s_dragging) {
+        const int16_t dx = at.x - s_touch_start.x;
+        const int16_t dy = at.y - s_touch_start.y;
+        const int16_t across = abs(dx) > abs(dy) ? dx : dy;
+        if (s_state == STATE_SELECTING && !s_on_plates) {
+          if (abs(across) >= SWIPE_PIXELS) {
+            step_avatar(across < 0);
+          }
+        } else if (s_state == STATE_SELECTING) {
+          // Snap to the nearest plate.
+          const int32_t steps = (s_ring + (s_ring >= 0 ? PLATE_ANGLE / 2 : -PLATE_ANGLE / 2))
+            / PLATE_ANGLE;
+          ring_animate(steps * PLATE_ANGLE, SNAP_MS);
+          s_idle_ms = 0;
+        }
+        break;
+      }
+      if (s_state == STATE_TIME || s_state == STATE_POWER_UP || s_state == STATE_CHASE) {
+        open_selector();
+      } else if (s_state == STATE_SELECTING) {
+        if (in_core(at)) {
+          transform();
+        }
+      } else if (s_state == STATE_AVATAR) {
+        back_to_selecting();
+      }
+      break;
+  }
+}
+#endif
+
+// Touch is read only while the avatars are turned on, as the touch sensor
+// stays on while anything listens to it.
+static void update_touch(void) {
+#if defined(ALIEN_CORE_TOUCH)
+  const bool wanted = s_settings.animation && touch_service_is_enabled();
+  if (wanted == s_touch_subscribed) {
+    return;
+  }
+  s_touch_subscribed = wanted;
+  if (wanted) {
+    touch_service_subscribe(touch_handler, NULL);
+  } else {
+    touch_service_unsubscribe();
+  }
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -1475,6 +1686,7 @@ static void inbox_received(DictionaryIterator *iterator, void *context) {
     persist_write_data(PERSIST_KEY_SETTINGS, &s_settings, sizeof(s_settings));
     apply_palette();
     load_name_font();
+    update_touch();
     update_light();
     layer_mark_dirty(s_canvas);
   }
@@ -1544,10 +1756,14 @@ static void init(void) {
     .appear = window_appear,
     .unload = window_unload,
   });
+#if defined(ALIEN_CORE_APP)
+  window_set_click_config_provider(s_window, click_config);
+#endif
   window_stack_push(s_window, true);
 
   tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
   accel_tap_service_subscribe(tap_handler);
+  update_touch();
 #if !defined(PBL_PLATFORM_APLITE)
   unobstructed_area_service_subscribe((UnobstructedAreaHandlers) {
     .change = unobstructed_change,
@@ -1564,6 +1780,11 @@ static void deinit(void) {
   }
   tick_timer_service_unsubscribe();
   accel_tap_service_unsubscribe();
+#if defined(ALIEN_CORE_TOUCH)
+  if (s_touch_subscribed) {
+    touch_service_unsubscribe();
+  }
+#endif
 #if defined(PBL_SPEAKER)
   speaker_stop();
 #endif

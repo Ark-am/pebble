@@ -38,11 +38,62 @@ tail, Driftjelly's pulsing bell and Coilfang's flicking tongue.
 
 Nothing else moves while the time shows, so the face costs little battery.
 PebbleOS does not pass touch to watch faces, only to watch apps, so the
-avatars are worked by flicks on every watch, including the Pebble Time 2 and
-Pebble Round 2.
+face's avatars are worked by flicks on every watch, including the Pebble Time 2
+and Pebble Round 2. The Alien Core watch app adds the buttons and touch (see
+below).
 
 The design is original; it does not use any character, logo or symbol from
 other works.
+
+## Watch app
+
+Alien Core also comes as a watch app, opened from the watch's app menu, with
+everything the face has. Being an app, it gets the buttons, and touch on the
+Pebble Time 2 and Pebble Round 2, which PebbleOS keeps from watch faces.
+Flicks still work too.
+
+The face and the app are two separate installs built from the same code: a
+Pebble package is either a watch face or a watch app, never both. Install both
+to have both, keeping the face as the watch face and opening the app when you
+want the buttons or touch; Back on the app's time returns to the watch face.
+
+| | Watch face | Watch app |
+| --- | --- | --- |
+| Project | this folder | `app/` |
+| Bundle | `build/alien-core.pbw` | `app/build/app.pbw` |
+| On the watch | In the list of watch faces | In the app menu |
+| Worked by | Flicks | Flicks, the buttons, and touch on the Pebble Time 2 and Pebble Round 2 |
+| Settings and avatar | Its own | Its own |
+
+Each would be its own store listing, under watch faces and under apps, with
+its own screenshots and description.
+
+| | Up | Select | Down | Back |
+| --- | --- | --- | --- | --- |
+| On the time | Open the selector | Open the selector | Open the selector | Leave the app |
+| Choosing | The avatar before | Transform now | The next avatar | Back to the time |
+| On the avatar | Back to choosing | Back to choosing | Back to choosing | Back to the time |
+
+On the Pebble Time 2 and Pebble Round 2, a tap on the time opens the selector.
+While choosing, swipe across the core (left or up for the next avatar, right
+or down for the one before), drag round the plates to turn the ring, which
+snaps to the nearest plate when you let go, or tap the core to transform. A
+tap or drag on the avatar goes back to choosing.
+
+The app is built from the face's own code: `app/src` and `app/resources` link
+to `src` and `resources`, and `app/wscript` defines `ALIEN_CORE_APP`, which
+turns on the "Buttons and touch" section of `src/c/main.c`. The app has its
+own uuid, so it keeps its own settings and avatar. `app/package.json` is made
+from `package.json` by `tools/make_app_package.py`; run it again after changing
+`package.json`, such as adding a message key or a resource:
+
+```
+python3 tools/make_app_package.py
+cd app
+npm install
+pebble build                       # build/app.pbw
+pebble install --emulator emery
+```
 
 ## Sound
 

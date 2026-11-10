@@ -15,6 +15,9 @@ Features:
 - Sound effects on the Pebble Time 2 and Pebble 2 Duo: a ratcheting dial, a note for every plate, and a call for each avatar
 - Eight glow colours on colour watches: alien green, lime, cyan, blue, purple, red, orange and yellow
 - Works on every Pebble, round and rectangular, colour and black and white
+- Also available as a separate Alien Core watch app, worked with the buttons, and with touch on the Pebble Time 2 and Pebble Round 2
+
+Alien Core comes as two separate downloads: this watch face, and the Alien Core watch app. A Pebble download is either a watch face or an app, so install both to have both. Keep the face as your everyday watch face, worked with flicks of the wrist, and open the app from the watch's app menu when you want to choose avatars with the buttons: Up and Down step through them, Select transforms, and Back returns to the time and then to your watch face. On the Pebble Time 2 and Pebble Round 2 the app also responds to touch: tap the time to open the selector, swipe or drag round the plates to choose, and tap the core to transform. The face and the app each keep their own settings and chosen avatar.
 
 Settings are available via the Pebble phone app. Weather supports Celsius and Fahrenheit and needs your paired phone's location and internet access, with no weather account or API key required. Health data is unavailable on the original Pebble, and heart rate requires a supported sensor.
 
