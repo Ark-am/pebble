@@ -6,12 +6,12 @@ Features:
 - Build up to four centre screens using weather, date, battery, steps, and heart rate
 - Each screen can pair a main item with a second value, and show your name or a third value on the line below
 - Tap the watch to switch screens, or let them change automatically every minute.
-- Weather artwork changes with the conditions and includes sun and moon variations for day and night.
+- Twenty-one weather icons, from light drizzle to heavy snow, hail storms, wind, heat and cold, each with a day and a night version.
 - The current hour's number in a colour of your choice (colour watches), with eight ways to show the minutes
 - An editable name under the information, PEBBLE by default, in a small or large size
 - Show or hide the minute lines between the hour ticks
 - Show or hide the lines around the values, and choose the colour of those lines and of the information (colour watches)
-- Handwritten Sketchy font by default, or Pebble, Serif, Rounded and Mono styles
+- Handwritten style Sketchy font by default, or Pebble, Serif, Rounded and Mono styles
 
 Phone connection and Quiet Time indicators keep you informed with optional disconnect vibrations that respect Quiet Time. Settings are available in the Pebble phone app. Weather supports Celsius and Fahrenheit and needs your paired phone's location and internet access, with no weather account or API key required. Steps require a watch with health support, and heart rate requires a supported sensor.
 

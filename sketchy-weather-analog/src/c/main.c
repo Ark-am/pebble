@@ -218,17 +218,30 @@ typedef struct {
 
 static Palette s_palette;
 
+// The conditions the phone can send (src/pkjs/index.js), each with an icon.
 typedef enum {
   WEATHER_UNKNOWN,
   WEATHER_CLEAR,
-  WEATHER_FAIR,
+  WEATHER_FAIR,           // Mostly clear: a large sun or moon, a small cloud.
+  WEATHER_PARTLY_CLOUDY,  // A small sun or moon behind a large cloud.
   WEATHER_CLOUDY,
   WEATHER_FOG,
   WEATHER_DRIZZLE,
+  WEATHER_ICY_DRIZZLE,
+  WEATHER_LIGHT_RAIN,
   WEATHER_RAIN,
+  WEATHER_HEAVY_RAIN,
+  WEATHER_ICY_RAIN,
   WEATHER_SHOWERS,
+  WEATHER_LIGHT_SNOW,
   WEATHER_SNOW,
+  WEATHER_HEAVY_SNOW,
+  WEATHER_SNOW_SHOWERS,
   WEATHER_STORM,
+  WEATHER_HAIL_STORM,
+  WEATHER_WINDY,
+  WEATHER_HOT,
+  WEATHER_COLD,
   WEATHER_COUNT,
 } Weather;
 
@@ -503,13 +516,25 @@ static Weather weather_from_condition(const char *condition) {
   static const char *const names[WEATHER_COUNT] = {
     [WEATHER_CLEAR] = "CLEAR",
     [WEATHER_FAIR] = "FAIR",
+    [WEATHER_PARTLY_CLOUDY] = "PARTLY_CLOUDY",
     [WEATHER_CLOUDY] = "CLOUDY",
     [WEATHER_FOG] = "FOG",
     [WEATHER_DRIZZLE] = "DRIZZLE",
+    [WEATHER_ICY_DRIZZLE] = "ICY_DRIZZLE",
+    [WEATHER_LIGHT_RAIN] = "LIGHT_RAIN",
     [WEATHER_RAIN] = "RAIN",
+    [WEATHER_HEAVY_RAIN] = "HEAVY_RAIN",
+    [WEATHER_ICY_RAIN] = "ICY_RAIN",
     [WEATHER_SHOWERS] = "SHOWERS",
+    [WEATHER_LIGHT_SNOW] = "LIGHT_SNOW",
     [WEATHER_SNOW] = "SNOW",
+    [WEATHER_HEAVY_SNOW] = "HEAVY_SNOW",
+    [WEATHER_SNOW_SHOWERS] = "SNOW_SHOWERS",
     [WEATHER_STORM] = "STORM",
+    [WEATHER_HAIL_STORM] = "HAIL_STORM",
+    [WEATHER_WINDY] = "WINDY",
+    [WEATHER_HOT] = "HOT",
+    [WEATHER_COLD] = "COLD",
   };
   for (int i = 1; i < WEATHER_COUNT; i++) {
     if (strcmp(condition, names[i]) == 0) {
@@ -647,15 +672,30 @@ static void draw_cloud(GContext *ctx, int16_t dx, int16_t dy, int16_t scale, GCo
 // Precipitation clouds sit higher in the box to leave room underneath.
 #define RAISED_CLOUD -14
 
-static void draw_rain(GContext *ctx, bool heavy) {
-  static const int8_t drops[][2] = { { 34, 62 }, { 52, 64 }, { 70, 62 }, { 43, 74 }, { 61, 74 } };
+// How much rain or snow falls from a cloud.
+typedef enum { FALL_LIGHT, FALL_MODERATE, FALL_HEAVY } Fall;
+
+static void draw_drop(GContext *ctx, int16_t x, int16_t y, int16_t length) {
   graphics_context_set_stroke_color(ctx, s_palette.rain);
   graphics_context_set_stroke_width(ctx, ICON_SIZE >= 60 ? 2 : 1);
-  const int count = heavy ? 5 : 3;
+  graphics_draw_line(ctx, icon_point(x, y), icon_point(x - 4, y + length));
+}
+
+static void draw_rain(GContext *ctx, Fall fall) {
+  static const int8_t drops[][2] = { { 34, 62 }, { 52, 64 }, { 70, 62 }, { 43, 74 }, { 61, 74 } };
+  static const int8_t heavy[][2] = {
+    { 28, 61 }, { 44, 63 }, { 60, 61 }, { 76, 63 }, { 36, 73 }, { 52, 75 }, { 68, 73 },
+  };
+  if (fall == FALL_HEAVY) {
+    for (size_t i = 0; i < ARRAY_LENGTH(heavy); i++) {
+      draw_drop(ctx, heavy[i][0], heavy[i][1], 10);
+    }
+    return;
+  }
+  // Light rain is three long drops, moderate rain five shorter ones.
+  const int count = fall == FALL_LIGHT ? 3 : 5;
   for (int i = 0; i < count; i++) {
-    const int16_t length = heavy ? 10 : 14;
-    graphics_draw_line(ctx, icon_point(drops[i][0], drops[i][1]),
-                       icon_point(drops[i][0] - 4, drops[i][1] + length));
+    draw_drop(ctx, drops[i][0], drops[i][1], fall == FALL_LIGHT ? 14 : 10);
   }
 }
 
@@ -669,16 +709,66 @@ static void draw_drizzle(GContext *ctx) {
   }
 }
 
-static void draw_snow(GContext *ctx) {
-  static const int8_t flakes[][2] = { { 32, 68 }, { 68, 68 }, { 50, 79 } };
-  const int16_t r = icon_length(7);
-  for (size_t i = 0; i < ARRAY_LENGTH(flakes); i++) {
-    const GPoint centre = icon_point(flakes[i][0], flakes[i][1]);
-    for (int arm = 0; arm < 3; arm++) {
-      const int32_t angle = TRIG_MAX_ANGLE * arm / 6;
-      sketch_line(ctx, ray_point(centre, angle, r),
-                  ray_point(centre, angle + TRIG_MAX_ANGLE / 2, r), s_palette.ink);
-    }
+// A six-armed snowflake, or an ice crystal, centred at (x, y) units.
+static void draw_flake(GContext *ctx, int16_t x, int16_t y, int16_t radius) {
+  const GPoint centre = icon_point(x, y);
+  const int16_t r = icon_length(radius);
+  for (int arm = 0; arm < 3; arm++) {
+    const int32_t angle = TRIG_MAX_ANGLE * arm / 6;
+    sketch_line(ctx, ray_point(centre, angle, r),
+                ray_point(centre, angle + TRIG_MAX_ANGLE / 2, r), s_palette.ink);
+  }
+}
+
+static void draw_snow(GContext *ctx, Fall fall) {
+  static const int8_t light[][2] = { { 38, 68 }, { 62, 76 } };
+  static const int8_t moderate[][2] = { { 32, 68 }, { 68, 68 }, { 50, 79 } };
+  static const int8_t heavy[][2] = { { 28, 65 }, { 50, 64 }, { 72, 65 }, { 39, 79 }, { 61, 79 } };
+  switch (fall) {
+    case FALL_LIGHT:
+      for (size_t i = 0; i < ARRAY_LENGTH(light); i++) {
+        draw_flake(ctx, light[i][0], light[i][1], 7);
+      }
+      break;
+    case FALL_HEAVY:
+      for (size_t i = 0; i < ARRAY_LENGTH(heavy); i++) {
+        draw_flake(ctx, heavy[i][0], heavy[i][1], 6);
+      }
+      break;
+    default:
+      for (size_t i = 0; i < ARRAY_LENGTH(moderate); i++) {
+        draw_flake(ctx, moderate[i][0], moderate[i][1], 7);
+      }
+      break;
+  }
+}
+
+// Freezing rain: two drops and an ice crystal.
+static void draw_icy_rain(GContext *ctx) {
+  draw_drop(ctx, 34, 62, 14);
+  draw_drop(ctx, 52, 64, 14);
+  draw_flake(ctx, 70, 72, 7);
+}
+
+// Freezing drizzle: three drizzle dots and an ice crystal.
+static void draw_icy_drizzle(GContext *ctx) {
+  static const int8_t drops[][2] = { { 32, 64 }, { 50, 66 }, { 41, 78 } };
+  graphics_context_set_fill_color(ctx, s_palette.rain);
+  for (size_t i = 0; i < ARRAY_LENGTH(drops); i++) {
+    graphics_fill_circle(ctx, icon_point(drops[i][0], drops[i][1]), icon_length(3));
+  }
+  draw_flake(ctx, 67, 72, 7);
+}
+
+// Hailstones either side of a lightning bolt: small sketched balls.
+static void draw_hail(GContext *ctx) {
+  static const int8_t stones[][2] = { { 28, 66 }, { 74, 66 }, { 33, 80 }, { 70, 80 } };
+  const int16_t r = icon_length(4);
+  for (size_t i = 0; i < ARRAY_LENGTH(stones); i++) {
+    const GPoint centre = icon_point(stones[i][0], stones[i][1]);
+    graphics_context_set_fill_color(ctx, s_palette.background);
+    graphics_fill_circle(ctx, centre, r);
+    sketch_circle(ctx, centre, r, s_palette.ink, NULL, NULL);
   }
 }
 
@@ -714,6 +804,105 @@ static void draw_small_sky(GContext *ctx, int16_t x, int16_t y) {
   }
 }
 
+// Two small stars in the top corners, so the cloudy icons show it is night.
+static void draw_stars(GContext *ctx) {
+  if (s_daytime) {
+    return;
+  }
+  static const int8_t stars[][3] = { { 18, 20, 5 }, { 84, 26, 4 } };
+  graphics_context_set_stroke_color(ctx, s_palette.ink);
+  graphics_context_set_stroke_width(ctx, 1);
+  for (size_t i = 0; i < ARRAY_LENGTH(stars); i++) {
+    const int16_t x = stars[i][0];
+    const int16_t y = stars[i][1];
+    const int16_t arm = stars[i][2];
+    graphics_draw_line(ctx, icon_point(x - arm, y), icon_point(x + arm, y));
+    graphics_draw_line(ctx, icon_point(x, y - arm), icon_point(x, y + arm));
+  }
+}
+
+typedef struct {
+  GPoint centre;
+  bool up;  // Curling up from the line's end; otherwise down.
+} CurlFilter;
+
+// A curl is most of a circle: everything but the quarter the line comes in
+// through.
+static bool curl_filter(GPoint point, const void *data) {
+  const CurlFilter *filter = data;
+  const bool left = point.x < filter->centre.x - 1;
+  return filter->up ? !(left && point.y > filter->centre.y + 1)
+                    : !(left && point.y < filter->centre.y - 1);
+}
+
+// A gust of wind: a line that ends in a curl, up or down, of the given radius.
+static void draw_gust(GContext *ctx, int16_t x0, int16_t x1, int16_t y, int16_t radius, bool up) {
+  sketch_line(ctx, icon_point(x0, y), icon_point(x1, y), s_palette.ink);
+  const CurlFilter filter = { icon_point(x1, up ? y - radius : y + radius), up };
+  sketch_circle(ctx, filter.centre, icon_length(radius), s_palette.ink, curl_filter, &filter);
+}
+
+static void draw_wind(GContext *ctx) {
+  draw_gust(ctx, 16, 50, 36, 10, true);
+  draw_gust(ctx, 24, 72, 56, 11, true);
+  draw_gust(ctx, 16, 52, 70, 8, false);
+}
+
+typedef struct {
+  int16_t centre_x;
+  int16_t half;
+  int16_t below;
+} TubeFilter;
+
+// The thermometer's bulb shows except where the tube joins it.
+static bool tube_filter(GPoint point, const void *data) {
+  const TubeFilter *filter = data;
+  return !(abs(point.x - filter->centre_x) < filter->half && point.y < filter->below);
+}
+
+static bool upper_half_filter(GPoint point, const void *data) {
+  return point.y <= *(const int16_t *)data + 1;
+}
+
+// A thermometer filled to `level` (units, lower is fuller) in `fill`, with a
+// sun or moon beside it when hot or a snowflake when cold.
+static void draw_thermometer(GContext *ctx, bool hot) {
+  const GColor fill = hot ? s_palette.warning : s_palette.rain;
+  const int16_t level = hot ? 28 : 58;
+  const GPoint bulb = icon_point(42, 74);
+  const int16_t bulb_r = icon_length(11);
+  const int16_t half = icon_length(6);
+  const GPoint top = icon_point(42, 24);
+  const int16_t inner = half > 3 ? half - 2 : 1;
+
+  graphics_context_set_fill_color(ctx, fill);
+  graphics_fill_circle(ctx, bulb, bulb_r);
+  const int16_t level_y = icon_point(0, level).y;
+  graphics_fill_rect(ctx, GRect(bulb.x - inner, level_y, inner * 2 + 1, bulb.y - level_y), 0,
+                     GCornerNone);
+
+  sketch_line(ctx, GPoint(top.x - half, top.y), GPoint(bulb.x - half, icon_point(0, 65).y),
+              s_palette.ink);
+  sketch_line(ctx, GPoint(top.x + half, top.y), GPoint(bulb.x + half, icon_point(0, 65).y),
+              s_palette.ink);
+  const int16_t top_y = top.y;
+  sketch_circle(ctx, top, half, s_palette.ink, upper_half_filter, &top_y);
+  const TubeFilter tube = { bulb.x, half, bulb.y };
+  sketch_circle(ctx, bulb, bulb_r, s_palette.ink, tube_filter, &tube);
+  // A scale up the side.
+  for (int16_t y = 32; y <= 52; y += 10) {
+    sketch_line(ctx, icon_point(51, y), icon_point(56, y), s_palette.ink);
+  }
+
+  if (!hot) {
+    draw_flake(ctx, 72, 32, 10);
+  } else if (s_daytime) {
+    draw_sun(ctx, 72, 34, 8, 5);
+  } else {
+    draw_moon(ctx, 72, 32, 11);
+  }
+}
+
 static void draw_weather_icon(GContext *ctx, Weather weather) {
   switch (weather) {
     case WEATHER_CLEAR:
@@ -724,37 +913,85 @@ static void draw_weather_icon(GContext *ctx, Weather weather) {
       }
       break;
     case WEATHER_FAIR:
+      if (s_daytime) {
+        draw_sun(ctx, 40, 44, 14, 9);
+      } else {
+        draw_moon(ctx, 42, 44, 20);
+      }
+      draw_cloud(ctx, 16, 14, 55, s_palette.cloud);
+      break;
+    case WEATHER_PARTLY_CLOUDY:
       draw_small_sky(ctx, 64, 34);
       draw_cloud(ctx, -8, 8, 85, s_palette.cloud);
       break;
     case WEATHER_CLOUDY:
+      draw_stars(ctx);
       draw_cloud(ctx, 10, -10, 75, s_palette.back_cloud);
       draw_cloud(ctx, -6, 6, 90, s_palette.cloud);
       break;
     case WEATHER_FOG:
+      draw_stars(ctx);
       draw_cloud(ctx, 0, RAISED_CLOUD, 90, s_palette.back_cloud);
       draw_fog(ctx);
       break;
     case WEATHER_DRIZZLE:
+      draw_stars(ctx);
       draw_cloud(ctx, 0, RAISED_CLOUD, 90, s_palette.cloud);
       draw_drizzle(ctx);
       break;
-    case WEATHER_RAIN:
+    case WEATHER_ICY_DRIZZLE:
+      draw_stars(ctx);
       draw_cloud(ctx, 0, RAISED_CLOUD, 90, s_palette.cloud);
-      draw_rain(ctx, true);
+      draw_icy_drizzle(ctx);
+      break;
+    case WEATHER_LIGHT_RAIN:
+    case WEATHER_RAIN:
+    case WEATHER_HEAVY_RAIN:
+      draw_stars(ctx);
+      draw_cloud(ctx, 0, RAISED_CLOUD, 90, s_palette.cloud);
+      draw_rain(ctx, weather == WEATHER_LIGHT_RAIN ? FALL_LIGHT
+                     : weather == WEATHER_HEAVY_RAIN ? FALL_HEAVY : FALL_MODERATE);
+      break;
+    case WEATHER_ICY_RAIN:
+      draw_stars(ctx);
+      draw_cloud(ctx, 0, RAISED_CLOUD, 90, s_palette.cloud);
+      draw_icy_rain(ctx);
       break;
     case WEATHER_SHOWERS:
       draw_small_sky(ctx, 68, 22);
       draw_cloud(ctx, -4, RAISED_CLOUD, 85, s_palette.cloud);
-      draw_rain(ctx, false);
+      draw_rain(ctx, FALL_LIGHT);
       break;
+    case WEATHER_LIGHT_SNOW:
     case WEATHER_SNOW:
+    case WEATHER_HEAVY_SNOW:
+      draw_stars(ctx);
       draw_cloud(ctx, 0, RAISED_CLOUD, 90, s_palette.cloud);
-      draw_snow(ctx);
+      draw_snow(ctx, weather == WEATHER_LIGHT_SNOW ? FALL_LIGHT
+                     : weather == WEATHER_HEAVY_SNOW ? FALL_HEAVY : FALL_MODERATE);
+      break;
+    case WEATHER_SNOW_SHOWERS:
+      draw_small_sky(ctx, 68, 22);
+      draw_cloud(ctx, -4, RAISED_CLOUD, 85, s_palette.cloud);
+      draw_snow(ctx, FALL_LIGHT);
       break;
     case WEATHER_STORM:
+      draw_stars(ctx);
       draw_cloud(ctx, 0, RAISED_CLOUD, 90, s_palette.back_cloud);
       draw_bolt(ctx);
+      break;
+    case WEATHER_HAIL_STORM:
+      draw_stars(ctx);
+      draw_cloud(ctx, 0, RAISED_CLOUD, 90, s_palette.back_cloud);
+      draw_bolt(ctx);
+      draw_hail(ctx);
+      break;
+    case WEATHER_WINDY:
+      draw_wind(ctx);
+      break;
+    case WEATHER_HOT:
+    case WEATHER_COLD:
+      draw_thermometer(ctx, weather == WEATHER_HOT);
       break;
     default:
       draw_cloud(ctx, 0, 0, 90, s_palette.background);

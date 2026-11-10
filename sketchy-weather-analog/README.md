@@ -50,12 +50,32 @@ sensor.
 | Conditions | Icon |
 | --- | --- |
 | Clear | Shaded sun by day, crescent moon at night |
-| Fair | Sun or moon behind a cloud |
+| Mostly clear | A large sun or moon with a small cloud |
+| Partly cloudy | A small sun or moon behind a cloud |
 | Cloudy | Two clouds |
 | Fog | Cloud over mist lines |
-| Drizzle, rain, showers | Cloud with drops (showers add the sun or moon) |
-| Snow | Cloud with snowflakes |
-| Storm | Cloud with a lightning bolt |
+| Drizzle | Cloud with drizzle dots |
+| Freezing drizzle | Cloud with drizzle dots and an ice crystal |
+| Light rain, rain, heavy rain | Cloud with three long drops, five drops or seven drops |
+| Freezing rain | Cloud with two drops and an ice crystal |
+| Showers | Sun or moon, cloud and drops |
+| Light snow, snow, heavy snow | Cloud with two, three or five snowflakes |
+| Snow showers | Sun or moon, cloud and snowflakes |
+| Thunderstorm | Cloud with a lightning bolt |
+| Thunderstorm with hail | Cloud with a lightning bolt and hailstones |
+| Windy | Three gusts ending in curls |
+| Hot | A full thermometer with a sun (a moon at night) |
+| Cold | A low thermometer with a snowflake |
+
+At night, the icons with only clouds also show two small stars, so every
+condition looks different by day and by night.
+
+Windy, hot and cold take the place of a dry sky (clear, mostly clear, partly
+cloudy or cloudy) when they stand out: at 32 °C (90 °F) or more it is hot, at
+-10 °C (14 °F) or less it is cold, and otherwise winds of 40 km/h (25 mph) or
+more make it windy. Rain, snow, fog and storms always show as themselves.
+The limits are `HOT_CELSIUS`, `COLD_CELSIUS` and `WINDY_KMH` in
+`src/pkjs/index.js`.
 
 Lines are drawn twice, slightly offset, like a pencil going back over a
 stroke. The sun and moon are cross-hatched. On colour watches the sun is
@@ -107,7 +127,7 @@ battery, choose it as one of the centre screen items.
 ## Weather
 
 The companion JavaScript runs in the Pebble phone app. It asks the phone for
-its location and fetches the current weather from
+its location and fetches the current weather, with the wind speed, from
 [Open-Meteo](https://open-meteo.com/), which needs no account or API key. The
 watch requests an update every 30 minutes and keeps the last reading if the
 phone is unavailable. Until the first reading arrives, the widget shows an
