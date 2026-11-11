@@ -1,0 +1,125 @@
+{
+  "name": "gps-speedometer",
+  "author": "ark-am",
+  "version": "1.0.0",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "GPS Speedometer",
+    "uuid": "761fe26a-a4f1-478c-b9dc-f3031c85927d",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "capabilities": [
+      "location"
+    ],
+    "messageKeys": [
+      "STATUS",
+      "SPEED",
+      "HEADING",
+      "ACCURACY",
+      "ODOMETER"
+    ],
+    "resources": {
+      "media": [
+        {
+          "type": "png",
+          "name": "IMAGE_MENU_ICON",
+          "file": "images/menu_icon.png",
+          "menuIcon": true
+        },
+        {
+          "type": "font",
+          "name": "FONT_DIGITS_46",
+          "file": "fonts/Antonio-SemiBold.ttf",
+          "characterRegex": "[0-9.]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_DIGITS_56",
+          "file": "fonts/Antonio-SemiBold.ttf",
+          "characterRegex": "[0-9.]",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_DIGITS_70",
+          "file": "fonts/Antonio-SemiBold.ttf",
+          "characterRegex": "[0-9.]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "emery",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_DIGITS_88",
+          "file": "fonts/Antonio-SemiBold.ttf",
+          "characterRegex": "[0-9.]",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_DIGITS_100",
+          "file": "fonts/Antonio-SemiBold.ttf",
+          "characterRegex": "[0-9.]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_VALUE_22",
+          "file": "fonts/Antonio-SemiBold.ttf",
+          "characterRegex": "[0-9A-Z./: -]",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_VALUE_28",
+          "file": "fonts/Antonio-SemiBold.ttf",
+          "characterRegex": "[0-9A-Z./: -]",
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ]
+        }
+      ]
+    }
+  }
+}
