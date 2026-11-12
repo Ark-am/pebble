@@ -125,7 +125,10 @@ Tracker.prototype.fromSpeed = function (point, coords, accuracy) {
       // After a gap, the straight line across it is the best guess, as long
       // as it is clearly more than the fixes' own uncertainty.
       var across = distance(this.last, point);
-      if (across >= Math.max(10, 2 * (accuracy || 0))) {
+      // A stale or newly acquired fix can land far from the real route.
+      // Never bridge a gap faster than the maximum plausible GPS speed.
+      if (across >= Math.max(10, 2 * (accuracy || 0)) &&
+          across <= MAX_SPEED * elapsed / 1000) {
         this.odometer += across;
       }
     }

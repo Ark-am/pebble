@@ -112,6 +112,16 @@ test("a gap such as a tunnel is bridged with a straight line", () => {
   assertNear(reading.odometer, 1025, 2, "odometer");
 });
 
+test("a GPS jump after a gap does not inflate the trip", () => {
+  const tracker = new Tracker();
+  tracker.update({ ...START, accuracy: 5, speed: 25, heading: 0 }, 0);
+  const reading = tracker.update(
+    { ...north(100000), accuracy: 5, speed: 25, heading: 0 },
+    40000
+  );
+  assert.equal(reading.odometer, 0);
+});
+
 test("the heading is held briefly after stopping, then dropped", () => {
   const tracker = new Tracker();
   tracker.update({ ...START, accuracy: 5, speed: 12, heading: 315 }, 0);
