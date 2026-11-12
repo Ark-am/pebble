@@ -119,7 +119,9 @@ typedef struct {
   bool alert_on;
   bool light_on;           // keep the screen lit while the app is open
   uint8_t launches;        // counts the first few, to show the touch hint
-  uint16_t alert_speed;    // in the chosen unit
+  // The alert speed, kept for each unit so switching units and back changes
+  // nothing.
+  uint16_t alert_speed[UNIT_COUNT];
   uint32_t trip_dm;        // distance, in decimetres
   uint32_t trip_seconds;   // time spent moving
   uint32_t max_cms;        // top speed, in cm/s
@@ -135,7 +137,9 @@ static void state_defaults(void) {
   // Miles for a watch set to American English, kilometres elsewhere.
   s_state.unit = strcmp(i18n_get_system_locale(), "en_US") == 0 ? UNIT_MPH : UNIT_KMH;
   s_state.range = RANGE_AUTO;
-  s_state.alert_speed = 50;
+  s_state.alert_speed[UNIT_KMH] = 50;
+  s_state.alert_speed[UNIT_MPH] = 30;
+  s_state.alert_speed[UNIT_KNOTS] = 25;
   // Starts the automatic dial at 0 to 60.
   s_state.peak_cms = 1400;
 }
@@ -159,8 +163,10 @@ static void state_load(void) {
   if (s_state.view >= VIEW_COUNT) {
     s_state.view = VIEW_DIAL;
   }
-  if (s_state.alert_speed < 5 || s_state.alert_speed > 995) {
-    s_state.alert_speed = 50;
+  for (int i = 0; i < UNIT_COUNT; i++) {
+    if (s_state.alert_speed[i] < 5 || s_state.alert_speed[i] > 995) {
+      s_state.alert_speed[i] = 50;
+    }
   }
 }
 
@@ -203,6 +209,11 @@ static bool has_fix(void) {
 
 static const Unit *unit(void) {
   return &UNITS[s_state.unit];
+}
+
+// The alert speed, in the chosen unit.
+static int alert_speed(void) {
+  return s_state.alert_speed[s_state.unit];
 }
 
 // A speed in tenths of the chosen unit.
@@ -256,6 +267,14 @@ typedef struct {
 } NumberFont;
 
 static NumberFont s_dial_digits;   // on the dial
+// On the Pebble Time 2, three digits at full size would run into the dial's
+// numbers, so a number that wide is drawn a size smaller.
+static NumberFont s_dial_narrow;
+#if defined(PBL_PLATFORM_EMERY)
+#define DIAL_NUMBER_FIT 84
+#else
+#define DIAL_NUMBER_FIT 1000
+#endif
 static NumberFont s_large_digits;  // on the large-digits view
 static GFont s_value_font;         // values and units
 static GFont s_caption_font;       // small labels
@@ -274,6 +293,8 @@ static void fonts_load(void) {
 #if defined(PBL_PLATFORM_EMERY)
   s_dial_digits = (NumberFont){fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_DIGITS_70)),
                                70, 61, 32, 18};
+  s_dial_narrow = (NumberFont){fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_DIGITS_56)),
+                               56, 50, 26, 15};
   s_large_digits = (NumberFont){fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_DIGITS_100)),
                                 100, 87, 45, 26};
 #elif defined(PBL_PLATFORM_GABBRO)
@@ -303,6 +324,9 @@ static void fonts_load(void) {
 
 static void fonts_unload(void) {
   fonts_unload_custom_font(s_dial_digits.font);
+#if defined(PBL_PLATFORM_EMERY)
+  fonts_unload_custom_font(s_dial_narrow.font);
+#endif
   fonts_unload_custom_font(s_large_digits.font);
   fonts_unload_custom_font(s_value_font);
 }
@@ -499,20 +523,36 @@ static void draw_dial(GContext *ctx, const Dial *dial, bool live) {
       graphics_draw_line(ctx, polar(c, outer, angle),
                          polar(c, outer - (major ? SZ(4, 6) : SZ(2, 3)), angle));
 #if LARGE
-      if (major) {
-        char label[6];
+      // Numbers only while the dial is in use; otherwise a message sits here.
+      if (major && live) {
+        char label[12];
         snprintf(label, sizeof(label), "%d", i / 2 * step);
-        const GPoint at = polar(c, outer - 18, angle);
-        draw_text(ctx, label, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                  GRect(at.x - 20, at.y - 10, 40, 16), GTextAlignmentCenter, COLOR_SOFT);
+        const GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+        const GPoint at = polar(c, outer - 16, angle);
+        if (i == 0 || i == count * 2) {
+          // The first and last sit beside the unit, so they keep clear of it.
+          const int clear = 31;
+          const int reach = ABS(at.x - c.x) - 6;
+          const int edge = reach > clear ? reach : clear;
+          if (i == 0) {
+            draw_text(ctx, label, font, GRect(c.x - edge - 40, at.y - 13, 40, 16),
+                      GTextAlignmentRight, COLOR_SOFT);
+          } else {
+            draw_text(ctx, label, font, GRect(c.x + edge, at.y - 13, 40, 16),
+                      GTextAlignmentLeft, COLOR_SOFT);
+          }
+        } else {
+          draw_text(ctx, label, font, GRect(at.x - 20, at.y - 10, 40, 16),
+                    GTextAlignmentCenter, COLOR_SOFT);
+        }
       }
 #endif
     }
   }
 
   // A notch across the band at the alert speed.
-  if (s_state.alert_on && s_state.alert_speed <= range) {
-    const int32_t angle = dial_angle(s_state.alert_speed * 10, top);
+  if (s_state.alert_on && alert_speed() <= range) {
+    const int32_t angle = dial_angle(alert_speed() * 10, top);
     const GPoint from = polar(c, r, angle);
     const GPoint to = polar(c, r - band, angle);
     graphics_context_set_stroke_color(ctx, GColorBlack);
@@ -655,27 +695,35 @@ static void draw_speed(GContext *ctx, const NumberFont *font, GPoint centre, int
 
   char number[8];
   speed_text(number, sizeof(number));
+  if (font == &s_dial_digits && number_width(font, number) > DIAL_NUMBER_FIT) {
+    font = &s_dial_narrow;
+  }
   draw_number(ctx, font, number, centre, s_over ? COLOR_OVER : GColorWhite);
 
+  // Over the alert speed, the number and unit turn red. Black and white
+  // screens put the unit on a filled plate instead.
   const char *name = unit()->name;
+#if !defined(PBL_COLOR)
   if (s_over) {
-    // Over the alert speed: the unit stands out on a filled plate.
-    const int plate = text_width(name, s_value_font) + SZ(12, 16);
-    graphics_context_set_fill_color(ctx, COLOR_OVER);
+    const int plate = text_width(name, s_value_font) + SZ(10, 14);
+    graphics_context_set_fill_color(ctx, GColorWhite);
     graphics_fill_rect(ctx, GRect(centre.x - plate / 2, unit_top - SZ(3, 4), plate,
                                   VALUE_CAP + SZ(6, 8)),
                        SZ(3, 4), GCornersAll);
-    draw_value(ctx, name, centre.x - 60, unit_top, 120, GTextAlignmentCenter,
-               PBL_IF_COLOR_ELSE(GColorWhite, GColorBlack));
-  } else {
-    draw_value(ctx, name, centre.x - 60, unit_top, 120, GTextAlignmentCenter, accent_color());
+    draw_value(ctx, name, centre.x - 60, unit_top, 120, GTextAlignmentCenter, GColorBlack);
+    return;
   }
+#endif
+  draw_value(ctx, name, centre.x - 60, unit_top, 120, GTextAlignmentCenter,
+             s_over ? COLOR_OVER : accent_color());
 }
 
 static const char *const CARDINALS[] = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
 
+// A dart: slim, with a shallow notch at the back, so the pointed end is
+// clear whichever way it is turned.
 static const GPoint ARROW_POINTS[] = {
-  {0, -SZ(7, 9)}, {SZ(5, 7), SZ(6, 8)}, {0, SZ(3, 4)}, {-SZ(5, 7), SZ(6, 8)},
+  {0, -SZ(8, 10)}, {SZ(4, 5), SZ(6, 8)}, {0, SZ(4, 5)}, {-SZ(4, 5), SZ(6, 8)},
 };
 static const GPathInfo ARROW_INFO = {
   .num_points = ARRAY_LENGTH(ARROW_POINTS),
@@ -801,7 +849,7 @@ static void draw_digits_view(GContext *ctx, GRect bounds) {
 static void draw_footer(GContext *ctx, GRect bounds) {
   const int w = bounds.size.w;
   const int h = bounds.size.h;
-  const int value_top = h - SZ(40, 48);
+  const int value_top = h - SZ(40, 51);
   const int caption_top = value_top + VALUE_CAP + SZ(3, 4);
   const int side = SZ(4, 8);
   const int column = SZ(52, 70);
@@ -831,7 +879,7 @@ static void draw_dial_view(GContext *ctx, GRect bounds) {
   const Dial dial = {c, r, SZ(10, 14), true};
   draw_status(ctx, bounds, GPointZero);
   draw_dial(ctx, &dial, has_fix());
-  draw_speed(ctx, &s_dial_digits, GPoint(c.x, c.y - SZ(4, 4)), c.y + SZ(22, 34), SZ(92, 130));
+  draw_speed(ctx, &s_dial_digits, GPoint(c.x, c.y - SZ(4, 4)), c.y + SZ(22, 34), SZ(76, 130));
   draw_footer(ctx, bounds);
 }
 
@@ -865,8 +913,8 @@ static void draw_bar(GContext *ctx, GRect box, bool live) {
     }
   }
   // The alert speed is a gap in the row with a mark above it.
-  if (s_state.alert_on && s_state.alert_speed * 10 <= top) {
-    const int x = left + (int)((int64_t)(blocks * (width + gap) - gap) * s_state.alert_speed * 10 /
+  if (s_state.alert_on && alert_speed() * 10 <= top) {
+    const int x = left + (int)((int64_t)(blocks * (width + gap) - gap) * alert_speed() * 10 /
                                top);
     graphics_context_set_fill_color(ctx, PBL_IF_COLOR_ELSE(GColorRed, GColorWhite));
     graphics_fill_rect(ctx, GRect(x - 1, box.origin.y - 3, 3, box.size.h + 6), 0, GCornerNone);
@@ -1019,7 +1067,7 @@ static void canvas_update(Layer *layer, GContext *ctx) {
 
   const int w = bounds.size.w;
   const int h = bounds.size.h;
-  draw_page_dots(ctx, GPoint(w / 2, h - PBL_IF_ROUND_ELSE(SZ(9, 13), SZ(4, 5))));
+  draw_page_dots(ctx, GPoint(w / 2, h - PBL_IF_ROUND_ELSE(SZ(7, 12), SZ(4, 5))));
   draw_toast(ctx, GPoint(w / 2, h - PBL_IF_ROUND_ELSE(SZ(40, 58), SZ(24, 30))));
 }
 
@@ -1107,12 +1155,7 @@ static void set_view(int view) {
 }
 
 static void set_unit(int next) {
-  // The alert speed stays the same speed: 50 km/h becomes 30 mph.
-  const uint32_t before = unit()->speed_factor;
   s_state.unit = next % UNIT_COUNT;
-  uint32_t alert = (s_state.alert_speed * unit()->speed_factor + before / 2) / before;
-  alert = (alert + 2) / 5 * 5;
-  s_state.alert_speed = alert < 5 ? 5 : alert > 995 ? 995 : alert;
   s_over = false;
   s_state_dirty = true;
   redraw();
@@ -1130,7 +1173,7 @@ static void check_alert(void) {
     return;
   }
   const int32_t x10 = speed_x10(s_speed_cms);
-  const int32_t limit = s_state.alert_speed * 10;
+  const int32_t limit = alert_speed() * 10;
   if (!s_over && x10 >= limit + 5) {
     s_over = true;
     vibes_double_pulse();
@@ -1233,7 +1276,7 @@ static void open_help(void) {
 }
 
 static void alert_selected(NumberWindow *window, void *context) {
-  s_state.alert_speed = number_window_get_value(window);
+  s_state.alert_speed[s_state.unit] = number_window_get_value(window);
   s_state.alert_on = true;
   s_over = false;
   state_save();
@@ -1251,7 +1294,7 @@ static void open_alert_speed(void) {
     number_window_set_step_size(s_alert_window, 5);
   }
   number_window_set_label(s_alert_window, s_alert_label);
-  number_window_set_value(s_alert_window, s_state.alert_speed);
+  number_window_set_value(s_alert_window, alert_speed());
   window_stack_push(number_window_get_window(s_alert_window), true);
 }
 
@@ -1319,7 +1362,7 @@ static void menu_draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, vo
         break;
       case ROW_ALERT_SPEED:
         title = "Alert over";
-        snprintf(subtitle, sizeof(subtitle), "%d %s", s_state.alert_speed, unit()->menu_name);
+        snprintf(subtitle, sizeof(subtitle), "%d %s", alert_speed(), unit()->menu_name);
         break;
       case ROW_THEME:
         title = "Colours";
@@ -1334,9 +1377,10 @@ static void menu_draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, vo
         break;
       case ROW_HELP:
         title = "How to use";
-        snprintf(subtitle, sizeof(subtitle), "Buttons%s", PBL_IF_COLOR_ELSE("", ""));
 #if defined(APP_TOUCH)
         snprintf(subtitle, sizeof(subtitle), "Buttons and touch");
+#else
+        snprintf(subtitle, sizeof(subtitle), "What the buttons do");
 #endif
         break;
     }

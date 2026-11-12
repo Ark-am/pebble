@@ -60,7 +60,8 @@
           "file": "fonts/Antonio-SemiBold.ttf",
           "characterRegex": "[0-9.]",
           "targetPlatforms": [
-            "chalk"
+            "chalk",
+            "emery"
           ]
         },
         {

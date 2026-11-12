@@ -1,0 +1,22 @@
+GPS Speedometer shows your speed on your wrist, from your phone's GPS, on a bright dial that lights up through its colours as you go faster. It's built for the Pebble Time 2 and works on every Pebble.
+
+There are three views, and Up and Down switch between them. On the Pebble Time 2 and Pebble Round 2 you can also swipe:
+- Dial: your speed in the middle of a coloured dial, with the trip distance, your heading and your top speed below it
+- Large digits: your speed as big as the screen allows
+- Trip: distance, moving time, average speed and top speed
+
+Features:
+- km/h, mph or knots. On a touch screen, tap the speed to change units
+- A speed alert that vibrates when you pass a set speed and turns the speed red
+- A dial range that follows your speed, or a fixed one from 10 to 320
+- Five colour themes: Aurora, Ice, Sunset, Neon and White
+- Heading arrow and compass direction
+- GPS signal bars, and a clear message when there is no signal
+- Steady readings: drift while standing still isn't counted, and GPS jumps are ignored
+- Keep the screen lit while the app is open, if you like
+- The trip is kept between launches. Hold Select to reset it, and hold again to undo
+
+Keep your phone with you, with location switched on for the Pebble app. The speed comes from your phone's GPS, so it is only as good as your phone's signal. Don't let it distract you from driving or riding.
+
+Created by Ark-am LLC. Discover our work and custom software development services:
+https://ark-am.com/

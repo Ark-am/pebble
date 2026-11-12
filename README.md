@@ -19,6 +19,7 @@ A growing collection of independent apps and watch faces for the Pebble watches.
 | [Phone Dialer](./phone-dialer/) | Dial numbers, returns Recent Calls, and calls from Favorites and/or Contacts on a paired Android phone using the native companion app. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Phone Sound Mode](./phone-sound-mode/) | Changes the Android phone's sound mode (Vibrate, Normal, Silent) using the native Android companion app. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Qibla Compass](./qibla-compass/) | Points toward the Qibla using the watch compass or the sun, the phone's location, and magnetic-declination correction. | Emery and Flint, but currently not fully operational |
+| [GPS Speedometer](./gps-speedometer/) | Your speed from the phone's GPS on a colourful dial, in large digits, or as trip totals, with a speed alert, three units, colour themes and touch controls on the Pebble Time 2 and Pebble Round 2. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Qibla-Tasbih](./qibla-tasbih/) | Dhikr counter with the after-prayer tasbih of 100, eight other dhikr in Arabic with their transliteration and meaning, a target and rounds for each, and a vibration at the end of each set. Everything runs on the watch. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Phone Voice Commands](./phone-voice-commands/) | Sends dictated commands from the watch to a paired Android phone: calls, texts, directions, timers, alarms, media and more. | Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
 | [Baltic](./baltic/) | Dress-watch face with Breguet-style numbers, a minute scale, a small seconds dial, and five dial colours. | Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro |
@@ -40,6 +41,7 @@ Follow a project's link for its requirements, build instructions, testing steps,
 | [Gnomon 2](./gnomon-2/store/screenshots/STORE_DESCRIPTION.txt) | [Phone Sound Mode](./phone-sound-mode/store/screenshots/STORE_DESCRIPTION.txt) |
 | [Meridian](./meridian/store/screenshots/STORE_DESCRIPTION.txt) | [Qibla Compass](./qibla-compass/store/screenshots/STORE_DESCRIPTION.txt) |
 | [Sketchy Weather Analog](./sketchy-weather-analog/store/screenshots/STORE_DESCRIPTION.txt) | [Qibla-Tasbih](./qibla-tasbih/store/STORE_DESCRIPTION.txt) |
+| | [GPS Speedometer](./gps-speedometer/store/STORE_DESCRIPTION.txt) |
 | [Retro F-91W](./retro-f91w/store/screenshots/STORE_DESCRIPTION.txt) |
 | [World Clock](./world-clock/store/screenshots/STORE_DESCRIPTION.txt) |
 | [Alien Core](./alien-core/store/screenshots/STORE_DESCRIPTION.txt) |
@@ -55,6 +57,7 @@ Follow a project's link for its requirements, build instructions, testing steps,
 ├── .gitignore               # Shared ignore rules for every project
 ├── qibla-compass/           # Qibla direction app
 ├── qibla-tasbih/            # Dhikr counter app
+├── gps-speedometer/         # GPS speedometer app
 ├── phone-sound-mode/        # Watch app and Android companion
 ├── phone-dialer/            # Watch dialer and Android companion
 ├── phone-voice-commands/    # Watch dictation app and Android companion
