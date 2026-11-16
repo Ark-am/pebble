@@ -146,5 +146,5 @@ around a circle. The Pebble Time Round uses the Pebble 2 Duo's font sizes;
 the Pebble Time 2 and Pebble Round 2 use a larger set, made by
 `tools/make_fonts.py`. Colour watches show the face in black and white too.
 
-Store screenshots for the Pebble 2 Duo, Pebble Time 2 and Pebble Round 2 are
-in `store/screenshots`, named by watch model.
+Store screenshots for every supported watch are in `store/screenshots`, named
+by watch model.
