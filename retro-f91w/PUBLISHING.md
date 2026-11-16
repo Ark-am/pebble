@@ -15,6 +15,7 @@
 | `build/retro-f91w.pbw` | Installable release bundle for Aplite, Basalt, Chalk, Diorite, Emery, Flint, and Gabbro. Includes the existing 25 × 25 watch menu icon. |
 | `retro-f91w-icon.png` | 1254 × 1254 RGBA store icon with transparency. |
 | `retro-f91w-screenshot.png` | The single screenshot supplied: native 200 × 228 Emery capture, without a watch frame. |
+| `store/screenshots/` | Three store screenshots for each of the seven watches, named by watch model (for example `pebble-time-2_1_default.png`), native size without a watch frame. |
 
 The PBW is generated output and is ignored by Git. Rebuild with `npm ci`
 followed by `pebble build` from this directory.
@@ -47,9 +48,10 @@ The full text is in `store/screenshots/STORE_DESCRIPTION.txt`.
 - The screenshot shows the default appearance (classic pale grey-green LCD,
   black case, PEBBLE brand, day and date in the top row, seconds off), with
   the emulator time set to 10:10.
-- Upload the PBW and artwork through your developer dashboard. The screenshot
-  supplied covers Emery; other platform collections may require their own
-  assets. No additional screenshots are supplied.
+- Upload the PBW and artwork through your developer dashboard. Screenshots
+  for every platform are in `store/screenshots/`: default, gold and silver
+  cases on colour watches; default, weather with seconds, and dark LCD on
+  black-and-white watches.
 - This release has been prepared locally; it has not been uploaded or published.
 
 Screenshot framing and asset collections follow the
