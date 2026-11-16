@@ -47,11 +47,11 @@
   // Visible height of the text and the blank space the font leaves above it.
   #define TEXT_HEIGHT 20
   #define TEXT_PAD 8
-  #define ICON_SIZE 124
+  #define ICON_SIZE 116
   // How far the icon's centre sits above the widget's centre, and the
   // underline below it.
-  #define ICON_RISE 32
-  #define RULE_DROP 13
+  #define ICON_RISE 34
+  #define RULE_DROP 16
   // Radius of the round area the information fills; the hands are short
   // pointers outside it.
   #define CLEAR_RADIUS 68
@@ -81,9 +81,9 @@
   #define DAY_PAD 5
   #define TEXT_HEIGHT 13
   #define TEXT_PAD 5
-  #define ICON_SIZE 74
-  #define ICON_RISE 16
-  #define RULE_DROP 11
+  #define ICON_SIZE 70
+  #define ICON_RISE 18
+  #define RULE_DROP 13
   #define CLEAR_RADIUS 46
   #define HOUR_TICK_LENGTH 8
   #define MINUTE_TICK_LENGTH 3
